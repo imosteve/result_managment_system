@@ -1,0 +1,376 @@
+/* Report Card Styles */
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 20px;
+    font-size: 12px;
+    line-height: 1.0;
+    color: #000;
+    background: transparent;
+}
+
+.report-container {
+    max-width: 900px;
+    margin: 0 auto;
+    border: 2px solid #000;
+    position: relative;
+}
+
+/* Watermark placeholder */
+.watermark {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    width: 600px;
+    height: 600px;
+    background-image: url('static/SU_logo.png'); /* Adjust path if needed */
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 300px 300px; /* Adjust size as needed */
+    opacity: 0.2; /* Adjust transparency */
+    z-index: -1;
+    pointer-events: none;
+    transform: translate(-50%, -50%) rotate(0deg); /* Horizontal + vertical center */
+}
+
+
+.content {
+    position: relative;
+    z-index: 2;
+    background: transparent;
+}
+
+/* Header Section */
+.header {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 15px;
+    margin-bottom: 5px;
+    background: transparent;
+}
+
+.logo-placeholder {
+    width: 80px;
+    height: 80px;
+    flex-shrink: 0;
+}
+
+.header-text {
+    flex: 1;
+    text-align: center;
+}
+
+.school-name {
+    font-weight: bold;
+    font-size: 25px;
+    margin: 3px 0;
+}
+
+.school-address {
+    font-size: 15px;
+    margin: 3px 0;
+}
+
+.report-title {
+    font-weight: bold;
+    font-size: 17px;
+    margin: 3px 0;
+}
+
+
+/* Student Info Section */
+.student-info {
+    min-height: 75px;
+    align-items: center; 
+}
+
+/* Container sections */
+.info-top,
+.info-middle,
+.info-bottom {
+    border: 1px solid #000;
+}
+
+/* Only info-top is flex (no grid) */
+.info-top {
+    display: flex;
+    align-items: center;
+    min-height: 30px;
+    padding: 0 8px;
+}
+
+/* Grid layout with 3 columns for middle and bottom */
+.info-middle,
+.info-bottom {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    padding: 0;
+}
+
+/* Each column within the grid */
+.info-col,
+.info-col2 {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    min-height: 23px; /* Ensure this is here */
+    padding: 0 8px;
+    box-sizing: border-box;
+}
+
+/* Borders for the middle section columns */
+.info-col2 {
+    border-left: 1px solid #000;
+    border-right: 1px solid #000;
+}
+
+/* Label and value styles */
+.info-label {
+    font-weight: bold;
+    min-width: 80px;
+}
+
+.info-value,
+.info-value-name {
+    flex: 1;
+    font-size: 15px;
+    text-align: center;
+    padding: 2px 5px;
+}
+
+.info-value-name {
+    font-size: 20px;
+    font-weight: bold;
+}
+
+
+/* Performance Table */
+.performance-section {
+    padding: 15px;
+}
+
+.section-title {
+    font-weight: bold;
+    font-size: 13px;
+    margin-bottom: 10px;
+    text-align: center;
+}
+
+.performance-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.performance-table th,
+.performance-table td {
+    border: 1px solid #000;
+    padding: 4px 6px;
+    text-align: center;
+    font-size: 13px;
+}
+
+.performance-table th {
+    background: transparent;
+    font-weight: bold;
+}
+
+.subject-column {
+    text-align: left !important;
+    width: 35%;
+}
+
+.total-row {
+    font-weight: bold;
+    background: transparent;
+}
+
+
+/* Conduct and Grading Section */
+.conduct-section {
+    padding: 5px;
+    max-width: 900px;
+}
+
+.header-container {
+    display: flex;
+    gap: 30px;
+    align-items: flex-start;
+}
+
+.left-content {
+    flex: 2;
+}
+
+.section-title {
+    font-weight: bold;
+    font-size: 12px;
+    color: red;
+    margin-bottom: 3px;
+    text-align: center;
+}
+
+.grading-subtitle {
+    font-size: 10px;
+    color: red;
+    margin-bottom: 5px;
+    text-align: center;
+}
+
+.conduct-table {
+    margin-top: 5px;
+}
+
+.conduct-table table {
+    width: 100%;
+    border-collapse: collapse;
+    border: 1px solid #000;
+}
+
+.conduct-table th,
+.conduct-table td {
+    border: 1px solid #000;
+    padding: 5px 8px;
+    text-align: left;
+    line-height: 0.9;
+}
+
+.conduct-table th {
+    background-color: #e8f5e8;
+    font-weight: bold;
+    text-align: center;
+    font-size: 12px;
+}
+
+.conduct-table .rating-header {
+    width: 60px;
+}
+
+.conduct-table .rating-cell {
+    width: 30px;
+    text-align: center;
+    background-color: transparent;
+    font-weight: bold;
+}
+
+.grading-system {
+    flex: 1;
+    padding: 12px;
+    background-color: transparent;
+    align-self: flex-start;
+    margin-top: 10px;
+}
+
+.grading-title {
+    font-weight: bold;
+    margin-bottom: 8px;
+    color: red;
+    text-align: center;
+    font-size: 12px;
+}
+
+.grading-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    border: black;
+    gap: 2px;
+    font-size: 12px;
+    line-height: 1.1;
+}
+
+.grading-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 1px 1px 1px 30px;
+}
+
+
+/* Comments Section */
+.comments-section {
+    width: 100%;
+    max-width: 800px;
+    margin: 10px auto; /* Center the whole section */
+}
+
+/* Section title stays left */
+.section-title {
+    font-weight: bold;
+    font-size: 10px;
+    text-align: center;
+}
+
+/* Each comment box is centered and styled */
+.comment-box {
+    display: flex;
+    min-height: 25px;
+    flex-direction: row; /* Stack label and comment vertically */
+    align-items: center; /* Center horizontally */
+    border: 1px solid #000;
+}
+
+/* Label above comment, centered */
+.comment-label {
+    font-weight: bold;
+    font-size: 10px;
+    width: 180px;
+    text-align: center;
+    padding: 0 5px;
+    border-right: 1px solid #000;
+    align-self: stretch; /* ✅ THIS is the key fix */
+
+    display: flex;               /* Add flex to the label */
+    align-items: center;         /* Vertically center content */
+    justify-content: center;     /* Horizontally center text */
+}
+
+
+/* Comment area content */
+.comment-area {
+    width: 100%;
+    text-align: left;
+    padding: 5px 5px;
+    font-size: 14px;
+}
+
+
+
+/* Footer Section */
+.footer-section {
+    background-color: #3b5625; /* dark green background */
+    color: white;
+    font-weight: bold;
+    font-size: 10px;
+    padding: 10px 20px;
+    display: grid;
+    grid-template-columns: 1fr 3fr 1fr;
+    align-items: top;
+}
+
+.fees-info, .account-info, .next-term {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.account-info {
+    text-align: center;
+}
+
+.next-term {
+    text-align: right;
+}
+
+
+/* Print Styles */
+@media print {
+    @page {
+    margin: 0.5in;
+    }
+    body {
+        padding: 0;
+    }
+    .report-container {
+        border: none;
+        max-width: none;
+    }
+}

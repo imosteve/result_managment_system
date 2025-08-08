@@ -1,0 +1,20 @@
+.stDataFrame {
+    border-radius: 8px;
+    overflow: hidden;
+}
+.stButton>button {
+    width: 100%;
+    border-radius: 5px;
+}
+.error-container {
+    background-color: #ffebee;
+    padding: 10px;
+    border-radius: 5px;
+    margin-bottom: 10px;
+}
+.success-container {
+    background-color: #e8f5e9;
+    padding: 10px;
+    border-radius: 5px;
+    margin-bottom: 10px;
+}

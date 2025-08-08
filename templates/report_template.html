@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Report Card</title>
+    <link rel="stylesheet" href="report_card_styles.css">
+</head>
+<body>
+    <div class="report-container">
+        <!-- Watermark background -->
+        <img src="static/SU_logo.png" class="watermark" alt="Watermark">
+        
+        <div class="content">
+            <!-- Header Section -->
+            <div class="header">
+                <div>
+                   <img src="static/SU_logo.png" class="logo-placeholder" alt="School Logo">
+                </div>
+                <div class="header-text">
+                   <div class="school-name">SCRIPTURE UNION INTERNATIONAL SCHOOLS</div>
+                    <div class="school-address">64 IKOT ABASI STREET, UYO, AKWA IBOM STATE</div>
+                    <div class="report-title">TERMLY REPORT FOR {{ term }}, {{ session }} SESSION</div>
+                </div>
+            </div>
+            
+            <!-- Student Information -->
+            <div class="student-info">
+                <div class="info-top">
+                    <div class="info-col">
+                        <span class="info-label">Name:</span>
+                        <span class="info-value-name">{{ name }}</span>
+                    </div>
+                </div>
+                <div class="info-middle">
+                    <div class="info-col">
+                        <span class="info-label">Gender:</span>
+                        <span class="info-value">{{ gender }}</span>
+                    </div>
+                    <div class="info-col2">
+                        <span class="info-label">Class:</span>
+                        <span class="info-value">{{ class_name }}</span>
+                    </div>
+                    <div class="info-col">
+                        <span class="info-label">No. in Class:</span>
+                        <span class="info-value">{{ class_size }}</span>
+                    </div>
+                </div>
+                <div class="info-bottom">
+                    <div class="info-col">
+                        <span class="info-label">Pupil's Average:</span>
+                        <span class="info-value">{{ average }}</span>
+                    </div>
+                    <div class="info-col2">
+                        <span class="info-label">Class Average:</span>
+                        <span class="info-value">{{ class_average }}</span>
+                    </div>
+                    <div class="info-col">
+                        <span class="info-label">Position:</span>
+                        <span class="info-value">{{ position }}</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Performance Section -->
+            <div class="performance-section">
+                <div class="section-title">PERFORMANCE IN SUBJECTS</div>
+                <table class="performance-table">
+                    <thead>
+                        <tr>
+                            <th class="subject-column">SUBJECTS</th>
+                            <th>Test<br>(30%)</th>
+                            <th>Exam<br>(70%)</th>
+                            <th>Total<br>(100%)</th>
+                            <th>Grade</th>
+                            <th>Remarks</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for subject in subjects %}
+                        <tr>
+                            <td class="subject-column">{{ subject.subject }}</td>
+                            <td>{{ subject.test }}</td>
+                            <td>{{ subject.exam }}</td>
+                            <td>{{ subject.total }}</td>
+                            <td>{{ subject.grade }}</td>
+                            <td>{{ 'Excellent' if subject.grade == 'A' else 'Very Good' if subject.grade == 'B' else 'Good' if subject.grade == 'C' else 'Pass' }}</td>
+                        </tr>
+                        {% endfor %}
+                        <tr class="total-row">
+                            <td class="subject-column">Total</td>
+                            <td>{{ total_test }}</td>
+                            <td>{{ total_exam }}</td>
+                            <td>{{ grand_total }}</td>
+                            <td colspan="2"></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="conduct-section">
+                <div class="header-container">
+                    <div class="left-content">
+                        <div class="section-title">OBSERVATION OF CONDUCT</div>
+                        <div class="grading-subtitle">(5 - Exceptional) (4 - Excellent) (3 - Good) (2 - Average) (1 - Below Average)</div>
+                        
+                        <div class="conduct-table">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>RATING</th>
+                                        <th class="rating-header"></th>
+                                        <th>RATING</th>
+                                        <th class="rating-header"></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>Punctuality</td>
+                                        <td class="rating-cell">0</td>
+                                        <td>Neatness</td>
+                                        <td class="rating-cell">0</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Honesty</td>
+                                        <td class="rating-cell">0</td>
+                                        <td>Cooperation</td>
+                                        <td class="rating-cell">0</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Leadership</td>
+                                        <td class="rating-cell">0</td>
+                                        <td>Perseverance</td>
+                                        <td class="rating-cell">0</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Politeness</td>
+                                        <td class="rating-cell">0</td>
+                                        <td>Obedience</td>
+                                        <td class="rating-cell">0</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Attentiveness</td>
+                                        <td class="rating-cell">0</td>
+                                        <td>Attitude to work</td>
+                                        <td class="rating-cell">0</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <div class="grading-system">
+                        <div class="grading-title">Grading System</div>
+                        <div class="grading-grid">
+                            <div class="grading-item">
+                                <span>A - Excellent</span>
+                                <span>- 80% & Above</span>
+                            </div>
+                            <div class="grading-item">
+                                <span>B - Very Good</span>
+                                <span>- 70% - 79%</span>
+                            </div>
+                            <div class="grading-item">
+                                <span>C - Good</span>
+                                <span>- 60% - 69%</span>
+                            </div>
+                            <div class="grading-item">
+                                <span>D - Pass</span>
+                                <span>- 50% - 59%</span>
+                            </div>
+                            <div class="grading-item">
+                                <span>E - Weak Pass</span>
+                                <span>- 45% - 49%</span>
+                            </div>
+                            <div class="grading-item">
+                                <span>F - Fail</span>
+                                <span>- 1% - 44%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Comments Section -->
+            <div class="comments-section">
+                <div class="section-title">COMMENTS & REMARKS</div>
+                
+                <div class="comment-box">
+                    <div class="comment-label">Class Teacher's Comment:</div>
+                    <div class="comment-area">{{ class_teacher_comment }}</div>
+                </div>
+                
+                <div class="comment-box">
+                    <div class="comment-label">Head Teacher's Comment:</div>
+                    <div class="comment-area">{{ head_teacher_comment }}</div>
+                </div>
+            </div>
+            
+            <!-- Footer Information -->
+            <div class="footer-section">
+                <div class="fees-info">
+                    <div class="fees-title">Next Terms School Fees:</div>
+                    <div>- For Nursery 1</div>
+                    <div>- For Nursery 1</div>
+                    <div>- For Primary 5</div>
+                </div>
+                
+                <div class="account-info">
+                    <div class="account-title">Account Information:</div>
+                    <div>ECOBANK 0272005494 Scripture Union Int'l Schools</div>
+                    <div>STERLING BANK 0072344744 Scripture Union Int'l Schools</div>
+                </div>
+                <div class="next-term">
+                    <strong>Next Term Begins On:</strong> {{ next_term_date }}
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
