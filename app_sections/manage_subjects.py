@@ -4,11 +4,17 @@ from utils import clean_input, create_metric_4col, inject_login_css
 from time import sleep
 
 def add_subjects():
-    # Check authentication
     if not st.session_state.get("authenticated", False):
         st.error("⚠️ Please log in first.")
         st.switch_page("main.py")
         return
+
+    if st.session_state.role not in ["admin", "class_teacher", "subject_teacher"]:
+        st.error("⚠️ Access denied.")
+        return
+
+    user_id = st.session_state.get("user_id", None)
+    role = st.session_state.get("role", None)
 
     st.set_page_config(page_title="Manage Subjects", layout="wide")
 
@@ -16,32 +22,52 @@ def add_subjects():
     inject_login_css("templates/tabs_styles.css")
 
     st.markdown(
-            """
-            <div style='width: auto; margin: auto; text-align: center; background-color: #c6b7b1;'>
-                <h3 style='color:#000; font-size:25px; margin-top:30px; margin-bottom:10px;'>
-                    Manage Subject Combination
-                </h3>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-    
-    classes = get_all_classes()
+        """
+        <div style='width: auto; margin: auto; text-align: center; background-color: #c6b7b1;'>
+            <h3 style='color:#000; font-size:25px; margin-top:30px; margin-bottom:10px;'>
+                Manage Subject Combination
+            </h3>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    classes = get_all_classes(user_id, role)
     if not classes:
         st.warning("⚠️ Please create at least one class first.")
+        if role in ["class_teacher", "subject_teacher"]:
+            st.info("You may need to select a class assignment in the 'Change Assignment' section.")
         return
 
     # Select class
     class_options = [f"{cls['class_name']} - {cls['term']} - {cls['session']}" for cls in classes]
-    selected_class_display = st.selectbox("Select Class", class_options)
-    selected_class_data = classes[class_options.index(selected_class_display)]
+    if role in ["class_teacher", "subject_teacher"]:
+        assignment = st.session_state.get("assignment")
+        if not assignment:
+            st.warning("⚠️ No class assignment selected. Please select a class in the 'Change Assignment' section.")
+            class_options = []  # Prevent class selection until assignment is set
+            selected_class_display = None
+        else:
+            allowed_class = f"{assignment['class_name']} - {assignment['term']} - {assignment['session']}"
+            if allowed_class not in class_options:
+                st.error("⚠️ Assigned class not found in available classes. Please select a new assignment.")
+                return
+            class_options = [allowed_class]
+            selected_class_display = st.selectbox("Select Class", class_options, disabled=True)
+    else:
+        selected_class_display = st.selectbox("Select Class", class_options)
 
+    if not class_options:
+        return
+
+    selected_index = class_options.index(selected_class_display)
+    selected_class_data = classes[selected_index]
     class_name = selected_class_data['class_name']
     term = selected_class_data['term']
     session = selected_class_data['session']
 
     # Get existing subjects
-    subjects = get_subjects_by_class(class_name, term, session)
+    subjects = get_subjects_by_class(class_name, term, session, user_id, role)
 
     # Tabs for different operations
     tab1, tab2, tab3 = st.tabs(["View/Edit Subjects", "Add Subjects", "Clear All Subjects"])
@@ -51,7 +77,7 @@ def add_subjects():
         if subjects:
             # Display class metrics
             create_metric_4col(class_name, term, session, subjects, "subject")
-
+            
             # Table header using columns
             header_cols = st.columns([0.5, 5, 1, 1])
             header_cols[0].markdown("**S/N**")
@@ -61,10 +87,10 @@ def add_subjects():
 
             for i, subject in enumerate(subjects):
                 col1, col2, col3, col4 = st.columns([0.5, 5, 1, 1], gap="small", vertical_alignment="bottom")
-
+                
                 # Display serial number (S/N)
                 col1.markdown(f"**{i+1}**")
-                
+
                 # Editable field for subject name
                 new_subject_name = col2.text_input(
                     "Subject",
@@ -73,8 +99,9 @@ def add_subjects():
                     label_visibility="collapsed"
                 ).upper()
 
-                # Update button
-                if col3.button("💾", key=f"update_{i}"):
+                # Update button (disabled for subject_teacher)
+                update_disabled = role == "subject_teacher"
+                if col3.button("💾", key=f"update_{i}", disabled=update_disabled):
                     new_subject_name_upper = clean_input(new_subject_name, "subject").strip().upper()
                     # Check for duplicates (excluding the current subject)
                     if any(
@@ -97,8 +124,9 @@ def add_subjects():
                         else:
                             st.markdown(f'<div class="error-container">⚠️ Failed to update \'{new_subject_name_upper}\'. It may already exist.</div>', unsafe_allow_html=True)
 
-                # Delete button
-                if col4.button("❌", key=f"delete_{i}"):
+                # Delete button (disabled for subject_teacher)
+                delete_disabled = role == "subject_teacher"
+                if col4.button("❌", key=f"delete_{i}", disabled=delete_disabled):
                     st.session_state["delete_pending"] = {
                         "subject_id": subject[0],
                         "subject_name": subject[1],
@@ -111,7 +139,7 @@ def add_subjects():
                 # If delete is pending, show confirmation
                 if "delete_pending" in st.session_state:
                     pending = st.session_state["delete_pending"]
-                    if pending["index"] == i:  # Show confirmation only under the correct row
+                    if pending["index"] == i:
                         st.warning(f"⚠️ Are you sure you want to delete '{pending['subject_name']}' for {pending['class_name']} - {pending['term']} - {pending['session']}?")
                         confirm_col1, confirm_col2 = st.columns(2)
                         if confirm_col1.button("✅ Delete", key=f"confirm_delete_{i}"):
@@ -128,59 +156,54 @@ def add_subjects():
 
     with tab2:
         st.subheader("Add Subjects")
-        with st.form("add_subject_form"):
-            new_subjects_input = st.text_area(
-                "Enter subject names (one per line)",
-                height=150,
-                placeholder="Mathematics\nEnglish Language\nPhysics"
-            )
-
-            submitted = st.form_submit_button("➕ Add Subjects")
-
-            if submitted:
-                # Clean, uppercase, and filter empty lines
-                new_subjects_raw = [clean_input(s, "subject").strip().upper() for s in new_subjects_input.split("\n") if s.strip()]
-                unique_new_subjects = list(set(new_subjects_raw))  # Remove duplicates in input
-                existing_subject_names = {s[1].upper() for s in subjects}  # Set for faster lookup
-
-                if not unique_new_subjects:
-                    st.markdown('<div class="error-container">⚠️ Please enter at least one valid subject.</div>', unsafe_allow_html=True)
-                else:
-                    added, skipped = [], []
-
-                    for subject in unique_new_subjects:
-                        if subject in existing_subject_names:
-                            skipped.append(subject)
-                        else:
-                            success = create_subject(subject, class_name, term, session)
-                            if success:
-                                added.append(subject)
-                            else:
+        if role == "subject_teacher":
+            st.info("Subject Teachers cannot add new subjects.")
+        else:
+            with st.form("add_subject_form"):
+                new_subjects_input = st.text_area(
+                    "Enter subject names (one per line)",
+                    height=150,
+                    placeholder="Mathematics\nEnglish Language\nPhysics"
+                )
+                submitted = st.form_submit_button("➕ Add Subjects")
+                if submitted:
+                    new_subjects_raw = [clean_input(s, "subject").strip().upper() for s in new_subjects_input.split("\n") if s.strip()]
+                    unique_new_subjects = list(set(new_subjects_raw))
+                    existing_subject_names = {s[1].upper() for s in subjects}
+                    if not unique_new_subjects:
+                        st.markdown('<div class="error-container">⚠️ Please enter at least one valid subject.</div>', unsafe_allow_html=True)
+                    else:
+                        added, skipped = [], []
+                        for subject in unique_new_subjects:
+                            if subject in existing_subject_names:
                                 skipped.append(subject)
-
-                    if added:
-                        st.markdown(f'<div class="success-container">✅ Successfully added: {', '.join(added)}</div>', unsafe_allow_html=True)
-                        st.rerun()
-                    if skipped:
-                        st.markdown(f'<div class="error-container">⚠️ Skipped (duplicates or failed to add): {', '.join(skipped)}</div>', unsafe_allow_html=True)
+                            else:
+                                success = create_subject(subject, class_name, term, session)
+                                if success:
+                                    added.append(subject)
+                                else:
+                                    skipped.append(subject)
+                        if added:
+                            st.markdown(f'<div class="success-container">✅ Successfully added: {', '.join(added)}</div>', unsafe_allow_html=True)
+                            st.rerun()
+                        if skipped:
+                            st.markdown(f'<div class="error-container">⚠️ Skipped (duplicates or failed to add): {', '.join(skipped)}</div>', unsafe_allow_html=True)
 
     with tab3:
         st.subheader("Clear All Subjects")
-        st.warning("⚠️ This action will permanently delete all subjects and their associated scores for the selected class. This cannot be undone.")
-        
-        if subjects:
-            confirm_clear = st.checkbox("I confirm I want to clear all subjects for this class")
-            clear_all_button = st.button("🗑️ Clear All Subjects", key="clear_all_subjects", disabled=not confirm_clear)
-            
-            if clear_all_button and confirm_clear:
-                success = clear_all_subjects(class_name, term, session)
-                if success:
-                    st.markdown(f'<div class="success-container">✅ All subjects cleared successfully for {class_name} - {term} - {session}!</div>', unsafe_allow_html=True)
-                    st.rerun()
-                else:
-                    st.markdown(f'<div class="error-container">❌ Failed to clear subjects. Please try again.</div>', unsafe_allow_html=True)
+        if role == "subject_teacher":
+            st.info("Subject Teachers cannot clear subjects.")
         else:
-            st.info("No subjects available to clear.")
-
-if __name__ == "__main__":
-    add_subjects()
+            st.warning("⚠️ This action will permanently delete all subjects and their associated scores for the selected class. This cannot be undone.")
+            if subjects:
+                confirm_clear = st.checkbox("I confirm I want to clear all subjects for this class")
+                clear_all_button = st.button("🗑️ Clear All Subjects", key="clear_all_subjects", disabled=not confirm_clear)
+                if clear_all_button and confirm_clear:
+                    success = clear_all_subjects(class_name, term, session)
+                    if success:
+                        st.markdown(f'<div class="success-container">✅ All subjects cleared successfully for {class_name} - {term} - {session}!</div>', unsafe_allow_html=True)
+                        st.rerun()
+                    else:
+                        st.markdown(f'<div class="error-container">❌ Failed to clear subjects. Please try again.</div>', unsafe_allow_html=True)
+            else:
+                st.info("No subjects available to clear.")

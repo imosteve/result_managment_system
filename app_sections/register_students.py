@@ -1,19 +1,25 @@
+# updated - FIXED
+
 import streamlit as st
 import pandas as pd
+from database import get_all_classes, get_students_by_class, create_student, update_student, delete_student, delete_all_students
 from utils import clean_input, create_metric_4col, inject_login_css
-from database import (
-    get_all_classes, get_students_by_class, create_student, 
-    update_student, delete_student, delete_all_students
-)
 
 def register_students():
-    # Authentication check
     if not st.session_state.get("authenticated", False):
         st.error("⚠️ Please log in first.")
         st.switch_page("main.py")
         return
 
-    st.set_page_config(page_title="Student Management", layout="wide")
+    if st.session_state.role not in ["admin", "class_teacher"]:
+        st.error("⚠️ Access denied. Admins and Class Teachers only.")
+        return
+
+    # Get user info for role-based access
+    user_id = st.session_state.get('user_id')
+    role = st.session_state.get('role')
+
+    st.set_page_config(page_title="Register Students", layout="wide")
 
     # Custom CSS for better table styling
     inject_login_css("templates/tabs_styles.css")
@@ -29,20 +35,15 @@ def register_students():
         unsafe_allow_html=True
     )
 
-    # Load classes
-    classes = get_all_classes()
+    # Get classes with proper parameters
+    classes = get_all_classes(user_id, role)
     if not classes:
-        st.warning("⚠️ No classes found. Please create a class first.")
+        st.warning("⚠️ No classes found.")
         return
 
-    # Class selection
     class_options = [f"{cls['class_name']} - {cls['term']} - {cls['session']}" for cls in classes]
-    selected_class_display = st.selectbox(
-        "Select Class",
-        class_options,
-        help="Select a class to manage students"
-    )
-    
+    selected_class_display = st.selectbox("Select Class", class_options)
+
     # Get selected class details
     selected_index = class_options.index(selected_class_display)
     selected_class_data = classes[selected_index]
@@ -50,9 +51,11 @@ def register_students():
     term = selected_class_data['term']
     session = selected_class_data['session']
 
-    # Load students
-    students = get_students_by_class(class_name, term, session)
-    
+    # Load students with proper parameters
+    students = get_students_by_class(class_name, term, session, user_id, role)
+    if not students:
+        st.info("No students found for this class. Add students below.")
+
     # Display class metrics
     create_metric_4col(class_name, term, session, students, "student")
 
@@ -179,10 +182,18 @@ def register_students():
             )
             
             if st.button("❌ Delete Student", key="delete_student"):
-                student_id = student_to_delete.split("(ID: ")[1].rstrip(")")
-                delete_student(student_id)
-                st.markdown('<div class="success-container">✅ Student deleted successfully!</div>', unsafe_allow_html=True)
-                st.rerun()
+                # Get the student ID from the students list
+                selected_student_name = student_to_delete
+                student_id = None
+                for s in students:
+                    if s[1] == selected_student_name:
+                        student_id = s[0]
+                        break
+                
+                if student_id:
+                    delete_student(student_id)
+                    st.markdown('<div class="success-container">✅ Student deleted successfully!</div>', unsafe_allow_html=True)
+                    st.rerun()
         else:
             st.info("No students available to delete.")
 

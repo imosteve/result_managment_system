@@ -1,8 +1,7 @@
 import sqlite3
 import os
+import bcrypt
 from utils import assign_grade
-import uuid
-
 
 # Database file path
 DB_PATH = os.path.join("data", "school.db")
@@ -12,6 +11,7 @@ def get_connection():
     os.makedirs("data", exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
+    conn.row_factory = sqlite3.Row  # Enable row factory for dict-like access
     return conn
 
 def create_tables():
@@ -19,7 +19,7 @@ def create_tables():
     conn = get_connection()
     cursor = conn.cursor()
     
-    # Classes table - Fixed: removed individual UNIQUE constraints on term and session
+    # Classes table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS classes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -31,7 +31,7 @@ def create_tables():
         )
     """)
     
-    # Students table - Updated to include term and session
+    # Students table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS students (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -47,7 +47,7 @@ def create_tables():
         )
     """)
     
-    # Subjects table - Updated to include term and session
+    # Subjects table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS subjects (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -61,7 +61,7 @@ def create_tables():
         )
     """)
     
-    # Scores table - Updated to include term and session
+    # Scores table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS scores (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -84,29 +84,211 @@ def create_tables():
         )
     """)
     
+    # Users table for RBAC
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL,
+            role TEXT NOT NULL CHECK(role IN ('admin', 'class_teacher', 'subject_teacher'))
+        )
+    """)
+    
+    # Teacher assignments table for RBAC
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS teacher_assignments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            class_name TEXT,
+            term TEXT,
+            session TEXT,
+            subject_name TEXT,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (class_name, term, session) REFERENCES classes(name, term, session) ON DELETE CASCADE,
+            FOREIGN KEY (subject_name, class_name, term, session) 
+                REFERENCES subjects(name, class_name, term, session) ON DELETE CASCADE,
+            UNIQUE(user_id, class_name, term, session, subject_name)
+        )
+    """)
+    
+    # Comments table for dynamic report card comments
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS comments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_name TEXT NOT NULL,
+            class_name TEXT NOT NULL,
+            term TEXT NOT NULL,
+            session TEXT NOT NULL,
+            class_teacher_comment TEXT,
+            head_teacher_comment TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (class_name, term, session) REFERENCES classes(name, term, session) ON DELETE CASCADE,
+            FOREIGN KEY (student_name, class_name, term, session) REFERENCES students(name, class_name, term, session) ON DELETE CASCADE,
+            UNIQUE(student_name, class_name, term, session)
+        )
+    """)
+    
     conn.commit()
     conn.close()
 
-def start_session(user_id):
-    session_id = str(uuid.uuid4())
-    conn = sqlite3.connect("sessions.db")
-    conn.execute("INSERT INTO sessions (session_id, user_id, logged_out) VALUES (?, ?, 0)", (session_id, user_id))
+def create_user(username, password, role):
+    """Create a new user with hashed password"""
+    hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            INSERT INTO users (username, password, role)
+            VALUES (?, ?, ?)
+        """, (username, hashed_password, role))
+        conn.commit()
+        return True
+    except sqlite3.IntegrityError:
+        return False
+    finally:
+        conn.close()
+
+def get_user_by_username(username):
+    """Retrieve user by username"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM users WHERE username = ?", (username,))
+    user = cursor.fetchone()
+    conn.close()
+    return user
+
+def delete_user(user_id):
+    """Delete a user and their assignments (CASCADE)"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
     conn.commit()
     conn.close()
-    return session_id
 
-def mark_session_as_logged_out(session_id):
-    conn = sqlite3.connect("sessions.db")
-    conn.execute("UPDATE sessions SET logged_out = 1 WHERE session_id = ?", (session_id,))
+def get_all_users():
+    """Get all users"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, username, role FROM users ORDER BY username")
+    users = cursor.fetchall()
+    conn.close()
+    return users
+
+def get_user_assignments(user_id):
+    """Get class/subject assignments for a user"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT id, class_name, term, session, subject_name
+        FROM teacher_assignments
+        WHERE user_id = ?
+        ORDER BY session DESC, term, class_name, subject_name
+    """, (user_id,))
+    assignments = cursor.fetchall()
+    conn.close()
+    return assignments
+
+def assign_teacher(user_id, class_name, term, session, subject_name=None):
+    """Assign a class or class/subject to a teacher"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        # Check for duplicate assignment
+        cursor.execute("""
+            SELECT id FROM teacher_assignments
+            WHERE user_id = ? AND class_name = ? AND term = ? AND session = ? AND subject_name IS ?
+        """, (user_id, class_name, term, session, subject_name))
+        if cursor.fetchone():
+            conn.close()
+            return False
+        cursor.execute("""
+            INSERT INTO teacher_assignments (user_id, class_name, term, session, subject_name)
+            VALUES (?, ?, ?, ?, ?)
+        """, (user_id, class_name, term, session, subject_name))
+        conn.commit()
+        return True
+    except sqlite3.IntegrityError:
+        return False
+    finally:
+        conn.close()
+
+def delete_assignment(assignment_id):
+    """Delete a teacher assignment"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM teacher_assignments WHERE id = ?", (assignment_id,))
+    conn.commit()
+    conn.close()
+
+def create_comment(student_name, class_name, term, session, class_teacher_comment=None, head_teacher_comment=None):
+    """Create or update a comment for a student"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            INSERT OR REPLACE INTO comments (
+                student_name, class_name, term, session, 
+                class_teacher_comment, head_teacher_comment, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        """, (student_name, class_name, term, session, class_teacher_comment, head_teacher_comment))
+        conn.commit()
+        return True
+    except sqlite3.IntegrityError:
+        return False
+    finally:
+        conn.close()
+
+def get_comment(student_name, class_name, term, session):
+    """Get comments for a student"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT class_teacher_comment, head_teacher_comment
+        FROM comments
+        WHERE student_name = ? AND class_name = ? AND term = ? AND session = ?
+    """, (student_name, class_name, term, session))
+    comment = cursor.fetchone()
+    conn.close()
+    return comment
+
+def delete_comment(student_name, class_name, term, session):
+    """Delete a comment for a student"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        DELETE FROM comments
+        WHERE student_name = ? AND class_name = ? AND term = ? AND session = ?
+    """, (student_name, class_name, term, session))
     conn.commit()
     conn.close()
 
 # ==================== CLASS OPERATIONS ====================
-def get_all_classes():
-    """Get all classes"""
+def get_all_classes(user_id=None, role=None):
+    """Get all classes, with restrictions for non-admins"""
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT name, term, session FROM classes ORDER BY session DESC, term, name")
+    
+    # FIXED: Admins should see ALL classes without restrictions
+    if role == "admin":
+        cursor.execute("""
+            SELECT name, term, session 
+            FROM classes 
+            ORDER BY session DESC, term, name
+        """)
+    elif role in ["class_teacher", "subject_teacher"] and user_id:
+        cursor.execute("""
+            SELECT DISTINCT c.name, c.term, c.session
+            FROM classes c
+            JOIN teacher_assignments ta ON c.name = ta.class_name 
+                AND c.term = ta.term AND c.session = ta.session
+            WHERE ta.user_id = ?
+            ORDER BY c.session DESC, c.term, c.name
+        """, (user_id,))
+    else:
+        conn.close()
+        return []
+        
     rows = cursor.fetchall()
     classes = [
         {"class_name": row[0], "term": row[1], "session": row[2]}
@@ -166,17 +348,42 @@ def clear_all_classes():
         conn.close()
 
 # ==================== STUDENT OPERATIONS ====================
-
-def get_students_by_class(class_name, term, session):
-    """Get all students in a class for specific term and session"""
+def get_students_by_class(class_name, term, session, user_id=None, role=None):
+    """Get all students in a class for specific term and session with role-based restrictions"""
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("""
-        SELECT id, name, gender, email 
-        FROM students 
-        WHERE class_name = ? AND term = ? AND session = ?
-        ORDER BY name
-    """, (class_name, term, session))
+    
+    # FIXED: Admins should see ALL students without restrictions
+    if role == "admin":
+        cursor.execute("""
+            SELECT id, name, gender, email 
+            FROM students 
+            WHERE class_name = ? AND term = ? AND session = ?
+            ORDER BY name
+        """, (class_name, term, session))
+    elif role == "class_teacher" and user_id:
+        cursor.execute("""
+            SELECT s.id, s.name, s.gender, s.email 
+            FROM students s
+            JOIN teacher_assignments ta ON s.class_name = ta.class_name 
+                AND s.term = ta.term AND s.session = ta.session
+            WHERE s.class_name = ? AND s.term = ? AND s.session = ? 
+                AND ta.user_id = ? AND ta.subject_name IS NULL
+            ORDER BY s.name
+        """, (class_name, term, session, user_id))
+    elif role == "subject_teacher" and user_id:
+        cursor.execute("""
+            SELECT s.id, s.name, s.gender, s.email 
+            FROM students s
+            JOIN teacher_assignments ta ON s.class_name = ta.class_name 
+                AND s.term = ta.term AND s.session = ta.session
+            WHERE s.class_name = ? AND s.term = ? AND s.session = ? 
+                AND ta.user_id = ? AND ta.subject_name IS NOT NULL
+            ORDER BY s.name
+        """, (class_name, term, session, user_id))
+    else:
+        conn.close()
+        return []
     students = cursor.fetchall()
     conn.close()
     return students
@@ -229,17 +436,43 @@ def delete_all_students(class_name, term, session):
     conn.close()
 
 # ==================== SUBJECT OPERATIONS ====================
-
-def get_subjects_by_class(class_name, term, session):
-    """Get all subjects for a class in specific term and session"""
+def get_subjects_by_class(class_name, term, session, user_id=None, role=None):
+    """Get all subjects for a class in specific term and session with role-based restrictions"""
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("""
-        SELECT id, name 
-        FROM subjects 
-        WHERE class_name = ? AND term = ? AND session = ?
-        ORDER BY name
-    """, (class_name, term, session))
+    
+    # FIXED: Admins should see ALL subjects without restrictions
+    if role == "admin":
+        cursor.execute("""
+            SELECT id, name 
+            FROM subjects 
+            WHERE class_name = ? AND term = ? AND session = ?
+            ORDER BY name
+        """, (class_name, term, session))
+    elif role == "class_teacher" and user_id:
+        cursor.execute("""
+            SELECT s.id, s.name 
+            FROM subjects s
+            JOIN teacher_assignments ta ON s.class_name = ta.class_name 
+                AND s.term = ta.term AND s.session = ta.session
+            WHERE s.class_name = ? AND s.term = ? AND s.session = ? 
+                AND ta.user_id = ? AND ta.subject_name IS NULL
+            ORDER BY s.name
+        """, (class_name, term, session, user_id))
+    elif role == "subject_teacher" and user_id:
+        cursor.execute("""
+            SELECT s.id, s.name 
+            FROM subjects s
+            JOIN teacher_assignments ta ON s.class_name = ta.class_name 
+                AND s.term = ta.term AND s.session = ta.session 
+                AND s.name = ta.subject_name
+            WHERE s.class_name = ? AND s.term = ? AND s.session = ? 
+                AND ta.user_id = ?
+            ORDER BY s.name
+        """, (class_name, term, session, user_id))
+    else:
+        conn.close()
+        return []
     subjects = cursor.fetchall()
     conn.close()
     return subjects
@@ -303,48 +536,138 @@ def clear_all_subjects(class_name, term, session):
         conn.close()
 
 # ==================== SCORE OPERATIONS ====================
-
-def get_scores_by_class_subject(class_name, subject_name, term, session):
-    """Get all scores for a specific class and subject in specific term and session"""
+def get_scores_by_class_subject(class_name, subject_name, term, session, user_id=None, role=None):
+    """Get all scores for a specific class and subject in specific term and session with role-based restrictions"""
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("""
-        SELECT id, student_name, subject_name, test_score, exam_score, 
-               total_score, grade, position
-        FROM scores 
-        WHERE class_name = ? AND subject_name = ? AND term = ? AND session = ?
-        ORDER BY total_score DESC
-    """, (class_name, subject_name, term, session))
+    
+    # FIXED: Admins should see ALL scores without restrictions
+    if role == "admin":
+        cursor.execute("""
+            SELECT id, student_name, subject_name, test_score, exam_score, 
+                   total_score, grade, position
+            FROM scores 
+            WHERE class_name = ? AND subject_name = ? AND term = ? AND session = ?
+            ORDER BY total_score DESC
+        """, (class_name, subject_name, term, session))
+    elif role == "class_teacher" and user_id:
+        cursor.execute("""
+            SELECT s.id, s.student_name, s.subject_name, s.test_score, s.exam_score, 
+                   s.total_score, s.grade, s.position
+            FROM scores s
+            JOIN teacher_assignments ta ON s.class_name = ta.class_name 
+                AND s.term = ta.term AND s.session = ta.session
+            WHERE s.class_name = ? AND s.subject_name = ? 
+                AND s.term = ? AND s.session = ? 
+                AND ta.user_id = ? AND ta.subject_name IS NULL
+            ORDER BY s.total_score DESC
+        """, (class_name, subject_name, term, session, user_id))
+    elif role == "subject_teacher" and user_id:
+        cursor.execute("""
+            SELECT s.id, s.student_name, s.subject_name, s.test_score, s.exam_score, 
+                   s.total_score, s.grade, s.position
+            FROM scores s
+            JOIN teacher_assignments ta ON s.class_name = ta.class_name 
+                AND s.term = ta.term AND s.session = ta.session 
+                AND s.subject_name = ta.subject_name
+            WHERE s.class_name = ? AND s.subject_name = ? 
+                AND s.term = ? AND s.session = ? 
+                AND ta.user_id = ?
+            ORDER BY s.total_score DESC
+        """, (class_name, subject_name, term, session, user_id))
+    else:
+        conn.close()
+        return []
     scores = cursor.fetchall()
     conn.close()
     return scores
 
-def get_all_scores_by_class(class_name, term, session):
-    """Get all scores for a class in specific term and session"""
+def get_all_scores_by_class(class_name, term, session, user_id=None, role=None):
+    """Get all scores for a class in specific term and session with role-based restrictions"""
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("""
-        SELECT id, student_name, subject_name, test_score, exam_score, 
-               total_score, grade, position
-        FROM scores 
-        WHERE class_name = ? AND term = ? AND session = ?
-        ORDER BY student_name, subject_name
-    """, (class_name, term, session))
+    
+    # FIXED: Admins should see ALL scores without restrictions
+    if role == "admin":
+        cursor.execute("""
+            SELECT id, student_name, subject_name, test_score, exam_score, 
+                   total_score, grade, position
+            FROM scores 
+            WHERE class_name = ? AND term = ? AND session = ?
+            ORDER BY student_name, subject_name
+        """, (class_name, term, session))
+    elif role == "class_teacher" and user_id:
+        cursor.execute("""
+            SELECT s.id, s.student_name, s.subject_name, s.test_score, s.exam_score, 
+                   s.total_score, s.grade, s.position
+            FROM scores s
+            JOIN teacher_assignments ta ON s.class_name = ta.class_name 
+                AND s.term = ta.term AND s.session = ta.session
+            WHERE s.class_name = ? AND s.term = ? AND s.session = ? 
+                AND ta.user_id = ? AND ta.subject_name IS NULL
+            ORDER BY s.student_name, s.subject_name
+        """, (class_name, term, session, user_id))
+    elif role == "subject_teacher" and user_id:
+        cursor.execute("""
+            SELECT s.id, s.student_name, s.subject_name, s.test_score, s.exam_score, 
+                   s.total_score, s.grade, s.position
+            FROM scores s
+            JOIN teacher_assignments ta ON s.class_name = ta.class_name 
+                AND s.term = ta.term AND s.session = ta.session 
+                AND s.subject_name = ta.subject_name
+            WHERE s.class_name = ? AND s.term = ? AND s.session = ? 
+                AND ta.user_id = ?
+            ORDER BY s.student_name, s.subject_name
+        """, (class_name, term, session, user_id))
+    else:
+        conn.close()
+        return []
     scores = cursor.fetchall()
     conn.close()
     return scores
 
-def get_student_scores(student_name, class_name, term, session):
-    """Get all scores for a specific student in specific term and session"""
+def get_student_scores(student_name, class_name, term, session, user_id=None, role=None):
+    """Get all scores for a specific student in specific term and session with role-based restrictions"""
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("""
-        SELECT id, student_name, subject_name, test_score, exam_score, 
-               total_score, grade, position
-        FROM scores 
-        WHERE student_name = ? AND class_name = ? AND term = ? AND session = ?
-        ORDER BY subject_name
-    """, (student_name, class_name, term, session))
+    
+    # FIXED: Admins should see ALL scores without restrictions
+    if role == "admin":
+        cursor.execute("""
+            SELECT id, student_name, subject_name, test_score, exam_score, 
+                   total_score, grade, position
+            FROM scores 
+            WHERE student_name = ? AND class_name = ? AND term = ? AND session = ?
+            ORDER BY subject_name
+        """, (student_name, class_name, term, session))
+    elif role == "class_teacher" and user_id:
+        cursor.execute("""
+            SELECT s.id, s.student_name, s.subject_name, s.test_score, s.exam_score, 
+                   s.total_score, s.grade, s.position
+            FROM scores s
+            JOIN teacher_assignments ta ON s.class_name = ta.class_name 
+                AND s.term = ta.term AND s.session = ta.session
+            WHERE s.student_name = ? AND s.class_name = ? 
+                AND s.term = ? AND s.session = ? 
+                AND ta.user_id = ? AND ta.subject_name IS NULL
+            ORDER BY s.subject_name
+        """, (student_name, class_name, term, session, user_id))
+    elif role == "subject_teacher" and user_id:
+        cursor.execute("""
+            SELECT s.id, s.student_name, s.subject_name, s.test_score, s.exam_score, 
+                   s.total_score, s.grade, s.position
+            FROM scores s
+            JOIN teacher_assignments ta ON s.class_name = ta.class_name 
+                AND s.term = ta.term AND s.session = ta.session 
+                AND s.subject_name = ta.subject_name
+            WHERE s.student_name = ? AND s.class_name = ? 
+                AND s.term = ? AND s.session = ? 
+                AND ta.user_id = ?
+            ORDER BY s.subject_name
+        """, (student_name, class_name, term, session, user_id))
+    else:
+        conn.close()
+        return []
     scores = cursor.fetchall()
     conn.close()
     return scores
@@ -437,37 +760,88 @@ def recalculate_positions(class_name, subject_name, term, session):
     conn.commit()
     conn.close()
 
-def get_class_average(class_name, term, session):
-    """Calculate the average total score for all students in a class for a term and session"""
+def get_class_average(class_name, term, session, user_id=None, role=None):
+    """Calculate the average total score for all students in a class for a term and session with role-based restrictions"""
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute("""
-            SELECT AVG(total_score)
-            FROM scores
-            WHERE class_name = ? AND term = ? AND session = ?
-        """, (class_name, term, session))
+        # FIXED: Admins should see ALL averages without restrictions
+        if role == "admin":
+            cursor.execute("""
+                SELECT AVG(total_score)
+                FROM scores
+                WHERE class_name = ? AND term = ? AND session = ?
+            """, (class_name, term, session))
+        elif role == "class_teacher" and user_id:
+            cursor.execute("""
+                SELECT AVG(s.total_score)
+                FROM scores s
+                JOIN teacher_assignments ta ON s.class_name = ta.class_name 
+                    AND s.term = ta.term AND s.session = ta.session
+                WHERE s.class_name = ? AND s.term = ? AND s.session = ? 
+                    AND ta.user_id = ? AND ta.subject_name IS NULL
+            """, (class_name, term, session, user_id))
+        elif role == "subject_teacher" and user_id:
+            cursor.execute("""
+                SELECT AVG(s.total_score)
+                FROM scores s
+                JOIN teacher_assignments ta ON s.class_name = ta.class_name 
+                    AND s.term = ta.term AND s.session = ta.session 
+                    AND s.subject_name = ta.subject_name
+                WHERE s.class_name = ? AND s.term = ? AND s.session = ? 
+                    AND ta.user_id = ?
+            """, (class_name, term, session, user_id))
+        else:
+            conn.close()
+            return 0
         avg = cursor.fetchone()[0]
+        conn.close()
         return round(avg, 2) if avg is not None else 0
     except sqlite3.Error as e:
         print(f"Error calculating class average: {e}")
-        return 0
-    finally:
         conn.close()
+        return 0
 
-def get_student_grand_totals(class_name, term, session):
-    """Get grand totals and ranks for all students in a class, term, and session"""
+def get_student_grand_totals(class_name, term, session, user_id=None, role=None):
+    """Get grand totals and ranks for all students in a class, term, and session with role-based restrictions"""
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        # Calculate grand total per student
-        cursor.execute("""
-            SELECT student_name, SUM(total_score) as grand_total
-            FROM scores
-            WHERE class_name = ? AND term = ? AND session = ?
-            GROUP BY student_name
-            ORDER BY grand_total DESC
-        """, (class_name, term, session))
+        # FIXED: Admins should see ALL grand totals without restrictions
+        if role == "admin":
+            cursor.execute("""
+                SELECT student_name, SUM(total_score) as grand_total
+                FROM scores
+                WHERE class_name = ? AND term = ? AND session = ?
+                GROUP BY student_name
+                ORDER BY grand_total DESC
+            """, (class_name, term, session))
+        elif role == "class_teacher" and user_id:
+            cursor.execute("""
+                SELECT s.student_name, SUM(s.total_score) as grand_total
+                FROM scores s
+                JOIN teacher_assignments ta ON s.class_name = ta.class_name 
+                    AND s.term = ta.term AND s.session = ta.session
+                WHERE s.class_name = ? AND s.term = ? AND s.session = ? 
+                    AND ta.user_id = ? AND ta.subject_name IS NULL
+                GROUP BY s.student_name
+                ORDER BY grand_total DESC
+            """, (class_name, term, session, user_id))
+        elif role == "subject_teacher" and user_id:
+            cursor.execute("""
+                SELECT s.student_name, SUM(s.total_score) as grand_total
+                FROM scores s
+                JOIN teacher_assignments ta ON s.class_name = ta.class_name 
+                    AND s.term = ta.term AND s.session = ta.session 
+                    AND s.subject_name = ta.subject_name
+                WHERE s.class_name = ? AND s.term = ? AND s.session = ? 
+                    AND ta.user_id = ?
+                GROUP BY s.student_name
+                ORDER BY grand_total DESC
+            """, (class_name, term, session, user_id))
+        else:
+            conn.close()
+            return []
         student_totals = cursor.fetchall()
 
         # Assign ranks, handling ties
@@ -484,12 +858,12 @@ def get_student_grand_totals(class_name, term, session):
             })
             previous_total = grand_total
 
+        conn.close()
         return result
     except sqlite3.Error as e:
         print(f"Error fetching grand totals: {e}")
-        return []
-    finally:
         conn.close()
+        return []
 
 def clear_all_scores(class_name, subject_name, term, session):
     """Delete all scores for a specific class, subject, term, and session"""
@@ -509,7 +883,6 @@ def clear_all_scores(class_name, subject_name, term, session):
         conn.close()
 
 # ==================== UTILITY FUNCTIONS ====================
-
 def get_database_stats():
     """Get database statistics"""
     conn = get_connection()
@@ -532,6 +905,18 @@ def get_database_stats():
     # Count scores
     cursor.execute("SELECT COUNT(*) FROM scores")
     stats['scores'] = cursor.fetchone()[0]
+    
+    # Count users
+    cursor.execute("SELECT COUNT(*) FROM users")
+    stats['users'] = cursor.fetchone()[0]
+    
+    # Count assignments
+    cursor.execute("SELECT COUNT(*) FROM teacher_assignments")
+    stats['assignments'] = cursor.fetchone()[0]
+    
+    # Count comments
+    cursor.execute("SELECT COUNT(*) FROM comments")
+    stats['comments'] = cursor.fetchone()[0]
     
     conn.close()
     return stats

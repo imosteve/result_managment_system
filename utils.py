@@ -134,3 +134,12 @@ def sanitize_filename(filename):
     # Remove extra spaces and replace with underscores
     filename = re.sub(r'\s+', '_', filename.strip())
     return filename
+
+def format_ordinal(n):
+    if not isinstance(n, int):
+        return str(n)
+    if 10 <= n % 100 <= 20:
+        suffix = 'th'
+    else:
+        suffix = {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')
+    return f"{n}{suffix}"
