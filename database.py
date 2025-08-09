@@ -1,10 +1,21 @@
 import sqlite3
 import os
 import bcrypt
+import logging
+from contextlib import contextmanager
 from utils import assign_grade
 
 # Database file path
-DB_PATH = os.path.join("data", "school.db")
+DB_PATH = os.getenv('DATABASE_PATH', os.path.join("data", "school.db"))
+BACKUP_PATH = os.getenv('BACKUP_PATH', os.path.join("backups"))
+LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
+
+# Configure logging
+logging.basicConfig(
+    level=getattr(logging, LOG_LEVEL),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 def get_connection():
     """Get database connection"""
@@ -13,6 +24,19 @@ def get_connection():
     conn.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
     conn.row_factory = sqlite3.Row  # Enable row factory for dict-like access
     return conn
+
+@contextmanager
+def get_db_connection():
+    """Context manager for database connections"""
+    conn = get_connection()
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 def create_tables():
     """Create all database tables"""
@@ -90,7 +114,7 @@ def create_tables():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
             password TEXT NOT NULL,
-            role TEXT NOT NULL CHECK(role IN ('admin', 'class_teacher', 'subject_teacher'))
+            role TEXT NOT NULL CHECK(role IN ('superadmin', 'admin', 'class_teacher', 'subject_teacher'))
         )
     """)
     
@@ -131,7 +155,11 @@ def create_tables():
     
     conn.commit()
     conn.close()
+    
+    # Create performance indexes
+    create_performance_indexes()
 
+# ==================== USER OPERATIONS ====================
 def create_user(username, password, role):
     """Create a new user with hashed password"""
     hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
@@ -141,10 +169,12 @@ def create_user(username, password, role):
         cursor.execute("""
             INSERT INTO users (username, password, role)
             VALUES (?, ?, ?)
-        """, (username, hashed_password, role))
+        """, (username, password, role))
         conn.commit()
+        logger.info(f"User '{username}' created successfully with role '{role}'")
         return True
     except sqlite3.IntegrityError:
+        logger.warning(f"Failed to create user '{username}' - may already exist")
         return False
     finally:
         conn.close()
@@ -177,17 +207,23 @@ def get_all_users():
 
 def get_user_assignments(user_id):
     """Get class/subject assignments for a user"""
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT id, class_name, term, session, subject_name
-        FROM teacher_assignments
-        WHERE user_id = ?
-        ORDER BY session DESC, term, class_name, subject_name
-    """, (user_id,))
-    assignments = cursor.fetchall()
-    conn.close()
-    return assignments
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, class_name, term, session, subject_name
+            FROM teacher_assignments
+            WHERE user_id = ?
+            ORDER BY session DESC, term, class_name, subject_name
+        """, (user_id,))
+        assignments = cursor.fetchall()
+        conn.close()
+        
+        logger.info(f"Retrieved {len(assignments)} assignments for user {user_id}")
+        return assignments
+    except Exception as e:
+        logger.error(f"Error getting assignments for user {user_id}: {str(e)}")
+        return []
 
 def assign_teacher(user_id, class_name, term, session, subject_name=None):
     """Assign a class or class/subject to a teacher"""
@@ -342,7 +378,7 @@ def clear_all_classes():
         conn.commit()
         return True
     except sqlite3.Error as e:
-        print(f"Error clearing classes: {e}")
+        logger.error(f"Error clearing classes: {e}")
         return False
     finally:
         conn.close()
@@ -400,6 +436,24 @@ def create_student(name, gender, email, class_name, term, session):
         conn.commit()
         return True
     except sqlite3.IntegrityError:
+        return False
+    finally:
+        conn.close()
+
+def create_students_batch(students_data, class_name, term, session):
+    """Create multiple students in a single transaction"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.executemany("""
+            INSERT INTO students (name, gender, email, class_name, term, session) 
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, [(s['name'], s.get('gender'), s.get('email'), class_name, term, session) 
+              for s in students_data])
+        conn.commit()
+        return True
+    except sqlite3.IntegrityError as e:
+        logger.error(f"Batch student creation failed: {str(e)}")
         return False
     finally:
         conn.close()
@@ -530,7 +584,7 @@ def clear_all_subjects(class_name, term, session):
         conn.commit()
         return True
     except sqlite3.Error as e:
-        print(f"Error clearing subjects: {e}")
+        logger.error(f"Error clearing subjects: {e}")
         return False
     finally:
         conn.close()
@@ -798,7 +852,7 @@ def get_class_average(class_name, term, session, user_id=None, role=None):
         conn.close()
         return round(avg, 2) if avg is not None else 0
     except sqlite3.Error as e:
-        print(f"Error calculating class average: {e}")
+        logger.error(f"Error calculating class average: {e}")
         conn.close()
         return 0
 
@@ -861,7 +915,7 @@ def get_student_grand_totals(class_name, term, session, user_id=None, role=None)
         conn.close()
         return result
     except sqlite3.Error as e:
-        print(f"Error fetching grand totals: {e}")
+        logger.error(f"Error fetching grand totals: {e}")
         conn.close()
         return []
 
@@ -877,7 +931,7 @@ def clear_all_scores(class_name, subject_name, term, session):
         conn.commit()
         return True
     except sqlite3.Error as e:
-        print(f"Error clearing scores: {e}")
+        logger.error(f"Error clearing scores: {e}")
         return False
     finally:
         conn.close()
@@ -949,8 +1003,10 @@ def backup_database(backup_path):
     import shutil
     try:
         shutil.copy2(DB_PATH, backup_path)
+        logger.info(f"Database backed up to {backup_path}")
         return True
-    except Exception:
+    except Exception as e:
+        logger.error(f"Database backup failed: {str(e)}")
         return False
 
 def restore_database(backup_path):
@@ -958,8 +1014,10 @@ def restore_database(backup_path):
     import shutil
     try:
         shutil.copy2(backup_path, DB_PATH)
+        logger.info(f"Database restored from {backup_path}")
         return True
-    except Exception:
+    except Exception as e:
+        logger.error(f"Database restore failed: {str(e)}")
         return False
 
 def migrate_old_database():
@@ -973,7 +1031,7 @@ def migrate_old_database():
     
     if 'term' not in columns or 'session' not in columns:
         # This is an old database, needs migration
-        print("Migrating old database structure...")
+        logger.info("Migrating old database structure...")
         
         # Backup old tables
         cursor.execute("ALTER TABLE classes RENAME TO classes_old")
@@ -1002,6 +1060,97 @@ def migrate_old_database():
         cursor.execute("DROP TABLE scores_old")
         
         conn.commit()
-        print("Migration completed!")
+        logger.info("Migration completed!")
     
     conn.close()
+
+# ==================== ENHANCED PRODUCTION FUNCTIONS ====================
+def database_health_check():
+    """Check database integrity and connectivity"""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        
+        # Test basic connectivity
+        cursor.execute("SELECT 1")
+        
+        # Check foreign key constraints
+        cursor.execute("PRAGMA foreign_key_check")
+        fk_violations = cursor.fetchall()
+        
+        # Check integrity
+        cursor.execute("PRAGMA integrity_check")
+        integrity_result = cursor.fetchone()[0]
+        
+        conn.close()
+        
+        return {
+            'status': 'healthy' if integrity_result == 'ok' and not fk_violations else 'issues',
+            'integrity': integrity_result,
+            'foreign_key_violations': len(fk_violations),
+            'details': fk_violations if fk_violations else None
+        }
+    except Exception as e:
+        logger.error(f"Database health check failed: {str(e)}")
+        return {'status': 'error', 'error': str(e)}
+
+def create_performance_indexes():
+    """Create indexes for better query performance"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        # Indexes for common queries
+        indexes = [
+            "CREATE INDEX IF NOT EXISTS idx_students_class_term_session ON students(class_name, term, session)",
+            "CREATE INDEX IF NOT EXISTS idx_subjects_class_term_session ON subjects(class_name, term, session)",  
+            "CREATE INDEX IF NOT EXISTS idx_scores_class_subject_term_session ON scores(class_name, subject_name, term, session)",
+            "CREATE INDEX IF NOT EXISTS idx_scores_student_class_term_session ON scores(student_name, class_name, term, session)",
+            "CREATE INDEX IF NOT EXISTS idx_teacher_assignments_user ON teacher_assignments(user_id)",
+            "CREATE INDEX IF NOT EXISTS idx_scores_total_score ON scores(total_score DESC)"
+        ]
+        
+        for index_sql in indexes:
+            cursor.execute(index_sql)
+        
+        conn.commit()
+        logger.info("Performance indexes created successfully")
+        return True
+    except Exception as e:
+        logger.error(f"Error creating indexes: {str(e)}")
+        return False
+    finally:
+        conn.close()
+
+def validate_student_data(name, gender=None, email=None):
+    """Validate student data before database insertion"""
+    errors = []
+    
+    if not name or not name.strip():
+        errors.append("Student name is required")
+    
+    if gender and gender not in ['M', 'F']:
+        errors.append("Gender must be 'M' or 'F'")
+    
+    if email and '@' not in email:
+        errors.append("Invalid email format")
+    
+    return errors
+
+def validate_score_data(test_score, exam_score):
+    """Validate score data"""
+    errors = []
+    
+    try:
+        test = float(test_score)
+        exam = float(exam_score)
+        
+        if test < 0 or test > 30:
+            errors.append("Test score must be between 0 and 30")
+        
+        if exam < 0 or exam > 70:
+            errors.append("Exam score must be between 0 and 70")
+            
+    except (ValueError, TypeError):
+        errors.append("Scores must be valid numbers")
+    
+    return errors

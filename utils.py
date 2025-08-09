@@ -29,7 +29,7 @@ def create_metric_4col(class_name, term, session, subjects_or_students, type):
 
     # Display metrics with custom style
     with col1:
-        st.markdown(f"<div class='custom-metric'><div class='label'>Class</div><div class='value'>{class_name}</div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='custom-metric'><div class='label'>Class</div><div class='value'>{class_name.title()}</div></div>", unsafe_allow_html=True)
     with col2:
         st.markdown(f"<div class='custom-metric'><div class='label'>Term</div><div class='value'>{term}</div></div>", unsafe_allow_html=True)
     with col3:

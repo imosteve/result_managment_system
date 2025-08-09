@@ -16,7 +16,17 @@ footer {visibility: hidden;}
 }
 
 /* Title styling */
-.login-title {
+.login-title h2{
+    color: white;
+    font-size: 2.2rem;
+    font-weight: 300;
+    text-align: center;
+    margin-bottom: 1.5rem;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Title styling */
+.assignment-title {
     color: white;
     font-size: 2.2rem;
     font-weight: 300;

@@ -1,4 +1,5 @@
 import streamlit as st
+import time
 from database import (
     get_all_classes, get_subjects_by_class,
     create_user, get_all_users, delete_user, assign_teacher, get_user_assignments,
@@ -72,18 +73,16 @@ def admin_interface():
 
     # View/Delete User Tab
     with tabs[0]:
-        st.markdown(
-            """
-            <div style='text-align: center;'>
-                <h3 style='color:#000; font-size:20px;'>View/Delete Users</h3>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+        # Add refresh button
+        col1, col2 = st.columns([4, 1])
+        with col2:
+            if st.button("🔄 Refresh Data", key="refresh_user_tab"):
+                st.rerun()
+                
         st.subheader("Current Users")
         users = get_all_users()
         if users:
-            user_data = [{"ID": u[0], "Username": u[1], "Role": u[2]} for u in users]
+            user_data = [{"Username": u[1], "Role": u[2], "Password": u[3]} for u in users]
             st.dataframe(user_data, use_container_width=True)
             user_id_to_delete = st.selectbox(
                 "Select User to Delete",
@@ -103,24 +102,25 @@ def admin_interface():
 
     # Add New User Tab
     with tabs[1]:
-        st.markdown(
-            """
-            <div style='text-align: center;'>
-                <h3 style='color:#000; font-size:20px;'>Add New User</h3>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+        # Add refresh button
+        col1, col2 = st.columns([4, 1])
+        with col2:
+            if st.button("🔄 Refresh Data", key="refresh_new_user"):
+                st.rerun()
+
         with st.form("add_user_form"):
             st.subheader("Add New User")
-            username = st.text_input("Username")
-            password = st.text_input("Password", type="password")
-            role = st.selectbox("Role", ["admin", "class_teacher", "subject_teacher"], key="add_user_role")
+            # Use a dynamic key based on a session state counter
+            form_key = f"add_user_form_{st.session_state.get('form_submit_count', 0)}"
+            username = st.text_input("Username", key=f"username_{form_key}")
+            password = st.text_input("Password", type="password", key=f"password_{form_key}")
+            role = st.selectbox("Role", ["admin", "class_teacher", "subject_teacher"], key=f"role_{form_key}")
             submitted = st.form_submit_button("Add User")
             if submitted:
                 if username and password and role:
                     if create_user(username, password, role):
-                        st.success(f"✅ User {username} added successfully.")
+                        st.session_state.success_message = f"✅ User {username} added successfully."
+                        st.session_state.form_submit_count = st.session_state.get('form_submit_count', 0) + 1
                         st.rerun()
                     else:
                         st.error(f"❌ Failed to add user. Username may already exist.")
@@ -129,14 +129,12 @@ def admin_interface():
 
     # View/Edit Teachers Assignment Tab
     with tabs[2]:
-        st.markdown(
-            """
-            <div style='text-align: center;'>
-                <h3 style='color:#000; font-size:20px;'>View/Edit Teachers Assignments</h3>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+        # Add refresh button
+        col1, col2 = st.columns([4, 1])
+        with col2:
+            if st.button("🔄 Refresh Data", key="refresh_teachers_tab"):
+                st.rerun()
+
         st.subheader("Current Assignments")
         users = get_all_users()
         assignments = []
@@ -213,22 +211,13 @@ def admin_interface():
 
     # Assign/Delete Class Teacher Tab
     with tabs[3]:
-        st.markdown(
-            """
-            <div style='text-align: center;'>
-                <h3 style='color:#000; font-size:20px;'>Assign Class Teacher</h3>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-        
         # Add refresh button
-        col1, col2 = st.columns([3, 1])
+        col1, col2 = st.columns([4, 1])
         with col2:
             if st.button("🔄 Refresh Data", key="refresh_class_teacher"):
                 st.rerun()
         
-        st.subheader("Assign Class Teacher")
+        # st.subheader("Assign Class Teacher")
         with st.form("assign_class_teacher_form"):
             users = get_all_users()
             user_options = [(u[0], u[1], u[2]) for u in users if u[2] == "class_teacher"]
@@ -284,22 +273,13 @@ def admin_interface():
 
     # Assign/Delete Subject Teacher Tab
     with tabs[4]:
-        st.markdown(
-            """
-            <div style='text-align: center;'>
-                <h3 style='color:#000; font-size:20px;'>Assign Subject Teacher</h3>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-        
         # Add refresh button
-        col1, col2 = st.columns([3, 1])
+        col1, col2 = st.columns([4, 1])
         with col2:
             if st.button("🔄 Refresh Data", key="refresh_subject_teacher"):
                 st.rerun()
         
-        st.subheader("Assign Subject Teacher")
+        # st.subheader("Assign Subject Teacher")
         
         # Initialize session state for dynamic updates
         if 'selected_class_for_subject' not in st.session_state:

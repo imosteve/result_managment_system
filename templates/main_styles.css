@@ -1,8 +1,9 @@
 .main-header {
     background: linear-gradient(135deg, #2E8B57, #228B22);
     padding: 20px;
-    border-radius: 10px;
+    /* border-radius: 10px; */
     margin-bottom: 20px;
+    height: 100px;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
