@@ -162,7 +162,11 @@ def create_tables():
 # ==================== USER OPERATIONS ====================
 def create_user(username, password, role):
     """Create a new user with hashed password"""
-    hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    # hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    # Require at least 8 characters
+    if len(password) < 4:
+        logger.error(f"Password for user '{username}' is too short (length: {len(password)})")
+        return False
     conn = get_connection()
     cursor = conn.cursor()
     try:
@@ -197,10 +201,10 @@ def delete_user(user_id):
     conn.close()
 
 def get_all_users():
-    """Get all users"""
+    """Get all users including password"""
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT id, username, role FROM users ORDER BY username")
+    cursor.execute("SELECT id, username, role, password FROM users ORDER BY username")
     users = cursor.fetchall()
     conn.close()
     return users

@@ -60,11 +60,13 @@ def handle_navigation(app: ApplicationManager, options: dict):
     else:
         current_page = option_keys[0]
 
+    st.sidebar.header("Navigate to:")
     # Navigation selectbox
     choice = st.sidebar.selectbox(
         "🧭 Navigate to:",
         option_keys,
-        index=option_keys.index(current_page)
+        index=option_keys.index(current_page),
+        label_visibility = "collapsed",
     )
 
     # Update URL parameters if choice changed
@@ -88,7 +90,7 @@ def handle_navigation(app: ApplicationManager, options: dict):
 def render_logout_button():
     """Render logout button with confirmation"""
     with st.sidebar:
-        st.markdown("---")
+        # st.markdown("---")
         if st.button("🚪 Logout", type="secondary", use_container_width=True):
             # Clear query parameters
             st.query_params.clear()

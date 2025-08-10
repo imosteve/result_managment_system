@@ -84,7 +84,7 @@
                             <td>{{ subject.exam }}</td>
                             <td>{{ subject.total }}</td>
                             <td>{{ subject.grade }}</td>
-                            <td>{{ 'Excellent' if subject.grade == 'A' else 'Very Good' if subject.grade == 'B' else 'Good' if subject.grade == 'C' else 'Pass' }}</td>
+                            <td>{{ 'Excellent' if subject.grade == 'A' else 'Very Good' if subject.grade == 'B' else 'Good' if subject.grade == 'C' else 'Pass' if subject.grade == 'D' else 'Weak Pass' if subject.grade == 'E' else 'Fail' if subject.grade == 'F' else ' ' }}</td>
                         </tr>
                         {% endfor %}
                         <tr class="total-row">

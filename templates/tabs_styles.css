@@ -18,3 +18,26 @@
     border-radius: 5px;
     margin-bottom: 10px;
 }
+
+/* Reliable selector for Streamlit tabs (recent versions) */
+div[data-testid="stTabs"] button[role="tab"] {
+    font-size: 25px !important;
+    padding: 8px 18px !important;
+    border-radius: 2px !important;
+    text-align: center !important;
+    color: #111 !important;
+}
+
+/* Selected tab styling */
+div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
+    background-color: #2E8B57 !important;
+    color: #fff !important;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.12) !important;
+}
+
+/* If the label is inside a span, make sure the span inherits size */
+div[data-testid="stTabs"] button[role="tab"] span {
+    font-size: inherit !important;
+    vertical-align: middle;
+    display:inline-block;
+}

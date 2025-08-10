@@ -5,7 +5,6 @@ import streamlit as st
 import logging
 from datetime import datetime
 from typing import Optional, Dict, Any
-from .config import COOKIE_PREFIX
 
 logger = logging.getLogger(__name__)
 
@@ -61,17 +60,21 @@ class SessionManager:
             True if saved successfully, False otherwise
         """
         try:
+            # Handle None values properly
+            subject_name = assignment_data.get("subject_name") or ""
+            
             st.session_state.assignment = {
                 "class_name": assignment_data["class_name"],
                 "term": assignment_data["term"],
                 "session": assignment_data["session"],
-                "subject_name": assignment_data.get("subject_name")
+                "subject_name": subject_name
             }
             
-            cookies["assignment_class"] = assignment_data["class_name"]
-            cookies["assignment_term"] = assignment_data["term"]
-            cookies["assignment_session"] = assignment_data["session"]
-            cookies["assignment_subject"] = assignment_data.get("subject_name", "")
+            # Ensure all cookie values are strings, not None
+            cookies["assignment_class"] = str(assignment_data["class_name"])
+            cookies["assignment_term"] = str(assignment_data["term"])
+            cookies["assignment_session"] = str(assignment_data["session"])
+            cookies["assignment_subject"] = subject_name  # Already guaranteed to be string
             cookies.save()
             
             logger.info(f"Assignment saved for user {st.session_state.get('username')}: {assignment_data['class_name']}")

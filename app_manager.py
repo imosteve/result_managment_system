@@ -134,7 +134,7 @@ class ApplicationManager:
         """Render application header"""
         st.markdown(f"""
         <div class="main-header">
-            <h4>{APP_CONFIG['app_name']}</h4>
+            <h2>{APP_CONFIG['app_name']}</h2>
         </div>
         """, unsafe_allow_html=True)
 
@@ -144,11 +144,14 @@ class ApplicationManager:
             st.markdown(f"""
             <div class="user-info-card">
                 <h4>👤 User Information</h4>
-                <p><strong>Username:</strong> {username}</p>
+                <p><strong>Username:</strong> {username.title()}</p>
                 <p><strong>Role:</strong> {role.replace('_', ' ').title()}</p>
                 <p><strong>Login Time:</strong> {st.session_state.get('login_time', 'Unknown')}</p>
             </div>
             """, unsafe_allow_html=True)
+
+            if st.button("🔄 Refresh", key="refresh_data", width="stretch"):
+                    st.rerun()
 
     def get_navigation_options(self, role: str) -> Dict[str, Callable]:
         """Get navigation options based on user role"""
@@ -197,7 +200,8 @@ class ApplicationManager:
                 }
             elif role == "subject_teacher":
                 base_options = {
-                    "📝 Enter Scores": enter_scores.enter_scores
+                    "📝 Enter Scores": enter_scores.enter_scores,
+                    "📋 View Broadsheet": view_broadsheet.generate_broadsheet,
                 }
             
             # Add assignment selection for teachers
@@ -259,7 +263,7 @@ class ApplicationManager:
         """Render role-specific dashboard content"""
         st.markdown("---")
         
-        if role == "admin":
+        if role in "superadmin":
             st.subheader("🔧 Admin Tools")
             col1, col2, col3 = st.columns(3)
             
@@ -282,7 +286,7 @@ class ApplicationManager:
             if assignment:
                 st.info(f"📌 Current Assignment: {assignment.get('class_name', 'N/A')} - {assignment.get('subject_name', 'All Subjects')}")
             else:
-                st.warning("⚠️ No assignment selected. Please select an assignment to continue.")
+                st.warning("⚠️ No assignment selected. Logout and login again to select an assignment to continue.")
 
     def perform_health_check(self):
         """Perform system health check"""

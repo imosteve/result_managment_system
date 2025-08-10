@@ -27,7 +27,9 @@ def setup_logging():
         # Create console handler with UTF-8 encoding
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setFormatter(formatter)
-        console_handler.setEncoding('utf-8')  # Explicitly set UTF-8 encoding for console
+        # Only set encoding if the method exists (Python 3.9+)
+        if hasattr(console_handler, 'setEncoding'):
+            console_handler.setEncoding('utf-8')
         
         # Configure root logger
         logging.basicConfig(
@@ -51,12 +53,11 @@ def setup_logging():
         
         return True
     except Exception as e:
-        # Fallback to console logging only with UTF-8 encoding
+        # Fallback to console logging only
         logging.basicConfig(
             level=getattr(logging, LOG_CONFIG['level']),
             format=LOG_CONFIG['format'],
             handlers=[logging.StreamHandler(sys.stdout)],
-            encoding='utf-8',  # Explicitly set UTF-8 encoding for fallback
             force=True
         )
         print(f"Warning: Could not setup file logging: {e}")

@@ -1,7 +1,7 @@
 """Authentication validation functions"""
 
 import streamlit as st
-import bcrypt
+# import bcrypt
 import logging
 from typing import Optional, Dict, Any
 from database import get_user_by_username
@@ -24,7 +24,7 @@ def validate_credentials(username: str, password: str) -> Optional[Dict[str, Any
         
     try:
         user = get_user_by_username(username)
-        if user and bcrypt.checkpw(password.encode('utf-8'), user["password"].encode('utf-8')):
+        if user and user["password"] == password:
             logger.info(f"Successful login for user: {username}")
             return user
         else:
@@ -113,7 +113,7 @@ def validate_user_input(username: str, password: str) -> tuple[bool, str]:
     if len(username.strip()) == 0:
         return False, "Username cannot be empty."
     
-    if len(password) < 3:  # Minimum password length
+    if len(password) < 4:  # Minimum password length
         return False, "Password too short."
     
     return True, ""

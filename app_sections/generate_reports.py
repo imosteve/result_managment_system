@@ -2,10 +2,10 @@ import streamlit as st
 import os
 from jinja2 import Environment, FileSystemLoader
 from weasyprint import HTML, CSS
-from utils import assign_grade, create_metric_5col_report, format_ordinal
+from utils import assign_grade, create_metric_5col_report, format_ordinal, render_page_header
 from database import (
     get_all_classes, get_students_by_class, get_student_scores, 
-    get_class_average, get_student_grand_totals, get_comment
+    get_class_average, get_student_grand_totals, get_comment, get_subjects_by_class
 )
 
 def generate_report_card(student_name, class_name, term, session):
@@ -23,16 +23,24 @@ def generate_report_card(student_name, class_name, term, session):
 
     # Fetch student scores with role-based restrictions
     student_scores = get_student_scores(student_name, class_name, term, session, user_id, role)
-    if not student_scores:
+    
+    # Get all subjects for the class
+    all_subjects = get_subjects_by_class(class_name, term, session, user_id, role)
+    if not all_subjects:
         return None
 
-    # Calculate student average and totals
-    total_score = sum(score[5] for score in student_scores)  # total_score column
-    total_test = sum(score[3] for score in student_scores)  # test_score column
-    total_exam = sum(score[4] for score in student_scores)  # exam_score column
-    grand_total = total_test + total_exam  # Should match sum of total_score
-    avg = total_score / len(student_scores) if student_scores else 0
-    grade = assign_grade(avg)
+    # Calculate student average and totals (only from actual scores)
+    if student_scores:
+        total_score = sum(score[5] for score in student_scores)  # total_score column
+        total_test = sum(score[3] for score in student_scores)  # test_score column
+        total_exam = sum(score[4] for score in student_scores)  # exam_score column
+        grand_total = total_test + total_exam  # Should match sum of total_score
+        avg = total_score / len(student_scores) if student_scores else 0
+        grade = assign_grade(avg)
+    else:
+        total_score = total_test = total_exam = grand_total = 0
+        avg = 0
+        grade = "-"
 
     # Calculate class average with role-based restrictions
     class_average = get_class_average(class_name, term, session, user_id, role)
@@ -47,17 +55,32 @@ def generate_report_card(student_name, class_name, term, session):
     class_teacher_comment = comment['class_teacher_comment'] if comment and comment['class_teacher_comment'] else "No comment provided."
     head_teacher_comment = comment['head_teacher_comment'] if comment and comment['head_teacher_comment'] else "No comment provided."
 
-    # Prepare data for template
+    # Create score dictionary for quick lookup
+    score_dict = {score[2]: score for score in student_scores}
+
+    # Prepare data for template with all subjects
     subjects_data = []
-    for score in student_scores:
-        subjects_data.append({
-            'subject': score[2],
-            'test': score[3],
-            'exam': score[4],
-            'total': score[5],
-            'grade': score[6],
-            'position': format_ordinal(position_data['position']) if position_data else "-"
-        })
+    for subject in all_subjects:
+        subject_name = subject[1]
+        if subject_name in score_dict:
+            score = score_dict[subject_name]
+            subjects_data.append({
+                'subject': subject_name,
+                'test': score[3],
+                'exam': score[4],
+                'total': score[5],
+                'grade': score[6],
+                'position': format_ordinal(position_data['position']) if position_data else "-"
+            })
+        else:
+            subjects_data.append({
+                'subject': subject_name,
+                'test': "-",
+                'exam': "-",
+                'total': "-",
+                'grade': "-",
+                'position': "-"
+            })
 
     # Load and render template
     try:
@@ -104,7 +127,7 @@ def report_card_section():
         st.switch_page("main.py")
         return
 
-    if st.session_state.role not in ["admin", "class_teacher"]:
+    if st.session_state.role not in ["superadmin", "admin", "class_teacher"]:
         st.error("⚠️ Access denied. Admins and Class Teachers only.")
         return
 
@@ -113,16 +136,8 @@ def report_card_section():
 
     st.set_page_config(page_title="Generate Report Card")
     
-    st.markdown(
-        """
-        <div style='width: auto; margin: auto; text-align: center; background-color: #c6b7b1;'>
-            <h3 style='color:#000; font-size:20px; margin-top:30px;'>
-                Generate Report Card
-            </h3>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+    # Subheader
+    render_page_header("Generate Report Card")
 
     classes = get_all_classes(user_id, role)
     if not classes:

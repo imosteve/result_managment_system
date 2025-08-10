@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import logging
 from typing import Optional, List, Dict, Any
-from utils import assign_grade, inject_login_css
+from utils import assign_grade, inject_login_css, format_ordinal, render_page_header
 from database import (
     get_all_classes, get_students_by_class, get_subjects_by_class,
     get_scores_by_class_subject, save_scores, clear_all_scores,
@@ -31,8 +31,8 @@ def enter_scores():
         st.set_page_config(page_title="Enter Scores", layout="wide")
         inject_login_css("templates/tabs_styles.css")
 
-        # Render page header
-        _render_page_header()
+        # Subheader
+        render_page_header("Manage Subject Scores")
 
         # Main application logic
         _render_score_management_interface()
@@ -261,14 +261,14 @@ def _render_score_entry_tab(students: List[tuple], score_map: Dict[str, tuple],
                     "Test (30%)", 
                     min_value=0, 
                     max_value=30, 
-                    width="medium",
+                    width="small",
                     format="%.1f"
                 ),
                 "Exam (70%)": st.column_config.NumberColumn(
                     "Exam (70%)", 
                     min_value=0, 
                     max_value=70, 
-                    width="medium",
+                    width="small",
                     format="%.1f"
                 ),
             },
@@ -350,7 +350,7 @@ def _save_scores_to_database(df: pd.DataFrame, class_name: str, subject: str, te
 def _render_score_preview_tab(students: List[tuple], score_map: Dict[str, tuple]):
     """Render the score preview tab"""
     st.subheader("👀 Preview Scores")
-    
+
     # Build preview data
     preview_data = []
     for idx, student in enumerate(students, 1):
@@ -362,7 +362,7 @@ def _render_score_preview_tab(students: List[tuple], score_map: Dict[str, tuple]
             exam = float(existing[4]) if existing[4] is not None else 0.0
             total = float(existing[5]) if existing[5] is not None else test + exam
             grade = existing[6] if existing[6] else assign_grade(total)
-            position = _format_ordinal(existing[7]) if existing[7] else "-"
+            position = format_ordinal(existing[7]) if existing[7] else "-"
         else:
             test = exam = total = 0.0
             grade = assign_grade(0.0)
@@ -384,11 +384,11 @@ def _render_score_preview_tab(students: List[tuple], score_map: Dict[str, tuple]
             column_config={
                 "S/N": st.column_config.TextColumn("S/N", width="small"),
                 "Student": st.column_config.TextColumn("Student", width="large"),
-                "Test": st.column_config.TextColumn("Test", width="medium"),
-                "Exam": st.column_config.TextColumn("Exam", width="medium"),
-                "Total": st.column_config.TextColumn("Total", width="medium"),
-                "Grade": st.column_config.TextColumn("Grade", width="medium"),
-                "Position": st.column_config.TextColumn("Position", width="medium")
+                "Test": st.column_config.TextColumn("Test", width="small"),
+                "Exam": st.column_config.TextColumn("Exam", width="small"),
+                "Total": st.column_config.TextColumn("Total", width="small"),
+                "Grade": st.column_config.TextColumn("Grade", width="small"),
+                "Position": st.column_config.TextColumn("Position", width="small")
             },
             hide_index=True,
             use_container_width=True
@@ -437,18 +437,6 @@ def _clear_all_scores_from_database(class_name: str, subject: str, term: str, se
         st.error("❌ Failed to clear scores. Please try again.")
         return False
 
-def _format_ordinal(n: int) -> str:
-    """Format number as ordinal (1st, 2nd, 3rd, etc.)"""
-    if not isinstance(n, int) or n <= 0:
-        return str(n) if n is not None else "-"
-    
-    if 10 <= n % 100 <= 20:
-        suffix = 'th'
-    else:
-        suffix = {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')
-    
-    return f"{n}{suffix}"
-
 # Additional utility functions for production readiness
 
 def _get_user_assignment_context() -> Optional[Dict[str, Any]]:
@@ -456,7 +444,7 @@ def _get_user_assignment_context() -> Optional[Dict[str, Any]]:
     user_id = st.session_state.get("user_id")
     role = st.session_state.get("role")
     
-    if not user_id or role == "admin":
+    if not user_id or role in ["superadmin", "admin"]:
         return None
     
     try:
@@ -476,41 +464,41 @@ def _get_user_assignment_context() -> Optional[Dict[str, Any]]:
     
     return None
 
-def _display_role_info():
-    """Display user role and permissions information"""
-    role = st.session_state.get("role", "Unknown")
-    username = st.session_state.get("username", "Unknown User")
+# def _display_role_info():
+#     """Display user role and permissions information"""
+#     role = st.session_state.get("role", "Unknown")
+#     username = st.session_state.get("username", "Unknown User")
     
-    role_descriptions = {
-        "admin": "Full access to all classes, subjects, and students",
-        "class_teacher": "Access to assigned classes and all their subjects",
-        "subject_teacher": "Access to assigned subjects in assigned classes"
-    }
+#     role_descriptions = {
+#         "admin": "Full access to all classes, subjects, and students",
+#         "class_teacher": "Access to assigned classes and all their subjects",
+#         "subject_teacher": "Access to assigned subjects in assigned classes"
+#     }
     
-    with st.sidebar:
-        st.markdown("---")
-        st.markdown("### 👤 User Information")
-        st.markdown(f"**User:** {username}")
-        st.markdown(f"**Role:** {role.replace('_', ' ').title()}")
-        st.markdown(f"**Permissions:** {role_descriptions.get(role, 'Limited access')}")
+#     with st.sidebar:
+#         st.markdown("---")
+#         st.markdown("### 👤 User Information")
+#         st.markdown(f"**User:** {username}")
+#         st.markdown(f"**Role:** {role.replace('_', ' ').title()}")
+#         st.markdown(f"**Permissions:** {role_descriptions.get(role, 'Limited access')}")
         
-        if role in ["class_teacher", "subject_teacher"]:
-            assignment = _get_user_assignment_context()
-            if assignment:
-                st.markdown("### 📋 Assignment")
-                st.markdown(f"**Class:** {assignment['class_name']}")
-                st.markdown(f"**Term:** {assignment['term']}")
-                st.markdown(f"**Session:** {assignment['session']}")
-                if assignment.get('subject_name'):
-                    st.markdown(f"**Subject:** {assignment['subject_name']}")
+#         if role in ["class_teacher", "subject_teacher"]:
+#             assignment = _get_user_assignment_context()
+#             if assignment:
+#                 st.markdown("### 📋 Assignment")
+#                 st.markdown(f"**Class:** {assignment['class_name']}")
+#                 st.markdown(f"**Term:** {assignment['term']}")
+#                 st.markdown(f"**Session:** {assignment['session']}")
+#                 if assignment.get('subject_name'):
+#                     st.markdown(f"**Subject:** {assignment['subject_name']}")
 
 # Initialize assignment context on page load
 if 'assignment_loaded' not in st.session_state:
     st.session_state.assignment = _get_user_assignment_context()
     st.session_state.assignment_loaded = True
 
-# Display role information in sidebar
-_display_role_info()
+# # Display role information in sidebar
+# _display_role_info()
 
 if __name__ == "__main__":
     enter_scores()

@@ -2,7 +2,7 @@
 
 import streamlit as st
 from database import get_all_classes, create_class, delete_class, update_class, clear_all_classes
-from utils import inject_login_css
+from utils import inject_login_css, render_page_header
 
 def create_class_section():
     if not st.session_state.get("authenticated", False):
@@ -10,7 +10,7 @@ def create_class_section():
         st.switch_page("main.py")
         return
 
-    if st.session_state.role != "admin":
+    if st.session_state.role not in ["superadmin", "admin"]:
         st.error("⚠️ Access denied. Admins only.")
         return
 
@@ -19,16 +19,8 @@ def create_class_section():
     # Custom CSS for better table styling
     inject_login_css("templates/tabs_styles.css")
 
-    st.markdown(
-        """
-        <div style='width: auto; margin: auto; text-align: center; background-color: #c6b7b1;'>
-            <h3 style='color:#000; font-size:30px; margin-top:30px; margin-bottom:10px;'>
-                Manage Class
-            </h3>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+    # Subheader
+    render_page_header("Manage Class")
 
     # FIX: Pass user_id and role to get_all_classes
     classes = get_all_classes(user_id=st.session_state.user_id, role=st.session_state.role)

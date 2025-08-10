@@ -1,7 +1,6 @@
 import streamlit as st
 from database import get_all_classes, get_subjects_by_class, create_subject, delete_subject, update_subject, clear_all_subjects
-from utils import clean_input, create_metric_4col, inject_login_css
-from time import sleep
+from utils import clean_input, create_metric_4col, inject_login_css, render_page_header
 
 def add_subjects():
     if not st.session_state.get("authenticated", False):
@@ -21,16 +20,8 @@ def add_subjects():
     # Custom CSS for better table styling
     inject_login_css("templates/tabs_styles.css")
 
-    st.markdown(
-        """
-        <div style='width: auto; margin: auto; text-align: center; background-color: #c6b7b1;'>
-            <h3 style='color:#000; font-size:25px; margin-top:30px; margin-bottom:10px;'>
-                Manage Subject Combination
-            </h3>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+    # Subheader
+    render_page_header("Manage Subject Combination")
 
     classes = get_all_classes(user_id, role)
     if not classes:
@@ -159,7 +150,11 @@ def add_subjects():
         if role == "subject_teacher":
             st.info("Subject Teachers cannot add new subjects.")
         else:
-            with st.form("add_subject_form"):
+            # Initialize form counter for clearing input
+            if 'subject_form_counter' not in st.session_state:
+                st.session_state.subject_form_counter = 0
+                
+            with st.form(f"add_subject_form_{st.session_state.subject_form_counter}"):
                 new_subjects_input = st.text_area(
                     "Enter subject names (one per line)",
                     height=150,
@@ -185,10 +180,12 @@ def add_subjects():
                                     skipped.append(subject)
                         if added:
                             st.markdown(f'<div class="success-container">✅ Successfully added: {', '.join(added)}</div>', unsafe_allow_html=True)
+                            # Clear the form by incrementing counter
+                            st.session_state.subject_form_counter += 1
                             st.rerun()
                         if skipped:
                             st.markdown(f'<div class="error-container">⚠️ Skipped (duplicates or failed to add): {', '.join(skipped)}</div>', unsafe_allow_html=True)
-
+    
     with tab3:
         st.subheader("Clear All Subjects")
         if role == "subject_teacher":
