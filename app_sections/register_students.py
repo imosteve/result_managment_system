@@ -76,7 +76,8 @@ def register_students():
     df = pd.DataFrame(df_data) if df_data else pd.DataFrame(columns=["S/N", "Name", "Gender", "Email"])
     
     # Tabs for different operations
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["View/Edit Students", "Add New Student", "Delete Student", "Batch Add Students", "Delete All Students"])
+    # tab1, tab2, tab3, tab4, tab5 = st.tabs(["View/Edit Students", "Add New Student", "Delete Student", "Batch Add Students", "Delete All Students"])
+    tab1, tab2, tab3, tab4 = st.tabs(["View/Edit Students", "Add New Student", "Batch Add Students", "Delete Student(s)"])
 
     with tab1:
         st.subheader("Student List")
@@ -142,7 +143,8 @@ def register_students():
                 st.rerun()
 
     with tab2:
-        st.subheader("Add New Student")
+        st.subheader("Add New Student")\
+        
         # Initialize form counter for clearing input
         if 'student_form_counter' not in st.session_state:
             st.session_state.student_form_counter = 0
@@ -180,54 +182,8 @@ def register_students():
                     for err in errors:
                         st.error(err)
                     st.markdown('</div>', unsafe_allow_html=True)
-    
+
     with tab3:
-        st.subheader("Delete Student")
-        if students:
-            student_options = [f"{s[1]}" for s in students]
-            student_to_delete = st.selectbox(
-                "Select student to delete",
-                student_options,
-                key="delete_student_select"
-            )
-
-            if 'delete_single_student' not in st.session_state:
-                st.session_state.delete_single_student = None
-
-            # Confirmation dialog
-            if st.button("❌ Delete Student", key="delete_student"):
-                @st.dialog("Confirm Student Deletion", width="small")
-                def confirm_delete_single_student():
-                    st.warning(f"⚠️ Are you sure you want to delete student from this class?")
-
-                    # Get the student ID from the students list
-                    selected_student_name = student_to_delete
-                    student_id = None
-                    for s in students:
-                        if s[1] == selected_student_name:
-                            student_id = s[0]
-                            break
-
-                    confirm_col1, confirm_col2 = st.columns(2)
-                    if confirm_col1.button("✅ Delete", key=f"confirm_delete_student"):
-                        if student_id:
-                            st.session_state.delete_single_student = delete_student(student_id)
-                            # if st.session_state.delete_single_student:
-                            st.markdown('<div class="success-container">✅ Student deleted successfully!</div>', unsafe_allow_html=True)
-                            st.session_state.delete_single_student = None
-                            st.rerun()
-                        else:
-                            st.markdown('<div class="error-container">❌ Failed to delete student. Please try again.</div>', unsafe_allow_html=True)
-                    elif confirm_col2.button("❌ Cancel", key=f"cancel_delete_student"):
-                        st.session_state.delete_single_student = None
-                        st.info("Deletion cancelled.")
-                        st.rerun()
-
-                confirm_delete_single_student()
-        else:
-            st.info("No students available to delete.")
-
-    with tab4:
         st.subheader("Batch Add Students")
         st.markdown("Enter multiple students below. Each row represents one student.")
 
@@ -315,12 +271,58 @@ def register_students():
                 # Clear the batch form by incrementing counter
                 st.session_state.batch_form_counter += 1
                 st.rerun()
-    
-    with tab5:
-        st.subheader("Delete All Students")
 
-        # Delete user section with expander
-        with st.expander("🗑️ Delete User", expanded=False):  
+    with tab4:
+        st.subheader("Delete Student")
+        # Delete single student with expander
+        with st.expander("**Delete Single Student**", expanded=True):
+            if students:
+                student_options = [f"{s[1]}" for s in students]
+                student_to_delete = st.selectbox(
+                    "Select student to delete",
+                    student_options,
+                    key="delete_student_select"
+                )
+
+                if 'delete_single_student' not in st.session_state:
+                    st.session_state.delete_single_student = None
+
+                # Confirmation dialog
+                if st.button("❌ Delete Student", key="delete_student"):
+                    @st.dialog("Confirm Student Deletion", width="small")
+                    def confirm_delete_single_student():
+                        st.warning(f"⚠️ Are you sure you want to delete **{student_to_delete}** from this class?")
+
+                        # Get the student ID from the students list
+                        selected_student_name = student_to_delete
+                        student_id = None
+                        for s in students:
+                            if s[1] == selected_student_name:
+                                student_id = s[0]
+                                break
+
+                        confirm_col1, confirm_col2 = st.columns(2)
+                        if confirm_col1.button("✅ Delete", key=f"confirm_delete_student"):
+                            if student_id:
+                                st.session_state.delete_single_student = delete_student(student_id)
+                                # if st.session_state.delete_single_student:
+                                st.markdown('<div class="success-container">✅ Student deleted successfully!</div>', unsafe_allow_html=True)
+                                st.session_state.delete_single_student = None
+                                st.rerun()
+                            else:
+                                st.markdown('<div class="error-container">❌ Failed to delete student. Please try again.</div>', unsafe_allow_html=True)
+                        elif confirm_col2.button("❌ Cancel", key=f"cancel_delete_student"):
+                            st.session_state.delete_single_student = None
+                            st.info("Deletion cancelled.")
+                            st.rerun()
+
+                    confirm_delete_single_student()
+            else:
+                st.info("No students available to delete.")
+
+        st.subheader("Delete All Students")
+        # Delete all students with expander
+        with st.expander("**Delete All Students**", expanded=False):  
             st.warning("⚠️ This action will permanently delete all students in the selected class. This cannot be undone.")
             
             if "delete_all_students_in_class" not in st.session_state:
@@ -351,3 +353,39 @@ def register_students():
                     confirm_delete_all_student()
             else:
                 st.info("No students available to delete.")
+
+    # with tab5:
+    #     st.subheader("Delete All Students")
+
+    #     # Delete user section with expander
+    #     with st.expander("🗑️ Delete User", expanded=False):  
+    #         st.warning("⚠️ This action will permanently delete all students in the selected class. This cannot be undone.")
+            
+    #         if "delete_all_students_in_class" not in st.session_state:
+    #             st.session_state.delete_all_students_in_class = None
+            
+    #         if students:
+    #             confirm_delete = st.checkbox("I confirm I want to delete all students in this class")
+    #             delete_all_button = st.button("🗑️ Delete All Students", key="delete_all_students", disabled=not confirm_delete)
+                
+    #             if delete_all_button and confirm_delete:
+    #                 @st.dialog("Confirm All Students Deletion", width="small")
+    #                 def confirm_delete_all_student():
+    #                     st.warning("⚠️ This action will permanently delete all students in this class. Do you want to proceed?")
+
+    #                     confirm_col1, confirm_col2 = st.columns(2)
+    #                     if confirm_col1.button("✅ Delete", key=f"confirm_delete_all_students"):
+    #                         st.session_state.delete_all_students_in_class = delete_all_students(class_name, term, session)
+    #                         # if not students:
+    #                         st.markdown('<div class="success-container">✅ All students deleted successfully!</div>', unsafe_allow_html=True)
+    #                         st.session_state.delete_all_students_in_class = None
+    #                         st.rerun()
+    #                         # else:
+    #                         #     st.markdown('<div class="error-container">❌ Failed to delete all students. Please try again.</div>', unsafe_allow_html=True)
+    #                     elif confirm_col2.button("❌ Cancel", key=f"cancel_delete_all_students"):
+    #                         st.session_state.delete_all_students_in_class = None
+    #                         st.info("Deletion cancelled.")
+    #                         st.rerun()
+    #                 confirm_delete_all_student()
+    #         else:
+    #             st.info("No students available to delete.")
