@@ -8,7 +8,7 @@ def add_subjects():
         st.switch_page("main.py")
         return
 
-    if st.session_state.role not in ["admin", "class_teacher", "subject_teacher"]:
+    if st.session_state.role not in ["superadmin", "admin", "class_teacher", "subject_teacher"]:
         st.error("⚠️ Access denied.")
         return
 

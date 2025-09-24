@@ -91,19 +91,23 @@ def create_class_section():
                     }
 
                 if "delete_pending" in st.session_state:
-                    pending = st.session_state["delete_pending"]
-                    if pending["index"] == i:
-                        st.warning(f"⚠️ Are you sure you want to delete '{pending['class_name']}' for {pending['term']}, {pending['session']}?")
-                        confirm_col1, confirm_col2 = st.columns(2)
-                        if confirm_col1.button("✅ Delete", key=f"confirm_delete_{i}"):
-                            delete_class(pending["class_name"], pending["term"], pending["session"])
-                            st.markdown(f'<div class="success-container">❌ Deleted {pending["class_name"]} - {pending["term"]} - {pending["session"]}</div>', unsafe_allow_html=True)
-                            del st.session_state["delete_pending"]
-                            st.rerun()
-                        elif confirm_col2.button("❌ Cancel", key=f"cancel_delete_{i}"):
-                            del st.session_state["delete_pending"]
-                            st.info("Deletion cancelled.")
-                            st.rerun()
+                    @st.dialog("Confirm Class Deletion", width="small")
+                    def confirm_delete_class():
+                        pending = st.session_state["delete_pending"]
+                        if pending["index"] == i:
+                            st.warning(f"⚠️ Are you sure you want to delete '{pending['class_name']}' for {pending['term']}, {pending['session']}?")
+                            confirm_col1, confirm_col2 = st.columns(2)
+                            if confirm_col1.button("✅ Delete", key=f"confirm_delete_{i}"):
+                                delete_class(pending["class_name"], pending["term"], pending["session"])
+                                st.markdown(f'<div class="success-container">❌ Deleted {pending["class_name"]} - {pending["term"]} - {pending["session"]}</div>', unsafe_allow_html=True)
+                                del st.session_state["delete_pending"]
+                                st.rerun()
+                            elif confirm_col2.button("❌ Cancel", key=f"cancel_delete_{i}"):
+                                del st.session_state["delete_pending"]
+                                st.info("Deletion cancelled.")
+                                st.rerun()
+                    confirm_delete_class()
+                    break
         else:
             st.info("No classes found. Add one in the 'Add Class' tab.")
 
@@ -112,26 +116,36 @@ def create_class_section():
 
         # ✅ Initialize default values before widgets
         if "new_class_input" not in st.session_state:
-            st.session_state["new_class_input"] = ""
+            st.session_state["class_input"] = ""
+        if "new_class_input" not in st.session_state:
+            st.session_state["arm_input"] = ""
         if "term_input" not in st.session_state:
             st.session_state["term_input"] = "1st Term"
         if "session_input" not in st.session_state:
             st.session_state["session_input"] = ""
 
         with st.form("add_class_form"):
-            col1, col2, col3 = st.columns([2, 2, 2])
-            new_class = col1.text_input(
-                "Class Name",
-                key="new_class_input"
+            col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
+            class_name = col1.selectbox(
+                "Class",
+                ["", "Primary", "SSS"],
+                key="class_input"
+            )
+
+            class_arm = col2.text_input(
+                "Arm (e.g. 4, 4A, 4B)",
+                key="arm_input"
             ).strip().upper()
 
-            term = col2.selectbox(
+            new_class = f'{class_name.upper()} {class_arm}'
+
+            term = col3.selectbox(
                 "Term",
                 ["1st Term", "2nd Term", "3rd Term"],
                 key="term_input"
             )
 
-            session = col3.text_input(
+            session = col4.text_input(
                 "Session (e.g. 2024/2025)",
                 key="session_input"
             ).strip()
@@ -139,7 +153,7 @@ def create_class_section():
             submitted = st.form_submit_button("➕ Add Class")
 
             if submitted:
-                if not new_class or not session or not term:
+                if not class_name or not class_arm or not session or not term:
                     st.markdown('<div class="error-container">⚠️ Please fill all fields.</div>', unsafe_allow_html=True)
                 else:
                     session_parts = session.split('/')
@@ -199,7 +213,8 @@ def create_class_section():
             st.info("No classes available to clear.")
 
 def reset_add_class_fields():
-    st.session_state["new_class_input"] = ""
+    st.session_state["class_input"] = ""
+    st.session_state["arm_input"] = ""
     st.session_state["term_input"] = "1st Term"
     st.session_state["session_input"] = ""
 
