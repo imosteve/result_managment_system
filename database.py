@@ -310,7 +310,7 @@ def get_all_classes(user_id=None, role=None):
     cursor = conn.cursor()
     
     # FIXED: Admins should see ALL classes without restrictions
-    if role == "admin":
+    if role in ["", "superadmin", "admin"]:
         cursor.execute("""
             SELECT name, term, session 
             FROM classes 
@@ -394,7 +394,7 @@ def get_students_by_class(class_name, term, session, user_id=None, role=None):
     cursor = conn.cursor()
     
     # FIXED: Admins should see ALL students without restrictions
-    if role == "admin":
+    if role in ["superadmin", "admin"]:
         cursor.execute("""
             SELECT id, name, gender, email 
             FROM students 
@@ -500,7 +500,7 @@ def get_subjects_by_class(class_name, term, session, user_id=None, role=None):
     cursor = conn.cursor()
     
     # FIXED: Admins should see ALL subjects without restrictions
-    if role == "admin":
+    if role in ["", "superadmin", "admin"]:
         cursor.execute("""
             SELECT id, name 
             FROM subjects 
@@ -600,7 +600,7 @@ def get_scores_by_class_subject(class_name, subject_name, term, session, user_id
     cursor = conn.cursor()
     
     # FIXED: Admins should see ALL scores without restrictions
-    if role == "admin":
+    if role in ["superadmin", "admin"]:
         cursor.execute("""
             SELECT id, student_name, subject_name, test_score, exam_score, 
                    total_score, grade, position
@@ -646,7 +646,7 @@ def get_all_scores_by_class(class_name, term, session, user_id=None, role=None):
     cursor = conn.cursor()
     
     # FIXED: Admins should see ALL scores without restrictions
-    if role == "admin":
+    if role in ["superadmin", "admin"]:
         cursor.execute("""
             SELECT id, student_name, subject_name, test_score, exam_score, 
                    total_score, grade, position
@@ -690,7 +690,7 @@ def get_student_scores(student_name, class_name, term, session, user_id=None, ro
     cursor = conn.cursor()
     
     # FIXED: Admins should see ALL scores without restrictions
-    if role == "admin":
+    if role in ["superadmin", "admin"]:
         cursor.execute("""
             SELECT id, student_name, subject_name, test_score, exam_score, 
                    total_score, grade, position
@@ -824,7 +824,7 @@ def get_class_average(class_name, term, session, user_id=None, role=None):
     cursor = conn.cursor()
     try:
         # FIXED: Admins should see ALL averages without restrictions
-        if role == "admin":
+        if role in ["superadmin", "admin"]:
             cursor.execute("""
                 SELECT AVG(total_score)
                 FROM scores
@@ -866,7 +866,7 @@ def get_student_grand_totals(class_name, term, session, user_id=None, role=None)
     cursor = conn.cursor()
     try:
         # FIXED: Admins should see ALL grand totals without restrictions
-        if role == "admin":
+        if role in ["superadmin", "admin"]:
             cursor.execute("""
                 SELECT student_name, SUM(total_score) as grand_total
                 FROM scores

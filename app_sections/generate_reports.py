@@ -1,6 +1,7 @@
 import streamlit as st
 import os
 from jinja2 import Environment, FileSystemLoader
+# from xhtml2pdf import pisa
 from weasyprint import HTML, CSS
 from utils import assign_grade, create_metric_5col_report, format_ordinal, render_page_header
 from database import (
@@ -116,6 +117,14 @@ def generate_report_card(student_name, class_name, term, session):
             stylesheets=[CSS('templates/report_card_styles.css')]
         )
         return output_path
+        
+        # # Convert HTML to PDF using xhtml2pdf
+        # with open(output_path, "w+b") as pdf_file:
+        #     pisa_status = pisa.CreatePDF(src=html_out, dest=pdf_file)
+        #     if pisa_status.err:
+        #         return None
+
+        # return output_path
     except Exception as e:
         st.error(f"Error generating PDF: {e}")
         return None

@@ -12,7 +12,8 @@ footer {visibility: hidden;}
 .block-container {
     padding-top: 3rem !important;
     padding-bottom: 2rem !important;
-    max-width: 500px !important;
+    max-width: 400px !important;
+    margin: auto;
 }
 
 /* Title styling */
@@ -34,3 +35,4 @@ footer {visibility: hidden;}
     margin-bottom: 1.5rem;
     text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
+

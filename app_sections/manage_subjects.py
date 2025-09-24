@@ -135,7 +135,7 @@ def add_subjects():
                         confirm_col1, confirm_col2 = st.columns(2)
                         if confirm_col1.button("✅ Delete", key=f"confirm_delete_{i}"):
                             delete_subject(pending["subject_id"])
-                            st.markdown(f'<div class="success-container">❌ Deleted {pending['subject_name']}</div>', unsafe_allow_html=True)
+                            st.markdown(f'<div class="success-container">❌ Deleted {pending["subject_name"]}</div>', unsafe_allow_html=True)
                             del st.session_state["delete_pending"]
                             st.rerun()
                         elif confirm_col2.button("❌ Cancel", key=f"cancel_delete_{i}"):
@@ -179,12 +179,12 @@ def add_subjects():
                                 else:
                                     skipped.append(subject)
                         if added:
-                            st.markdown(f'<div class="success-container">✅ Successfully added: {', '.join(added)}</div>', unsafe_allow_html=True)
+                            st.markdown(f'<div class="success-container">✅ Successfully added: {", ".join(added)}</div>', unsafe_allow_html=True)
                             # Clear the form by incrementing counter
                             st.session_state.subject_form_counter += 1
                             st.rerun()
                         if skipped:
-                            st.markdown(f'<div class="error-container">⚠️ Skipped (duplicates or failed to add): {', '.join(skipped)}</div>', unsafe_allow_html=True)
+                            st.markdown(f'<div class="error-container">⚠️ Skipped (duplicates or failed to add): {", ".join(skipped)}</div>', unsafe_allow_html=True)
     
     with tab3:
         st.subheader("Clear All Subjects")

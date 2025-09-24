@@ -7,8 +7,8 @@ from database import (
 )
 from utils import inject_login_css, render_page_header
 
-def admin_interface():
-    """Admin interface for user management and assignments"""
+def admin_panel():
+    """Admin panel for user management and assignments"""
     if not st.session_state.get("authenticated", False):
         st.error("⚠️ Please log in first.")
         st.switch_page("main.py")
@@ -26,15 +26,18 @@ def admin_interface():
         st.error("⚠️ Session state missing user_id or role. Please log out and log in again.")
         return
 
-    st.set_page_config(page_title="Admin Interface", layout="wide")
+    st.set_page_config(page_title="Admin Panel", layout="wide")
     
     # Subheader
     render_page_header("Admin Dashboard")
 
+    
+    # Custom CSS for better table styling
+    inject_login_css("templates/metrics_styles.css")
+
     # Dashboard Metrics
     stats = get_database_stats()
     col1, col2, col3, col4 = st.columns(4)
-    inject_login_css("templates/metrics_styles.css")
     with col1:
         st.markdown(f"<div class='custom-metric'><div class='label'>Total Users</div><div class='value'>{stats['users']}</div></div>", unsafe_allow_html=True)
     with col2:
@@ -69,28 +72,81 @@ def admin_interface():
         st.subheader("Current Users")
         users = get_all_users()
         if users:
-            user_data = [{"Username": u[1], "Role": u[2].replace("_", " ").title(), "Password": u[3]} for u in users]
-            st.dataframe(user_data, use_container_width=True)
+            if role == "superadmin":
+                user_data = [{"Username": u[1], "Role": u[2].replace("_", " ").title(), "Password": u[3]} for u in users]
+            else:
+                user_data = [{"Username": u[1], "Role": u[2].replace("_", " ").title(), "Password": u[3]} for u in users if u[2] not in ["superadmin", "admin"]]
+            st.dataframe(user_data, width="stretch")
             
-            # Column layout for delete user
-            col1, col2 = st.columns([3, 1.2], vertical_alignment="bottom")
-            with col1:
-                st.subheader("Delete User")
+            # Initialize session state for delete confirmation
+            if 'show_delete_user_confirm' not in st.session_state:
+                st.session_state.show_delete_user_confirm = False
+            if 'user_to_delete_info' not in st.session_state:
+                st.session_state.user_to_delete_info = None
+            
+            # Delete user section with expander
+            with st.expander("🗑️ Delete User", expanded=False):
+                st.warning("⚠️ **Warning:** This action cannot be undone. Deleting a user will remove all their data and assignments.")
+                
+                # Get user IDs and add a placeholder option
+                user_ids = [""] + [u[0] for u in users]  # Add empty string as first option
                 user_id_to_delete = st.selectbox(
                     "Select User to Delete",
-                    [u[0] for u in users],
-                    format_func=lambda x: next(u[1] for u in users if u[0] == x),
-                    key="delete_user_select",
-                    label_visibility="collapsed"
+                    user_ids,
+                    format_func=lambda x: "Select a user" if x == "" else next(u[1] for u in users if u[0] == x),
+                    key="delete_user_select"
                 )
-            with col2:
-                if st.button("❌ Delete Selected User", key="delete_user_button"):
-                    if user_id_to_delete == user_id:
+                
+                if user_id_to_delete and user_id_to_delete != "":
+                    selected_user = next(u for u in users if u[0] == user_id_to_delete)
+                    st.info(f"Selected user: **{selected_user[1]}** (Role: {selected_user[2].replace('_', ' ').title()})")
+                
+                if st.button("❌ Delete Selected User", key="delete_user_button", type="primary"):
+                    if user_id_to_delete == "":
+                        st.error("⚠️ Please select a user to delete.")
+                    elif user_id_to_delete == user_id:
                         st.error("⚠️ Cannot delete your own account.")
                     else:
-                        delete_user(user_id_to_delete)
-                        st.success(f"✅ User deleted successfully.")
+                        # Store user info and show confirmation dialog
+                        selected_user = next(u for u in users if u[0] == user_id_to_delete)
+                        st.session_state.user_to_delete_info = {
+                            'id': user_id_to_delete,
+                            'name': selected_user[1],
+                            'role': selected_user[2]
+                        }
+                        st.session_state.show_delete_user_confirm = True
                         st.rerun()
+                        
+                # Confirmation dialog
+                if st.session_state.show_delete_user_confirm and st.session_state.user_to_delete_info:
+                    @st.dialog("Confirm User Deletion")
+                    def confirm_delete_user():
+                        user_info = st.session_state.user_to_delete_info
+                        st.markdown(f"### Are you sure you want to delete this user?")
+                        st.error(f"**Username:** {user_info['name']}")
+                        st.error(f"**Role:** {user_info['role'].replace('_', ' ').title()}")
+                        st.markdown("---")
+                        st.warning("⚠️ **This action cannot be undone!**")
+                        st.warning("• All user data will be permanently deleted")
+                        st.warning("• All assignments will be removed")
+                        st.warning("• User will lose access immediately")
+                        
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if st.button("🚫 Cancel", key="cancel_delete_user", type="secondary", use_container_width=True):
+                                st.session_state.show_delete_user_confirm = False
+                                st.session_state.user_to_delete_info = None
+                                st.rerun()
+                        with col2:
+                            if st.button("❌ Delete User", key="confirm_delete_user", type="primary", use_container_width=True):
+                                delete_user(user_info['id'])
+                                st.session_state.show_delete_user_confirm = False
+                                st.session_state.user_to_delete_info = None
+                                st.success(f"✅ User {user_info['name']} deleted successfully.")
+                                time.sleep(1)
+                                st.rerun()
+                    
+                    confirm_delete_user()
         else:
             st.info("No users found.")
 
@@ -106,8 +162,12 @@ def admin_interface():
             with col2:
                 password = st.text_input("Password", type="password", key=f"password_{form_key}")
             with col3:
-                role = st.selectbox("Role", ["admin", "class_teacher", "subject_teacher"], key=f"role_{form_key}")
-            
+                # role = st.selectbox("Role", ["admin", "class_teacher", "subject_teacher"], key=f"role_{form_key}")
+                if st.session_state.role == "superadmin":
+                    role = st.selectbox("Role", ["", "superadmin", "admin", "class_teacher", "subject_teacher"], key=f"role_{form_key}")
+                else:
+                    role = st.selectbox("Role", ["", "admin", "class_teacher", "subject_teacher"], key=f"role_{form_key}")
+            print(role)
             submitted = st.form_submit_button("Add User")
             if submitted:
                 if username and password and role:
@@ -137,31 +197,75 @@ def admin_interface():
                     "Subject": a['subject_name'] or "-"
                 })
                 sn_counter += 1
+                
         if assignments:
-            st.dataframe(assignments, use_container_width=True)
+            st.dataframe(assignments, width="stretch")
             
-            # Column layout for delete assignment
-            col1, col2 = st.columns([3, 1.2], vertical_alignment="bottom")
-            with col1:
-                st.subheader("Delete Assignment")
+            # Initialize session state for delete assignment confirmation
+            if 'show_delete_assignment_confirm' not in st.session_state:
+                st.session_state.show_delete_assignment_confirm = False
+            if 'assignment_to_delete_info' not in st.session_state:
+                st.session_state.assignment_to_delete_info = None
+            
+            # Delete assignment section with expander
+            with st.expander("🗑️ Delete Assignment", expanded=False):
+                st.warning("⚠️ **Warning:** This action cannot be undone. Deleting an assignment will remove the teacher's access to the assigned class/subject.")
+                
                 assignment_s_n_to_delete = st.selectbox(
-                    "Select Assignment",
+                    "Select Assignment to Delete",
                     [a["S/N"] for a in assignments],
                     format_func=lambda x: next(f"{a['Teacher']} - {a['Class']} - {a['Subject']}" for a in assignments if a["S/N"] == x),
-                    key="delete_assignment_select", 
-                    label_visibility="collapsed"
+                    key="delete_assignment_select"
                 )
-            with col2:
-                if st.button("❌ Delete Assignment", key="delete_assignment_button"):
+                
+                if assignment_s_n_to_delete:
                     selected_assignment = next((a for a in assignments if a["S/N"] == assignment_s_n_to_delete), None)
                     if selected_assignment:
-                        delete_assignment(selected_assignment["id"])
-                        st.success(f"✅ Assignment deleted successfully.")
+                        st.info(f"Selected assignment: **{selected_assignment['Teacher']}** - {selected_assignment['Class']} - {selected_assignment['Subject']}")
+                
+                if st.button("❌ Delete Assignment", key="delete_assignment_button", type="primary"):
+                    selected_assignment = next((a for a in assignments if a["S/N"] == assignment_s_n_to_delete), None)
+                    if selected_assignment:
+                        # Store assignment info and show confirmation dialog
+                        st.session_state.assignment_to_delete_info = selected_assignment
+                        st.session_state.show_delete_assignment_confirm = True
                         st.rerun()
+                        
+                # Confirmation dialog
+                if st.session_state.show_delete_assignment_confirm and st.session_state.assignment_to_delete_info:
+                    @st.dialog("Confirm Assignment Deletion", width="small")
+                    def confirm_delete_assignment():
+                        assignment_info = st.session_state.assignment_to_delete_info
+                        st.markdown(f"### Are you sure you want to delete this assignment?")
+                        st.error(f"**Teacher:** {assignment_info['Teacher']}")
+                        st.error(f"**Class:** {assignment_info['Class']}")
+                        st.error(f"**Subject:** {assignment_info['Subject']}")
+                        st.markdown("---")
+                        st.warning("⚠️ **This action cannot be undone!**")
+                        st.warning("• Teacher will lose access to this class/subject")
+                        st.warning("• All related data may be affected")
+                        st.warning("• Assignment will be permanently removed")
+                        
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if st.button("🚫 Cancel", key="cancel_delete_assignment", type="secondary", use_container_width=True):
+                                st.session_state.show_delete_assignment_confirm = False
+                                st.session_state.assignment_to_delete_info = None
+                                st.rerun()
+                        with col2:
+                            if st.button("❌ Delete Assignment", key="confirm_delete_assignment", type="primary", use_container_width=True):
+                                delete_assignment(assignment_info["id"])
+                                st.session_state.show_delete_assignment_confirm = False
+                                st.session_state.assignment_to_delete_info = None
+                                st.success(f"✅ Assignment deleted successfully.")
+                                time.sleep(1)
+                                st.rerun()
+                    
+                    confirm_delete_assignment()
         else:
             st.info("No assignments found.")
     
-    # Assign/Delete Class Teacher Tab
+    # Assign Class Teacher Tab
     with tabs[3]:
         with st.form("assign_class_teacher_form"):
             users = get_all_users()
@@ -202,7 +306,7 @@ def admin_interface():
                         else:
                             st.error("❌ Failed to assign class teacher. Assignment may already exist.")
         
-    # Assign/Delete Subject Teacher Tab
+    # Assign Subject Teacher Tab
     with tabs[4]:
         # Initialize session state for dynamic updates
         if 'selected_class_for_subject' not in st.session_state:
@@ -274,4 +378,4 @@ def admin_interface():
         
 
 if __name__ == "__main__":
-    admin_interface()
+    admin_panel()

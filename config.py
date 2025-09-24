@@ -7,7 +7,8 @@ load_dotenv()
 
 # Application Configuration
 APP_CONFIG = {
-    "app_name": "Student Result Management System",
+    "school_name": "scripture union international schools".upper(),
+    "app_name": "Result Management System".upper(),
     "version": "1.0.0",
     "page_title": "Student Result System",
     "cookie_prefix": "student_results_app/",

@@ -37,7 +37,7 @@ div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
 
 /* If the label is inside a span, make sure the span inherits size */
 div[data-testid="stTabs"] button[role="tab"] span {
-    font-size: inherit !important;
+    font-size: 18px !important;
     vertical-align: middle;
     display:inline-block;
 }

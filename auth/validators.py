@@ -1,7 +1,6 @@
 """Authentication validation functions"""
 
 import streamlit as st
-# import bcrypt
 import logging
 from typing import Optional, Dict, Any
 from database import get_user_by_username
@@ -96,6 +95,29 @@ def validate_session_cookies(cookies) -> bool:
         logger.error(f"Error validating session cookies: {str(e)}")
         return False
 
+def validate_session_with_mobile_support(cookies):
+    """Enhanced session validation with mobile support"""
+    try:
+        # Import here to avoid circular imports
+        from auth.session_manager import SessionManager
+        
+        # First check if session exists in session_state
+        if st.session_state.get("authenticated"):
+            SessionManager.update_activity()
+            return True
+        
+        # Try to validate from cookies (works for both desktop and mobile)
+        if SessionManager.validate_mobile_session(cookies):
+            return True
+        
+        # If all else fails, clear any stale data
+        SessionManager.clear_session(cookies)
+        return False
+        
+    except Exception as e:
+        logger.error(f"Error in session validation: {e}")
+        return False
+    
 def validate_user_input(username: str, password: str) -> tuple[bool, str]:
     """
     Validate user input for login form

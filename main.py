@@ -14,33 +14,7 @@ logger = logging.getLogger(__name__)
 
 # Import managers
 from app_manager import ApplicationManager
-try:
-    from security_manager import SecurityManager
-except ImportError:
-    # Create a minimal SecurityManager if it doesn't exist
-    class SecurityManager:
-        @staticmethod
-        def initialize_security_headers():
-            pass
-        
-        @staticmethod
-        def check_session_timeout():
-            from datetime import datetime
-            from auth.config import SESSION_TIMEOUT
-            last_activity = st.session_state.get('last_activity')
-            if last_activity:
-                if (datetime.now() - last_activity).seconds > SESSION_TIMEOUT:
-                    st.session_state.authenticated = False
-                    st.error("⚠️ Session expired. Please login again.")
-                    st.rerun()
-                    return False
-            return True
-        
-        @staticmethod
-        def force_logout(reason):
-            logger.warning(f"Force logout: {reason}")
-            st.session_state.authenticated = False
-            st.rerun()
+from security_manager import SecurityManager
 
 # Import authentication
 from auth.login import login
@@ -166,6 +140,8 @@ def main():
         if not app.initialize_database():
             st.stop()
         
+        app.initialize_mobile_support()
+
         # Initialize cookies
         cookies = app.initialize_cookies()
         if cookies is None:

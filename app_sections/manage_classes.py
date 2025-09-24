@@ -39,9 +39,22 @@ def create_class_section():
 
             for i, cls in enumerate(classes):
                 col1, col2, col3, col4, col5 = st.columns([3, 3, 3, 1.2, 1.2], gap="small", vertical_alignment="bottom")
-                new_class = col1.text_input("Class", value=cls['class_name'], key=f"class_name_{i}", label_visibility="collapsed").upper()
-                new_term = col2.selectbox("Term", options=["1st Term", "2nd Term", "3rd Term"], index=["1st Term", "2nd Term", "3rd Term"].index(cls['term']), key=f"term_{i}", label_visibility="collapsed")
-                new_session = col3.text_input("Session", value=cls['session'], key=f"session_{i}", label_visibility="collapsed")
+                new_class = col1.text_input("Class", 
+                                            value=cls['class_name'], 
+                                            key=f"class_name_{i}", 
+                                            label_visibility="collapsed"
+                                            ).strip().upper()
+                new_term = col2.selectbox("Term", 
+                                          options=["1st Term", "2nd Term", "3rd Term"], 
+                                          index=["1st Term", "2nd Term", "3rd Term"].index(cls['term']), 
+                                          key=f"term_{i}", 
+                                          label_visibility="collapsed"
+                                          )
+                new_session = col3.text_input("Session", 
+                                              value=cls['session'], 
+                                              key=f"session_{i}", 
+                                              label_visibility="collapsed"
+                                              )
 
                 if col4.button("💾", key=f"update_{i}"):
                     new_class_upper = new_class.strip().upper()
@@ -56,7 +69,7 @@ def create_class_section():
                         )
                         for cls_other in classes
                     ):
-                        st.markdown(f'<div class="error-container">⚠️ A class with name \'{new_class_upper}\', term \'{new_term}\', and session \'{new_session}\' already exists.</div>', unsafe_allow_html=True)
+                        st.markdown(f'<div class="error-container">⚠️ A class with name "{new_class_upper}", term "{new_term}", and session "{new_session}" already exists.</div>', unsafe_allow_html=True)
                     else:
                         update_class(
                             original_class_name=cls['class_name'],
@@ -84,7 +97,7 @@ def create_class_section():
                         confirm_col1, confirm_col2 = st.columns(2)
                         if confirm_col1.button("✅ Delete", key=f"confirm_delete_{i}"):
                             delete_class(pending["class_name"], pending["term"], pending["session"])
-                            st.markdown(f'<div class="success-container">❌ Deleted {pending['class_name']} - {pending['term']} - {pending['session']}</div>', unsafe_allow_html=True)
+                            st.markdown(f'<div class="success-container">❌ Deleted {pending["class_name"]} - {pending["term"]} - {pending["session"]}</div>', unsafe_allow_html=True)
                             del st.session_state["delete_pending"]
                             st.rerun()
                         elif confirm_col2.button("❌ Cancel", key=f"cancel_delete_{i}"):
@@ -138,16 +151,17 @@ def create_class_section():
                         cls["session"].strip() == session
                         for cls in classes
                     ):
-                        st.markdown(f'<div class="error-container">⚠️ Class with name \'{new_class}\', term \'{term}\', and session \'{session}\' already exists.</div>', unsafe_allow_html=True)
+                        st.markdown(f'<div class="error-container">⚠️ Class with name "{new_class}", term "{term}", and session "{session}" already exists.</div>', unsafe_allow_html=True)
                     else:
                         success = create_class(new_class, term, session)
                         if success:
-                            st.markdown(f'<div class="success-container">✅ Class \'{new_class}\' added for {term}, {session}.</div>', unsafe_allow_html=True)
+                            st.markdown(f'<div class="success-container">✅ Class "{new_class}" added for {term}, {session}.</div>', unsafe_allow_html=True)
                             st.rerun()
                             reset_add_class_fields()  # ✅ Reset via function
                             st.rerun()
                         else:
-                            st.markdown(f'<div class="error-container">❌ Failed to add class \'{new_class}\'. A class with this name, term, and session may already exist in the database.</div>', unsafe_allow_html=True)
+                            st.markdown(f'<div class="error-container">❌ Failed to add class "{new_class}". A class with this name, term, and session may already exist in the database.</div>', unsafe_allow_html=True)
+                            st.rerun()
 
     with tab3:
         st.subheader("Clear All Classes")
@@ -155,16 +169,34 @@ def create_class_section():
         if classes:
             confirm_clear = st.checkbox("I confirm I want to clear all classes")
             clear_all_button = st.button("🗑️ Clear All Classes", key="clear_all_classes", disabled=not confirm_clear)
+            
+            if 'clear_all_class' not in st.session_state:
+                    st.session_state.clear_all_class = None
+            
+            # Confirmation dialog
             if clear_all_button and confirm_clear:
-                success = clear_all_classes()
-                if success:
-                    st.markdown('<div class="success-container">✅ All classes cleared successfully!</div>', unsafe_allow_html=True)
-                    st.rerun()
-                else:
-                    st.markdown('<div class="error-container">❌ Failed to clear classes. Please try again.</div>', unsafe_allow_html=True)
+                @st.dialog("Confirm All Classes Deletion", width="small")
+                def confirm_delete_all_classes():
+                    st.warning(f"⚠️ Are you sure you want to delete delete all classes and their associated students, subjects, and scores.?")
+                    
+                    confirm_col1, confirm_col2 = st.columns(2)
+                    if confirm_col1.button("✅ Delete", key=f"confirm_delete_{i}"):
+                        st.session_state.clear_all_class = clear_all_classes()
+                        if st.session_state.clear_all_class:
+                            st.markdown('<div class="success-container">✅ All classes cleared successfully!</div>', unsafe_allow_html=True)
+                            st.session_state.clear_all_class = None
+                            st.rerun()
+                        else:
+                            st.markdown('<div class="error-container">❌ Failed to clear classes. Please try again.</div>', unsafe_allow_html=True)
+                    elif confirm_col2.button("❌ Cancel", key=f"cancel_delete_{i}"):
+                        st.session_state.clear_all_class = None
+                        st.info("Deletion cancelled.")
+                        st.rerun()
+                
+                confirm_delete_all_classes()
+
         else:
             st.info("No classes available to clear.")
-
 
 def reset_add_class_fields():
     st.session_state["new_class_input"] = ""

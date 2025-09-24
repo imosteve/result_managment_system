@@ -1,4 +1,4 @@
-# security_manager.py
+# security_manager.py - CLEANED VERSION
 import streamlit as st
 import logging
 from datetime import datetime
@@ -11,45 +11,54 @@ class SecurityManager:
     
     @staticmethod
     def initialize_security_headers():
-        """Initialize security headers"""
-        if not SECURITY_CONFIG['disable_right_click'] and not SECURITY_CONFIG['disable_dev_tools']:
+        """Initialize security headers - ONLY FOR AUTHENTICATED USERS"""
+        # Only load security scripts after login, not on login page
+        if not st.session_state.get("authenticated", False):
+            return
+            
+        if not SECURITY_CONFIG.get('disable_right_click', False) and not SECURITY_CONFIG.get('disable_dev_tools', False):
             return
             
         st.markdown("""
         <script>
-        // Disable right-click context menu
-        document.addEventListener('contextmenu', function(e) {
-            e.preventDefault();
-        });
+        // Check if mobile device
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
         
-        // Disable certain keyboard shortcuts
-        document.addEventListener('keydown', function(e) {
-            // Disable F12, Ctrl+Shift+I, Ctrl+U
-            if (e.keyCode === 123 || 
-                (e.ctrlKey && e.shiftKey && e.keyCode === 73) || 
-                (e.ctrlKey && e.keyCode === 85)) {
+        if (!isMobile) {
+            // Only apply desktop security restrictions
+            document.addEventListener('contextmenu', function(e) {
                 e.preventDefault();
-            }
-        });
+            });
+            
+            document.addEventListener('keydown', function(e) {
+                if (e.keyCode === 123 || 
+                    (e.ctrlKey && e.shiftKey && e.keyCode === 73) || 
+                    (e.ctrlKey && e.keyCode === 85)) {
+                    e.preventDefault();
+                }
+            });
+        }
         </script>
         """, unsafe_allow_html=True)
 
     @staticmethod
     def check_session_timeout():
-        """Check if user session has timed out"""
-        if not SECURITY_CONFIG['session_timeout_enabled']:
+        """Check session timeout with mobile-friendly settings"""
+        if not st.session_state.get('authenticated'):
             return True
             
         if 'last_activity' in st.session_state:
             time_diff = datetime.now() - st.session_state.last_activity
-            if time_diff.total_seconds() > APP_CONFIG['session_timeout']:
+            # Longer timeout for mobile (2 hours vs 1 hour)
+            timeout_seconds = 7200 if is_mobile_device() else 3600
+            
+            if time_diff.total_seconds() > timeout_seconds:
                 logger.warning(f"Session timeout for user {st.session_state.get('username')}")
-                SecurityManager.force_logout("Session expired due to inactivity")
                 return False
         
         st.session_state.last_activity = datetime.now()
         return True
-
+    
     @staticmethod
     def force_logout(reason: str = "Security logout"):
         """Force user logout for security reasons"""
@@ -65,3 +74,7 @@ class SecurityManager:
         
         st.error(f"🔒 {reason}. Please log in again.")
         st.rerun()
+
+def is_mobile_device():
+    """Simple mobile detection helper"""
+    return st.session_state.get('is_mobile', False)

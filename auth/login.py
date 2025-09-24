@@ -28,7 +28,7 @@ def reset_main_app_styles():
 
 def render_login_form() -> tuple[str, str, bool]:
     """Render the login form"""
-    st.markdown("<br><br>", unsafe_allow_html=True)
+    # st.markdown("<br><br>", unsafe_allow_html=True)
     st.markdown(f'<div class="{CSS_CLASSES["login_container"]}">', unsafe_allow_html=True)
     st.markdown(f'<h1 class="{CSS_CLASSES["login_title"]}">🎓 Login</h1>', unsafe_allow_html=True)
     
@@ -153,29 +153,3 @@ def login(cookies):
         logger.error(f"Error in login function: {str(e)}")
         st.error("An error occurred during authentication. Please refresh the page.")
         st.stop()
-# USER_CREDENTIALS = {
-#     "admin": {"password": "admin", "role": "admin"},
-#     "cteacher": {"password": "class", "role": "class_teacher"},
-#     "steacher": {"password": "subject", "role": "subject_teacher"},
-# }
-
-# def login():
-#     if "authenticated" not in st.session_state:
-#         st.session_state.authenticated = False
-#         st.session_state.role = None
-
-#     try:
-#         # Show login form
-#         inject_login_css("templates/login_styles.css")
-#         username, password, login_clicked = render_login_form()
-        
-#         if login_clicked:
-#             handle_login_attempts(username, password)
-        
-#         st.markdown('</div>', unsafe_allow_html=True)
-#         st.stop()
-        
-#     except Exception as e:
-#         logger.error(f"Error in login function: {str(e)}")
-#         st.error("An error occurred during authentication. Please refresh the page.")
-#         st.stop()
