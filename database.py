@@ -156,6 +156,8 @@ def create_tables():
         )
     """)
     
+    create_student_subject_selections_table()
+    
     conn.commit()
     conn.close()
     
@@ -1161,3 +1163,86 @@ def validate_score_data(test_score, exam_score):
         errors.append("Scores must be valid numbers")
     
     return errors
+
+
+# UPDATES
+# Add these functions to database.py
+def create_student_subject_selections_table():
+    """Create student_subject_selections table for SSS2 and SSS3 subject choices"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS student_subject_selections (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_name TEXT NOT NULL,
+            subject_name TEXT NOT NULL,
+            class_name TEXT NOT NULL,
+            term TEXT NOT NULL,
+            session TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (class_name, term, session) REFERENCES classes(name, term, session) ON DELETE CASCADE,
+            FOREIGN KEY (student_name, class_name, term, session) REFERENCES students(name, class_name, term, session) ON DELETE CASCADE,
+            FOREIGN KEY (subject_name, class_name, term, session) REFERENCES subjects(name, class_name, term, session) ON DELETE CASCADE,
+            UNIQUE(student_name, subject_name, class_name, term, session)
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+def get_student_selected_subjects(student_name, class_name, term, session):
+    """Get subjects selected by a specific student"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT subject_name
+        FROM student_subject_selections
+        WHERE student_name = ? AND class_name = ? AND term = ? AND session = ?
+    """, (student_name, class_name, term, session))
+    subjects = [row[0] for row in cursor.fetchall()]
+    conn.close()
+    return subjects
+
+def save_student_subject_selections(student_name, selected_subjects, class_name, term, session):
+    """Save/update subject selections for a student"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    # Clear existing selections
+    cursor.execute("""
+        DELETE FROM student_subject_selections
+        WHERE student_name = ? AND class_name = ? AND term = ? AND session = ?
+    """, (student_name, class_name, term, session))
+    
+    # Insert new selections
+    for subject in selected_subjects:
+        cursor.execute("""
+            INSERT INTO student_subject_selections (student_name, subject_name, class_name, term, session)
+            VALUES (?, ?, ?, ?, ?)
+        """, (student_name, subject, class_name, term, session))
+    
+    conn.commit()
+    conn.close()
+
+def get_all_student_subject_selections(class_name, term, session):
+    """Get all student subject selections for a class"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT student_name, subject_name
+        FROM student_subject_selections
+        WHERE class_name = ? AND term = ? AND session = ?
+        ORDER BY student_name, subject_name
+    """, (class_name, term, session))
+    selections = cursor.fetchall()
+    conn.close()
+    return selections
+
+# # Update the create_tables function to include the new table
+# def create_tables():
+#     """Create all database tables"""
+#     # ... existing code ...
+    
+#     # Add this at the end before conn.commit()
+#     create_student_subject_selections_table()
+    
+#     # ... rest of existing code ...
