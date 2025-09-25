@@ -1,3 +1,5 @@
+# app_sections/generate_reports.py
+
 import streamlit as st
 import os
 from jinja2 import Environment, FileSystemLoader

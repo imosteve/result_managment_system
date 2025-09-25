@@ -1,3 +1,5 @@
+# app_sections/manage_subjects.py
+
 import streamlit as st
 from database import get_all_classes, get_subjects_by_class, create_subject, delete_subject, update_subject, clear_all_subjects
 from utils import clean_input, create_metric_4col, inject_login_css, render_page_header

@@ -1,3 +1,5 @@
+# app_sections/enter_scores.py
+
 import streamlit as st
 import pandas as pd
 import logging

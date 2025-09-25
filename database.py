@@ -1,3 +1,5 @@
+# database.py
+
 import sqlite3
 import os
 import bcrypt
@@ -112,9 +114,10 @@ def create_tables():
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
+            username TEXT NOT NULL,
             password TEXT NOT NULL,
-            role TEXT NOT NULL CHECK(role IN ('superadmin', 'admin', 'class_teacher', 'subject_teacher'))
+            role TEXT NOT NULL CHECK(role IN ('superadmin', 'admin', 'class_teacher', 'subject_teacher')),
+            UNIQUE(username, role)
         )
     """)
     
@@ -178,7 +181,7 @@ def create_user(username, password, role):
         logger.info(f"User '{username}' created successfully with role '{role}'")
         return True
     except sqlite3.IntegrityError:
-        logger.warning(f"Failed to create user '{username}' - may already exist")
+        logger.warning(f"Failed to create user '{username}' with role '{role} - may already exist")
         return False
     finally:
         conn.close()

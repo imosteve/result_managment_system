@@ -1,3 +1,5 @@
+# app_sections/manage_comments.py
+
 import streamlit as st
 from database import get_all_classes, get_students_by_class, create_comment, get_comment, delete_comment
 from utils import render_page_header, inject_login_css

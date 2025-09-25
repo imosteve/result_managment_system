@@ -1,3 +1,5 @@
+# app_sections/admin_panel.py
+
 import streamlit as st
 import time
 from database import (
@@ -89,7 +91,10 @@ def admin_panel():
                 st.warning("⚠️ **Warning:** This action cannot be undone. Deleting a user will remove all their data and assignments.")
                 
                 # Get user IDs and add a placeholder option
-                user_ids = [""] + [u[0] for u in users]  # Add empty string as first option
+                if role == "superadmin":
+                    user_ids = [""] + [u[0] for u in users]  # Add empty string as first option
+                else:
+                    user_ids = [""] + [u[0] for u in users if u[2] not in ["superadmin", "admin"]]  # Add empty string as first option
                 user_id_to_delete = st.selectbox(
                     "Select User to Delete",
                     user_ids,

@@ -1,4 +1,4 @@
-# updated - FIXED
+# app_sections/register_students.py
 
 import streamlit as st
 import pandas as pd

@@ -1,4 +1,4 @@
-# updated version - FIXED
+# app_sections/manage classes.py
 
 import streamlit as st
 from database import get_all_classes, create_class, delete_class, update_class, clear_all_classes
