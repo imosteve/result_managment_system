@@ -6,12 +6,11 @@ import logging
 from typing import Optional, List, Dict, Any
 from utils import (
     assign_grade, inject_login_css, format_ordinal, render_page_header,
-    
 )
 from database import (
     get_all_classes, get_students_by_class, get_subjects_by_class,
     get_scores_by_class_subject, save_scores, clear_all_scores,
-    get_user_assignments
+    get_user_assignments, get_student_selected_subjects
 )
 
 # Configure logging
@@ -56,7 +55,7 @@ def _check_authentication() -> bool:
 
 def _check_authorization() -> bool:
     """Check if user has proper role-based authorization"""
-    allowed_roles = ["admin", "class_teacher", "subject_teacher"]
+    allowed_roles = ["superadmin", "admin", "class_teacher", "subject_teacher"]
     user_role = st.session_state.get("role")
     
     if user_role not in allowed_roles:
@@ -73,20 +72,6 @@ def _initialize_session_state():
         st.session_state.role = None
     if 'assignment' not in st.session_state:
         st.session_state.assignment = None
-
-def _render_page_header():
-    """Render the page header"""
-    st.markdown(
-        """
-        <div style='width: auto; margin: auto; text-align: center; background-color: #c6b7b1; padding: 20px; border-radius: 10px;'>
-            <h3 style='color:#000; font-size:30px; margin:0;'>
-                Manage Subject Scores
-            </h3>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-    st.markdown("<br>", unsafe_allow_html=True)
 
 def _render_score_management_interface():
     """Render the main score management interface"""
@@ -120,14 +105,26 @@ def _render_score_management_interface():
     if not selected_subject:
         return
 
-    # Get students for the selected class
-    students = _get_accessible_students(class_name, term, session, user_id, role)
+    # Check if this is a senior class requiring subject selection consideration
+    is_senior_class = class_name in ["SSS 2", "SSS 3"]
+
+    # Get students for the selected class and subject
+    students = _get_accessible_students(class_name, term, session, user_id, role, selected_subject, is_senior_class)
     if not students:
-        st.warning(f"⚠️ No students found in {class_name} - {term} - {session}.")
+        # For SSS2/SSS3, show specific message about subject selection
+        if is_senior_class:
+            st.warning(f"⚠️ No students have selected {selected_subject} in {class_name} - {term} - {session}.")
+            st.info("💡 Students need to make their subject selections in the 'Manage Subject Combination' section first.")
+        else:
+            st.warning(f"⚠️ No students found in {class_name} - {term} - {session}.")
         return
 
     # Get existing scores
     existing_scores = _get_existing_scores(class_name, selected_subject, term, session, user_id, role)
+    
+    # Show info message for senior classes
+    if is_senior_class:
+        st.info(f"📋 Showing {len(students)} student(s) who selected {selected_subject}")
     
     # Render tabs for different operations
     _render_score_tabs(students, existing_scores, class_name, selected_subject, term, session)
@@ -196,13 +193,48 @@ def _render_subject_selection(subjects: List[tuple], role: str) -> Optional[str]
     
     return st.selectbox("Select Subject", subject_names)
 
-def _get_accessible_students(class_name: str, term: str, session: str, user_id: int, role: str) -> List[tuple]:
-    """Get students accessible to the user for the selected class"""
+def _get_accessible_students(class_name: str, term: str, session: str, user_id: int, role: str, 
+                           subject_name: str, is_senior_class: bool = False) -> List[tuple]:
+    """Get students accessible to the user for the selected class and subject"""
     try:
-        return get_students_by_class(class_name, term, session, user_id, role)
+        # For SSS 2 and SSS 3, get students who selected this subject
+        if is_senior_class and subject_name:
+            return _get_students_for_subject(class_name, subject_name, term, session, user_id, role)
+        else:
+            # For other classes, get all students
+            return get_students_by_class(class_name, term, session, user_id, role)
     except Exception as e:
         logger.error(f"Error fetching students for class {class_name}: {str(e)}")
         st.error("❌ Failed to load students. Please try again.")
+        return []
+
+def _get_students_for_subject(class_name: str, subject_name: str, term: str, session: str, 
+                            user_id: int, role: str) -> List[tuple]:
+    """Get students who selected a particular subject (for SSS 2 and SSS 3)"""
+    try:
+        # Get all students in the class first
+        all_students = get_students_by_class(class_name, term, session, user_id, role)
+        
+        # Use a set to track processed student IDs and prevent duplicates
+        processed_students = set()
+        students_with_subject = []
+
+        for student in all_students:
+            student_id = student[0]  # Assuming student[0] is the student ID
+            student_name = student[1]  # student[1] is the name
+            
+            # Skip if we've already processed this student
+            if student_id in processed_students:
+                continue
+                
+            selected_subjects = get_student_selected_subjects(student_name, class_name, term, session)
+            if subject_name in selected_subjects:
+                students_with_subject.append(student)
+                processed_students.add(student_id)
+        
+        return students_with_subject
+    except Exception as e:
+        logger.error(f"Error filtering students for subject {subject_name}: {str(e)}")
         return []
 
 def _get_existing_scores(class_name: str, subject: str, term: str, session: str, user_id: int, role: str) -> Dict[str, tuple]:
@@ -234,23 +266,30 @@ def _render_score_entry_tab(students: List[tuple], score_map: Dict[str, tuple],
     """Render the score entry tab"""
     st.subheader("📝 Enter Scores")
     
-    # Build editable data
-    editable_rows = []
+    if not students:
+        st.warning("⚠️ No students available for score entry.")
+        return
+    
+    # Build editable data - use a dict to prevent duplicates
+    student_scores = {}
     for student in students:
         student_name = student[1]
+        # Skip if we've already processed this student
+        if student_name in student_scores:
+            continue
+            
         existing = score_map.get(student_name)
         test_score = float(existing[3]) if existing and existing[3] is not None else 0.0
         exam_score = float(existing[4]) if existing and existing[4] is not None else 0.0
         
-        editable_rows.append({
+        student_scores[student_name] = {
             "Student": student_name,
             "Test (30%)": test_score,
             "Exam (70%)": exam_score,
-        })
+        }
 
-    if not editable_rows:
-        st.warning("⚠️ No students available for score entry.")
-        return
+    # Convert to list for DataFrame
+    editable_rows = list(student_scores.values())
 
     # Create editable DataFrame with validation
     try:
@@ -278,8 +317,8 @@ def _render_score_entry_tab(students: List[tuple], score_map: Dict[str, tuple],
                 ),
             },
             hide_index=True,
-            use_container_width=True,
-            key="score_editor"
+            width="stretch",
+            key=f"score_editor_{class_name}_{subject}_{term}_{session}"
         )
 
         # Validate scores before saving
@@ -356,10 +395,19 @@ def _render_score_preview_tab(students: List[tuple], score_map: Dict[str, tuple]
     """Render the score preview tab"""
     st.subheader("👀 Preview Scores")
 
-    # Build preview data
-    preview_data = []
-    for idx, student in enumerate(students, 1):
+    if not students:
+        st.info("📝 No students available to preview.")
+        return
+
+    # Build preview data - use dict to prevent duplicates
+    preview_data = {}
+    for student in students:
         student_name = student[1]
+        
+        # Skip if we've already processed this student
+        if student_name in preview_data:
+            continue
+            
         existing = score_map.get(student_name)
         
         if existing:
@@ -373,33 +421,35 @@ def _render_score_preview_tab(students: List[tuple], score_map: Dict[str, tuple]
             grade = assign_grade(0.0)
             position = "-"
         
-        preview_data.append({
-            "S/N": str(idx),
+        preview_data[student_name] = {
             "Student": student_name,
             "Test": f"{test:.1f}",
             "Exam": f"{exam:.1f}",
             "Total": f"{total:.1f}",
             "Grade": grade,
             "Position": position
-        })
+        }
 
-    if preview_data:
-        st.dataframe(
-            pd.DataFrame(preview_data),
-            column_config={
-                "S/N": st.column_config.TextColumn("S/N", width="small"),
-                "Student": st.column_config.TextColumn("Student", width="large"),
-                "Test": st.column_config.TextColumn("Test", width="small"),
-                "Exam": st.column_config.TextColumn("Exam", width="small"),
-                "Total": st.column_config.TextColumn("Total", width="small"),
-                "Grade": st.column_config.TextColumn("Grade", width="small"),
-                "Position": st.column_config.TextColumn("Position", width="small")
-            },
-            hide_index=True,
-            use_container_width=True
-        )
-    else:
-        st.info("📝 No scores available to preview.")
+    # Convert to list and add S/N
+    final_preview_data = []
+    for idx, (_, data) in enumerate(preview_data.items(), 1):
+        data["S/N"] = str(idx)
+        final_preview_data.append(data)
+
+    st.dataframe(
+        pd.DataFrame(final_preview_data),
+        column_config={
+            "S/N": st.column_config.TextColumn("S/N", width="small"),
+            "Student": st.column_config.TextColumn("Student", width="large"),
+            "Test": st.column_config.TextColumn("Test", width="small"),
+            "Exam": st.column_config.TextColumn("Exam", width="small"),
+            "Total": st.column_config.TextColumn("Total", width="small"),
+            "Grade": st.column_config.TextColumn("Grade", width="small"),
+            "Position": st.column_config.TextColumn("Position", width="small")
+        },
+        hide_index=True,
+        width="stretch"
+    )
 
 def _render_clear_scores_tab(score_map: Dict[str, tuple], class_name: str, 
                            subject: str, term: str, session: str):
@@ -442,8 +492,6 @@ def _clear_all_scores_from_database(class_name: str, subject: str, term: str, se
         st.error("❌ Failed to clear scores. Please try again.")
         return False
 
-# Additional utility functions for production readiness
-
 def _get_user_assignment_context() -> Optional[Dict[str, Any]]:
     """Get the user's assignment context for role-based restrictions"""
     user_id = st.session_state.get("user_id")
@@ -456,7 +504,6 @@ def _get_user_assignment_context() -> Optional[Dict[str, Any]]:
         assignments = get_user_assignments(user_id)
         if assignments:
             # Return the first assignment for simplicity
-            # In a more complex system, you might need assignment selection logic
             assignment = assignments[0]
             return {
                 "class_name": assignment[1],
@@ -469,41 +516,10 @@ def _get_user_assignment_context() -> Optional[Dict[str, Any]]:
     
     return None
 
-# def _display_role_info():
-#     """Display user role and permissions information"""
-#     role = st.session_state.get("role", "Unknown")
-#     username = st.session_state.get("username", "Unknown User")
-    
-#     role_descriptions = {
-#         "admin": "Full access to all classes, subjects, and students",
-#         "class_teacher": "Access to assigned classes and all their subjects",
-#         "subject_teacher": "Access to assigned subjects in assigned classes"
-#     }
-    
-#     with st.sidebar:
-#         st.markdown("---")
-#         st.markdown("### 👤 User Information")
-#         st.markdown(f"**User:** {username}")
-#         st.markdown(f"**Role:** {role.replace('_', ' ').title()}")
-#         st.markdown(f"**Permissions:** {role_descriptions.get(role, 'Limited access')}")
-        
-#         if role in ["class_teacher", "subject_teacher"]:
-#             assignment = _get_user_assignment_context()
-#             if assignment:
-#                 st.markdown("### 📋 Assignment")
-#                 st.markdown(f"**Class:** {assignment['class_name']}")
-#                 st.markdown(f"**Term:** {assignment['term']}")
-#                 st.markdown(f"**Session:** {assignment['session']}")
-#                 if assignment.get('subject_name'):
-#                     st.markdown(f"**Subject:** {assignment['subject_name']}")
-
 # Initialize assignment context on page load
 if 'assignment_loaded' not in st.session_state:
     st.session_state.assignment = _get_user_assignment_context()
     st.session_state.assignment_loaded = True
-
-# # Display role information in sidebar
-# _display_role_info()
 
 if __name__ == "__main__":
     enter_scores()

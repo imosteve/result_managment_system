@@ -117,7 +117,7 @@ def select_assignment():
     Display assignment selection for class/subject teachers
     """
     # Show login form
-    inject_login_css("templates/login_styles.css")
+    # inject_login_css("templates/login_styles.css")
     st.markdown(f'<div class="{CSS_CLASSES["login_container"]}">', unsafe_allow_html=True)
     st.markdown(f'<h2 class="{CSS_CLASSES["assignment_title"]}">Select Assignment</h2>', unsafe_allow_html=True)
     

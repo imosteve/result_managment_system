@@ -114,10 +114,17 @@ def create_class_section():
     with tab2:
         st.subheader("Add Class")
 
-        # ✅ Initialize default values before widgets
-        if "new_class_input" not in st.session_state:
+        # Use a flag to reset fields AFTER rerun, not before widget instantiation
+        if st.session_state.get("reset_add_class", False):
             st.session_state["class_input"] = ""
-        if "new_class_input" not in st.session_state:
+            st.session_state["arm_input"] = ""
+            st.session_state["term_input"] = "1st Term"
+            st.session_state["session_input"] = ""
+            st.session_state["reset_add_class"] = False
+
+        if "class_input" not in st.session_state:
+            st.session_state["class_input"] = ""
+        if "arm_input" not in st.session_state:
             st.session_state["arm_input"] = ""
         if "term_input" not in st.session_state:
             st.session_state["term_input"] = "1st Term"
@@ -170,8 +177,7 @@ def create_class_section():
                         success = create_class(new_class, term, session)
                         if success:
                             st.markdown(f'<div class="success-container">✅ Class "{new_class}" added for {term}, {session}.</div>', unsafe_allow_html=True)
-                            st.rerun()
-                            reset_add_class_fields()  # ✅ Reset via function
+                            reset_add_class_fields()  # Set flag, not direct assignment
                             st.rerun()
                         else:
                             st.markdown(f'<div class="error-container">❌ Failed to add class "{new_class}". A class with this name, term, and session may already exist in the database.</div>', unsafe_allow_html=True)
@@ -185,16 +191,16 @@ def create_class_section():
             clear_all_button = st.button("🗑️ Clear All Classes", key="clear_all_classes", disabled=not confirm_clear)
             
             if 'clear_all_class' not in st.session_state:
-                    st.session_state.clear_all_class = None
+                st.session_state.clear_all_class = None
             
             # Confirmation dialog
             if clear_all_button and confirm_clear:
                 @st.dialog("Confirm All Classes Deletion", width="small")
                 def confirm_delete_all_classes():
-                    st.warning(f"⚠️ Are you sure you want to delete delete all classes and their associated students, subjects, and scores.?")
+                    st.warning(f"⚠️ Are you sure you want to delete all classes and their associated students, subjects, and scores?")
                     
                     confirm_col1, confirm_col2 = st.columns(2)
-                    if confirm_col1.button("✅ Delete", key=f"confirm_delete_{i}"):
+                    if confirm_col1.button("✅ Delete", key="confirm_clear_all"):
                         st.session_state.clear_all_class = clear_all_classes()
                         if st.session_state.clear_all_class:
                             st.markdown('<div class="success-container">✅ All classes cleared successfully!</div>', unsafe_allow_html=True)
@@ -202,7 +208,7 @@ def create_class_section():
                             st.rerun()
                         else:
                             st.markdown('<div class="error-container">❌ Failed to clear classes. Please try again.</div>', unsafe_allow_html=True)
-                    elif confirm_col2.button("❌ Cancel", key=f"cancel_delete_{i}"):
+                    elif confirm_col2.button("❌ Cancel", key="cancel_clear_all"):
                         st.session_state.clear_all_class = None
                         st.info("Deletion cancelled.")
                         st.rerun()
@@ -213,8 +219,6 @@ def create_class_section():
             st.info("No classes available to clear.")
 
 def reset_add_class_fields():
-    st.session_state["class_input"] = ""
-    st.session_state["arm_input"] = ""
-    st.session_state["term_input"] = "1st Term"
-    st.session_state["session_input"] = ""
+    # Use st.experimental_rerun to reset fields after rerun, not before widgets are created
+    st.session_state["reset_add_class"] = True
 
