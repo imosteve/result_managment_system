@@ -266,6 +266,57 @@ def delete_assignment(assignment_id):
     conn.commit()
     conn.close()
 
+def update_user(user_id, new_username, new_password=None):
+    """Update user's username and optionally password"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        if new_password:
+            # Update both username and password
+            if len(new_password) < 4:
+                logger.error(f"Password for user '{new_username}' is too short")
+                return False
+            cursor.execute("""
+                UPDATE users 
+                SET username = ?, password = ?
+                WHERE id = ?
+            """, (new_username, new_password, user_id))
+        else:
+            # Update only username
+            cursor.execute("""
+                UPDATE users 
+                SET username = ?
+                WHERE id = ?
+            """, (new_username, user_id))
+        
+        conn.commit()
+        logger.info(f"User {user_id} updated successfully")
+        return True
+    except sqlite3.IntegrityError:
+        logger.warning(f"Failed to update user - username may already exist")
+        return False
+    finally:
+        conn.close()
+
+def update_assignment(assignment_id, new_class_name, new_term, new_session, new_subject_name=None):
+    """Update a teacher assignment"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            UPDATE teacher_assignments
+            SET class_name = ?, term = ?, session = ?, subject_name = ?
+            WHERE id = ?
+        """, (new_class_name, new_term, new_session, new_subject_name, assignment_id))
+        conn.commit()
+        logger.info(f"Assignment {assignment_id} updated successfully")
+        return True
+    except sqlite3.IntegrityError:
+        logger.warning(f"Failed to update assignment - may already exist")
+        return False
+    finally:
+        conn.close()
+
 def create_comment(student_name, class_name, term, session, class_teacher_comment=None, head_teacher_comment=None):
     """Create or update a comment for a student"""
     conn = get_connection()

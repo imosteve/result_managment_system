@@ -5,7 +5,7 @@ import time
 from database import (
     get_all_classes, get_subjects_by_class,
     create_user, get_all_users, delete_user, assign_teacher, get_user_assignments,
-    delete_assignment, get_database_stats
+    delete_assignment, get_database_stats, update_user, update_assignment
 )
 from utils import inject_login_css, render_page_header
 
@@ -80,21 +80,67 @@ def admin_panel():
                 user_data = [{"Username": u[1], "Role": u[2].replace("_", " ").title(), "Password": u[3]} for u in users if u[2] not in ["superadmin", "admin"]]
             st.dataframe(user_data, width="stretch")
             
-            # Initialize session state for delete confirmation
+            # Initialize session state
             if 'show_delete_user_confirm' not in st.session_state:
                 st.session_state.show_delete_user_confirm = False
             if 'user_to_delete_info' not in st.session_state:
                 st.session_state.user_to_delete_info = None
+            if 'show_edit_user' not in st.session_state:
+                st.session_state.show_edit_user = False
+            if 'user_to_edit_info' not in st.session_state:
+                st.session_state.user_to_edit_info = None
             
-            # Delete user section with expander
+            # Edit User Section
+            with st.expander("✏️ Edit User", expanded=False):
+                st.info("Update username and password for existing users")
+                
+                if role == "superadmin":
+                    user_ids = [""] + [u[0] for u in users]
+                else:
+                    user_ids = [""] + [u[0] for u in users if u[2] not in ["superadmin", "admin"]]
+                
+                user_id_to_edit = st.selectbox(
+                    "Select User to Edit",
+                    user_ids,
+                    format_func=lambda x: "Select a user" if x == "" else next(u[1] for u in users if u[0] == x),
+                    key="edit_user_select"
+                )
+                
+                if user_id_to_edit and user_id_to_edit != "":
+                    selected_user = next(u for u in users if u[0] == user_id_to_edit)
+                    st.info(f"Editing: **{selected_user[1]}** (Role: {selected_user[2].replace('_', ' ').title()})")
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        new_username = st.text_input("New Username", value=selected_user[1], key="new_username")
+                    with col2:
+                        new_password = st.text_input("New Password", type="password", placeholder="Leave blank to keep current", key="new_password")
+                    
+                    if st.button("💾 Update User", key="update_user_button", type="primary"):
+                        if not new_username.strip():
+                            st.error("Username cannot be empty")
+                        else:
+                            update_success = update_user(
+                                user_id_to_edit, 
+                                new_username.strip(), 
+                                new_password if new_password else None
+                            )
+                            if update_success:
+                                st.success(f"✅ User updated successfully")
+                                time.sleep(1)
+                                st.rerun()
+                            else:
+                                st.error("❌ Failed to update user. Username may already exist.")
+            
+            # Delete user section (keep existing code)
             with st.expander("🗑️ Delete User", expanded=False):
                 st.warning("⚠️ **Warning:** This action cannot be undone. Deleting a user will remove all their data and assignments.")
                 
-                # Get user IDs and add a placeholder option
                 if role == "superadmin":
-                    user_ids = [""] + [u[0] for u in users]  # Add empty string as first option
+                    user_ids = [""] + [u[0] for u in users]
                 else:
-                    user_ids = [""] + [u[0] for u in users if u[2] not in ["superadmin", "admin"]]  # Add empty string as first option
+                    user_ids = [""] + [u[0] for u in users if u[2] not in ["superadmin", "admin"]]
+                
                 user_id_to_delete = st.selectbox(
                     "Select User to Delete",
                     user_ids,
@@ -112,7 +158,6 @@ def admin_panel():
                     elif user_id_to_delete == user_id:
                         st.error("⚠️ Cannot delete your own account.")
                     else:
-                        # Store user info and show confirmation dialog
                         selected_user = next(u for u in users if u[0] == user_id_to_delete)
                         st.session_state.user_to_delete_info = {
                             'id': user_id_to_delete,
@@ -122,7 +167,7 @@ def admin_panel():
                         st.session_state.show_delete_user_confirm = True
                         st.rerun()
                         
-                # Confirmation dialog
+                # Confirmation dialog (keep existing code)
                 if st.session_state.show_delete_user_confirm and st.session_state.user_to_delete_info:
                     @st.dialog("Confirm User Deletion")
                     def confirm_delete_user():
@@ -195,24 +240,98 @@ def admin_panel():
             user_assignments = get_user_assignments(user[0])
             for a in user_assignments:
                 assignments.append({
+                    "id": a[0],
                     "S/N": str(sn_counter),
+                    "user_id": user[0],
                     "Teacher": user[1].title(),
                     "Role": user[2].replace("_", " ").title(),
                     "Class": f"{a['class_name']} - {a['term']} - {a['session']}",
-                    "Subject": a['subject_name'] or "-"
+                    "class_name": a['class_name'],
+                    "term": a['term'],
+                    "session": a['session'],
+                    "Subject": a['subject_name'] or "-",
+                    "subject_name": a['subject_name']
                 })
                 sn_counter += 1
                 
         if assignments:
-            st.dataframe(assignments, width="stretch")
+            display_assignments = [{k: v for k, v in a.items() if k in ["S/N", "Teacher", "Role", "Class", "Subject"]} for a in assignments]
+            st.dataframe(display_assignments, width="stretch")
             
-            # Initialize session state for delete assignment confirmation
+            # Initialize session state
             if 'show_delete_assignment_confirm' not in st.session_state:
                 st.session_state.show_delete_assignment_confirm = False
             if 'assignment_to_delete_info' not in st.session_state:
                 st.session_state.assignment_to_delete_info = None
             
-            # Delete assignment section with expander
+            # Edit Assignment Section
+            with st.expander("✏️ Edit Assignment", expanded=False):
+                st.info("Update class and subject assignments for teachers")
+                
+                assignment_s_n_to_edit = st.selectbox(
+                    "Select Assignment to Edit",
+                    [""] + [a["S/N"] for a in assignments],
+                    format_func=lambda x: "Select an assignment" if x == "" else next(f"{a['Teacher']} - {a['Class']} - {a['Subject']}" for a in assignments if a["S/N"] == x),
+                    key="edit_assignment_select"
+                )
+                
+                if assignment_s_n_to_edit and assignment_s_n_to_edit != "":
+                    selected_assignment = next((a for a in assignments if a["S/N"] == assignment_s_n_to_edit), None)
+                    if selected_assignment:
+                        st.info(f"Editing: **{selected_assignment['Teacher']}** - {selected_assignment['Class']} - {selected_assignment['Subject']}")
+                        
+                        # Get fresh classes and subjects
+                        classes = get_fresh_classes()
+                        
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            class_options = [f"{cls['class_name']} - {cls['term']} - {cls['session']}" for cls in classes]
+                            current_class = f"{selected_assignment['class_name']} - {selected_assignment['term']} - {selected_assignment['session']}"
+                            current_index = class_options.index(current_class) if current_class in class_options else 0
+                            
+                            new_class = st.selectbox(
+                                "New Class",
+                                class_options,
+                                index=current_index,
+                                key="edit_assignment_class"
+                            )
+                            
+                            selected_class_index = class_options.index(new_class)
+                            class_data = classes[selected_class_index]
+                            new_class_name, new_term, new_session = class_data['class_name'], class_data['term'], class_data['session']
+                        
+                        with col2:
+                            if selected_assignment['subject_name']:  # Subject teacher
+                                subjects = get_fresh_subjects(new_class_name, new_term, new_session)
+                                subject_options = [s[1] for s in subjects]
+                                current_subject_index = subject_options.index(selected_assignment['subject_name']) if selected_assignment['subject_name'] in subject_options else 0
+                                
+                                new_subject = st.selectbox(
+                                    "New Subject",
+                                    subject_options,
+                                    index=current_subject_index,
+                                    key="edit_assignment_subject"
+                                )
+                            else:  # Class teacher
+                                new_subject = None
+                                st.info("Class teacher (no subject)")
+                        
+                        if st.button("💾 Update Assignment", key="update_assignment_button", type="primary"):
+                            update_success = update_assignment(
+                                selected_assignment['id'],
+                                new_class_name,
+                                new_term,
+                                new_session,
+                                new_subject
+                            )
+                            if update_success:
+                                st.success("✅ Assignment updated successfully")
+                                time.sleep(1)
+                                st.rerun()
+                            else:
+                                st.error("❌ Failed to update assignment. Assignment may already exist.")
+            
+            # Delete assignment section (keep existing code)
             with st.expander("🗑️ Delete Assignment", expanded=False):
                 st.warning("⚠️ **Warning:** This action cannot be undone. Deleting an assignment will remove the teacher's access to the assigned class/subject.")
                 
@@ -231,12 +350,11 @@ def admin_panel():
                 if st.button("❌ Delete Assignment", key="delete_assignment_button", type="primary"):
                     selected_assignment = next((a for a in assignments if a["S/N"] == assignment_s_n_to_delete), None)
                     if selected_assignment:
-                        # Store assignment info and show confirmation dialog
                         st.session_state.assignment_to_delete_info = selected_assignment
                         st.session_state.show_delete_assignment_confirm = True
                         st.rerun()
                         
-                # Confirmation dialog
+                # Confirmation dialog (keep existing code)
                 if st.session_state.show_delete_assignment_confirm and st.session_state.assignment_to_delete_info:
                     @st.dialog("Confirm Assignment Deletion", width="small")
                     def confirm_delete_assignment():
@@ -269,7 +387,7 @@ def admin_panel():
                     confirm_delete_assignment()
         else:
             st.info("No assignments found.")
-    
+        
     # Assign Class Teacher Tab
     with tabs[3]:
         with st.form("assign_class_teacher_form"):
