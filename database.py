@@ -823,47 +823,85 @@ def recalculate_positions(class_name, subject_name, term, session):
     conn.commit()
     conn.close()
 
-def get_class_average(class_name, term, session, user_id=None, role=None):
-    """Calculate the average total score for all students in a class for a term and session with role-based restrictions"""
+# def get_class_average(class_name, term, session, user_id=None, role=None):
+#     """Calculate the average total score for all students in a class for a term and session with role-based restrictions"""
+#     conn = get_connection()
+#     cursor = conn.cursor()
+#     try:
+#         # FIXED: Admins should see ALL averages without restrictions
+#         if role in ["superadmin", "admin"]:
+#             cursor.execute("""
+#                 SELECT AVG(total_score)
+#                 FROM scores
+#                 WHERE class_name = ? AND term = ? AND session = ?
+#             """, (class_name, term, session))
+#         elif role == "class_teacher" and user_id:
+#             cursor.execute("""
+#                 SELECT AVG(s.total_score)
+#                 FROM scores s
+#                 JOIN teacher_assignments ta ON s.class_name = ta.class_name 
+#                     AND s.term = ta.term AND s.session = ta.session
+#                 WHERE s.class_name = ? AND s.term = ? AND s.session = ? 
+#                     AND ta.user_id = ? AND ta.subject_name IS NULL
+#             """, (class_name, term, session, user_id))
+#         elif role == "subject_teacher" and user_id:
+#             cursor.execute("""
+#                 SELECT AVG(s.total_score)
+#                 FROM scores s
+#                 JOIN teacher_assignments ta ON s.class_name = ta.class_name 
+#                     AND s.term = ta.term AND s.session = ta.session 
+#                     AND s.subject_name = ta.subject_name
+#                 WHERE s.class_name = ? AND s.term = ? AND s.session = ? 
+#                     AND ta.user_id = ?
+#             """, (class_name, term, session, user_id))
+#         else:
+#             conn.close()
+#             return 0
+#         avg = cursor.fetchone()[0]
+#         conn.close()
+#         return round(avg, 2) if avg is not None else 0
+#     except sqlite3.Error as e:
+#         logger.error(f"Error calculating class average: {e}")
+#         conn.close()
+#         return 0
+
+def get_class_average(class_name, term, session, user_id, role):
+    """
+    Calculate class average based on individual student averages (same as broadsheet calculation)
+    This ensures consistency between broadsheet and report card
+    """
     conn = get_connection()
     cursor = conn.cursor()
+    
     try:
-        # FIXED: Admins should see ALL averages without restrictions
-        if role in ["superadmin", "admin"]:
-            cursor.execute("""
-                SELECT AVG(total_score)
-                FROM scores
-                WHERE class_name = ? AND term = ? AND session = ?
-            """, (class_name, term, session))
-        elif role == "class_teacher" and user_id:
-            cursor.execute("""
-                SELECT AVG(s.total_score)
-                FROM scores s
-                JOIN teacher_assignments ta ON s.class_name = ta.class_name 
-                    AND s.term = ta.term AND s.session = ta.session
-                WHERE s.class_name = ? AND s.term = ? AND s.session = ? 
-                    AND ta.user_id = ? AND ta.subject_name IS NULL
-            """, (class_name, term, session, user_id))
-        elif role == "subject_teacher" and user_id:
-            cursor.execute("""
-                SELECT AVG(s.total_score)
-                FROM scores s
-                JOIN teacher_assignments ta ON s.class_name = ta.class_name 
-                    AND s.term = ta.term AND s.session = ta.session 
-                    AND s.subject_name = ta.subject_name
-                WHERE s.class_name = ? AND s.term = ? AND s.session = ? 
-                    AND ta.user_id = ?
-            """, (class_name, term, session, user_id))
-        else:
-            conn.close()
+        # Get all students in the class
+        students = get_students_by_class(class_name, term, session, user_id, role)
+        if not students:
             return 0
-        avg = cursor.fetchone()[0]
-        conn.close()
-        return round(avg, 2) if avg is not None else 0
-    except sqlite3.Error as e:
-        logger.error(f"Error calculating class average: {e}")
-        conn.close()
+        
+        # Calculate average for each student
+        student_averages = []
+        for student in students:
+            student_name = student[1]
+            scores = get_student_scores(student_name, class_name, term, session, user_id, role)
+            
+            if scores:
+                # Calculate student's average from their total scores
+                total_score = sum(score[5] for score in scores)  # score[5] is total
+                student_avg = total_score / len(scores)
+                student_averages.append(student_avg)
+        
+        # Calculate class average from student averages
+        if student_averages:
+            class_average = sum(student_averages) / len(student_averages)
+            return round(class_average, 2)
         return 0
+        
+    except Exception as e:
+        logger.error(f"Error calculating class average: {str(e)}")
+        return 0
+    finally:
+        conn.close()
 
 def get_student_grand_totals(class_name, term, session, user_id=None, role=None):
     """Get grand totals and ranks for all students in a class, term, and session with role-based restrictions"""

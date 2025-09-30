@@ -2,8 +2,8 @@
 
 import streamlit as st
 import os
+import zipfile
 from jinja2 import Environment, FileSystemLoader
-# from xhtml2pdf import pisa
 from weasyprint import HTML, CSS
 from utils import assign_grade, create_metric_5col_report, format_ordinal, render_page_header
 from database import (
@@ -35,9 +35,9 @@ def generate_report_card(student_name, class_name, term, session):
     # Calculate student average and totals (only from actual scores)
     if student_scores:
         total_score = sum(score[5] for score in student_scores)  # total_score column
-        total_test = sum(score[3] for score in student_scores)  # test_score column
-        total_exam = sum(score[4] for score in student_scores)  # exam_score column
-        grand_total = total_test + total_exam  # Should match sum of total_score
+        total_test = sum(int(score[3]) for score in student_scores)  # test_score column as int
+        total_exam = sum(int(score[4]) for score in student_scores)  # exam_score column as int
+        grand_total = int(total_test + total_exam)  # Should match sum of total_score
         avg = total_score / len(student_scores) if student_scores else 0
         grade = assign_grade(avg)
     else:
@@ -45,7 +45,7 @@ def generate_report_card(student_name, class_name, term, session):
         avg = 0
         grade = "-"
 
-    # Calculate class average with role-based restrictions
+    # Calculate class average - use the same method as broadsheet for consistency
     class_average = get_class_average(class_name, term, session, user_id, role)
 
     # Get position based on grand total comparison
@@ -61,7 +61,7 @@ def generate_report_card(student_name, class_name, term, session):
     # Create score dictionary for quick lookup
     score_dict = {score[2]: score for score in student_scores}
 
-    # Prepare data for template with all subjects
+    # Prepare data for template with all subjects - convert scores to integers
     subjects_data = []
     for subject in all_subjects:
         subject_name = subject[1]
@@ -69,9 +69,9 @@ def generate_report_card(student_name, class_name, term, session):
             score = score_dict[subject_name]
             subjects_data.append({
                 'subject': subject_name,
-                'test': score[3],
-                'exam': score[4],
-                'total': score[5],
+                'test': int(score[3]) if score[3] is not None else "-",
+                'exam': int(score[4]) if score[4] is not None else "-",
+                'total': int(score[5]) if score[5] is not None else "-",
                 'grade': score[6],
                 'position': format_ordinal(position_data['position']) if position_data else "-"
             })
@@ -120,15 +120,26 @@ def generate_report_card(student_name, class_name, term, session):
         )
         return output_path
         
-        # # Convert HTML to PDF using xhtml2pdf
-        # with open(output_path, "w+b") as pdf_file:
-        #     pisa_status = pisa.CreatePDF(src=html_out, dest=pdf_file)
-        #     if pisa_status.err:
-        #         return None
-
-        # return output_path
     except Exception as e:
         st.error(f"Error generating PDF: {e}")
+        return None
+
+def create_zip_file(pdf_paths, class_name, term, session):
+    """Create a zip file containing all generated PDFs"""
+    try:
+        os.makedirs("data/reports", exist_ok=True)
+        zip_filename = f"{class_name.replace(' ', '_')}_{term.replace(' ', '_')}_{session.replace('/', '_')}_Reports.zip"
+        zip_path = os.path.join("data/reports", zip_filename)
+        
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            for pdf_path in pdf_paths:
+                if os.path.exists(pdf_path):
+                    # Add file to zip with just the filename (not full path)
+                    zipf.write(pdf_path, os.path.basename(pdf_path))
+        
+        return zip_path
+    except Exception as e:
+        st.error(f"Error creating zip file: {e}")
         return None
 
 def report_card_section():
@@ -233,6 +244,7 @@ def report_card_section():
         
         success_count = 0
         failed_students = []
+        pdf_paths = []
         progress_bar = st.progress(0)
         status_text = st.empty()
         
@@ -243,15 +255,34 @@ def report_card_section():
             pdf_path = generate_report_card(student_name, class_name, term, session)
             if pdf_path and os.path.exists(pdf_path):
                 success_count += 1
+                pdf_paths.append(pdf_path)
             else:
                 failed_students.append(student_name)
                 
             progress_bar.progress((i + 1) / len(students))
 
-        status_text.text("Complete!")
+        status_text.text("Creating zip file...")
         
-        if success_count > 0:
-            st.success(f"✅ Generated {success_count}/{len(students)} report cards successfully.")
+        if pdf_paths:
+            zip_path = create_zip_file(pdf_paths, class_name, term, session)
+            
+            if zip_path and os.path.exists(zip_path):
+                status_text.text("Complete!")
+                st.success(f"✅ Generated {success_count}/{len(students)} report cards successfully.")
+                
+                with open(zip_path, "rb") as f:
+                    st.download_button(
+                        label=f"📥 Download All Report Cards (ZIP)",
+                        data=f,
+                        file_name=os.path.basename(zip_path),
+                        mime="application/zip"
+                    )
+            else:
+                status_text.text("Complete!")
+                st.error("❌ Failed to create zip file.")
+        else:
+            status_text.text("Complete!")
+            st.error("❌ No report cards were generated successfully.")
         
         if failed_students:
             st.warning(f"⚠️ Failed to generate reports for: {', '.join(failed_students)}")

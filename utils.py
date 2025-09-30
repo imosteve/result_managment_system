@@ -46,12 +46,14 @@ def create_metric_5col_broadsheet(subjects, students, class_average, broadsheet_
     # Get all possible subjects for the class
     all_subjects = get_subjects_by_class(class_name, term, session, user_id, role)
     
-    # Count subjects with scores (subjects that appear in broadsheet data)
+    # Count subjects with scores (subjects that appear in broadsheet data with Total column)
     subjects_with_scores = set()
     for row in broadsheet_data:
         for subject in all_subjects:
             subject_name = subject[1]
-            if subject_name in row and row[subject_name] != "-":
+            # Check the Total column for this subject
+            total_key = f"{subject_name} (Total)"
+            if total_key in row and row[total_key] != "-":
                 subjects_with_scores.add(subject_name)
     
     subjects_added = len(subjects_with_scores)
@@ -83,7 +85,6 @@ def create_metric_5col_broadsheet(subjects, students, class_average, broadsheet_
     
     # Display subjects without scores if any
     if subjects_without_scores:
-        # st.markdown("---")
         st.markdown("**📋 Subjects Without Scores:**")
         subjects_text = ", ".join(subjects_without_scores)
         st.markdown(f"<div style='background-color: #fff3cd; padding: 10px; border-radius: 5px; border-left: 4px solid #ffc107;'>{subjects_text}</div>", unsafe_allow_html=True)

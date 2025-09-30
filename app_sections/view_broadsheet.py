@@ -51,7 +51,7 @@ def generate_broadsheet():
         assignment = st.session_state.get("assignment")
         if not assignment:
             st.warning("⚠️ No class assignment selected. Please select a class in the 'Change Assignment' section.")
-            class_options = []  # Prevent class selection until assignment is set
+            class_options = []
             selected_class_display = None
         else:
             allowed_class = f"{assignment['class_name']} - {assignment['term']} - {assignment['session']}"
@@ -86,28 +86,55 @@ def generate_broadsheet():
     broadsheet_data = []
     grand_totals = get_student_grand_totals(class_name, term, session, user_id, role)
 
-    for student in students:
+    for idx, student in enumerate(students, 1):
         student_name = student[1]
         scores = get_student_scores(student_name, class_name, term, session, user_id, role)
-        score_dict = {score[2]: score[5] for score in scores}
-        row = {"Student": student_name}
+        
+        # Create dictionaries for test, exam, and total scores
+        test_scores = {}
+        exam_scores = {}
+        total_scores = {}
+        
+        for score in scores:
+            subject_name = score[2]
+            test_scores[subject_name] = str(int(score[3])) if score[3] is not None else "-"
+            exam_scores[subject_name] = str(int(score[4])) if score[4] is not None else "-"
+            total_scores[subject_name] = str(int(score[5])) if score[5] is not None else "-"
+        
+        row = {"S/N": str(idx), "Student": student_name}
+        
+        # Add Test, Exam, and Total columns for each subject
         for subject in subjects:
             subject_name = subject[1]
-            row[subject_name] = score_dict.get(subject_name, "-")  # Changed from 0 to "-"
-        # Only sum numeric values for total
-        numeric_scores = [v for v in score_dict.values() if isinstance(v, (int, float))]
-        total_score = sum(numeric_scores)
-        row["Total"] = total_score if numeric_scores else "-"
-        row["Average"] = round(total_score / len(numeric_scores), 2) if numeric_scores else "-"
-        row["Grade"] = assign_grade(row["Average"]) if isinstance(row["Average"], (int, float)) else "-"
+            row[f"{subject_name} (Test)"] = test_scores.get(subject_name, "-")
+            row[f"{subject_name} (Exam)"] = exam_scores.get(subject_name, "-")
+            row[f"{subject_name} (Total)"] = total_scores.get(subject_name, "-")
+        
+        # Calculate grand total (sum of all subject totals)
+        numeric_totals = [int(v) for v in total_scores.values() if v != "-"]
+        grand_total = str(sum(numeric_totals)) if numeric_totals else "-"
+        row["Grand Total"] = grand_total
+        
+        # Calculate average
+        if grand_total != "-" and numeric_totals:
+            avg = round(int(grand_total) / len(numeric_totals), 2)
+            row["Average"] = str(avg)
+        else:
+            row["Average"] = "-"
+        
+        # Get position
         position_data = next((gt for gt in grand_totals if gt['student_name'] == student_name), None)
         row["Position"] = format_ordinal(position_data['position']) if position_data else "-"
+        
         broadsheet_data.append(row)
 
     # Calculate class average
-    df = pd.DataFrame(broadsheet_data)
-    # Only calculate class average from numeric values
-    numeric_averages = [row["Average"] for row in broadsheet_data if isinstance(row["Average"], (int, float))]
+    numeric_averages = []
+    for row in broadsheet_data:
+        avg = row["Average"]
+        if avg != "-":
+            numeric_averages.append(float(avg))
+    
     class_average = round(sum(numeric_averages) / len(numeric_averages), 2) if numeric_averages else 0
     
     # Display class summary
@@ -125,16 +152,33 @@ def generate_broadsheet():
     # Create columns with expanded metrics
     create_metric_5col_broadsheet(subjects, students, class_average, broadsheet_data, class_name, term, session, user_id, role)
 
+    # Create DataFrame
     df = pd.DataFrame(broadsheet_data)
+    
+    # Display DataFrame
     st.dataframe(
         df,
         column_config={
+            "S/N": st.column_config.TextColumn("S/N", width="small"),
             "Student": st.column_config.TextColumn("Student", width="large"),
-            "Total": st.column_config.TextColumn("Total", width="medium"),
+            "Grand Total": st.column_config.TextColumn("Grand Total", width="medium"),
             "Average": st.column_config.TextColumn("Average", width="medium"),
-            "Grade": st.column_config.TextColumn("Grade", width="medium"),
             "Position": st.column_config.TextColumn("Position", width="medium")
         },
         hide_index=True,
-        use_container_width=True
+        width="stretch"
     )
+    
+    # Download button for CSV
+    st.markdown("---")
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col2:
+        csv_filename = f"{class_name}_{term}_{session}_Broadsheet.csv"
+        csv_data = df.to_csv(index=False)
+        st.download_button(
+            label="📥 Download Broadsheet as CSV",
+            data=csv_data,
+            file_name=csv_filename,
+            mime="text/csv",
+            width="stretch"
+        )

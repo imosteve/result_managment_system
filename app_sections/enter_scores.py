@@ -270,9 +270,12 @@ def _render_score_entry_tab(students: List[tuple], score_map: Dict[str, tuple],
         st.warning("⚠️ No students available for score entry.")
         return
     
+    # Display score limits
+    st.info("📊 **Score Limits:** Test (0-30) | Exam (0-70) | Total (0-100)")
+    
     # Build editable data - use a dict to prevent duplicates
     student_scores = {}
-    for student in students:
+    for idx, student in enumerate(students, 1):
         student_name = student[1]
         # Skip if we've already processed this student
         if student_name in student_scores:
@@ -283,19 +286,27 @@ def _render_score_entry_tab(students: List[tuple], score_map: Dict[str, tuple],
         exam_score = float(existing[4]) if existing and existing[4] is not None else 0.0
         
         student_scores[student_name] = {
+            "S/N": str(idx),
             "Student": student_name,
             "Test (30%)": test_score,
             "Exam (70%)": exam_score,
         }
 
-    # Convert to list for DataFrame
-    editable_rows = list(student_scores.values())
+    # Convert to list for DataFrame with S/N
+    editable_rows = []
+    for idx, (_, data) in enumerate(student_scores.items(), 1):
+        editable_rows.append(data)
 
     # Create editable DataFrame with validation
     try:
         editable_df = st.data_editor(
             pd.DataFrame(editable_rows),
             column_config={
+                "S/N": st.column_config.TextColumn(
+                    "S/N",
+                    disabled=True,
+                    width=10
+                ),
                 "Student": st.column_config.TextColumn(
                     "Student", 
                     disabled=True, 
@@ -322,36 +333,52 @@ def _render_score_entry_tab(students: List[tuple], score_map: Dict[str, tuple],
         )
 
         # Validate scores before saving
-        if _validate_scores(editable_df):
+        validation_result = _validate_scores(editable_df)
+        if validation_result["valid"]:
             if st.button("💾 Save All Scores", key="save_scores", type="primary"):
                 _save_scores_to_database(editable_df, class_name, subject, term, session)
         else:
+            # Display validation errors
+            for error in validation_result["errors"]:
+                st.error(error)
             st.warning("⚠️ Please correct invalid scores before saving.")
 
     except Exception as e:
         logger.error(f"Error in score entry interface: {str(e)}")
         st.error("❌ Error creating score entry interface.")
 
-def _validate_scores(df: pd.DataFrame) -> bool:
+def _validate_scores(df: pd.DataFrame) -> Dict[str, Any]:
     """Validate score data before saving"""
+    errors = []
+    
     try:
         for _, row in df.iterrows():
+            student_name = row['Student']
             test_score = float(row.get("Test (30%)", 0))
             exam_score = float(row.get("Exam (70%)", 0))
             
-            # Check score ranges
-            if not (0 <= test_score <= 30):
-                st.error(f"❌ Invalid test score for {row['Student']}: {test_score}. Must be between 0 and 30.")
-                return False
+            # Check test score range
+            if test_score < 0:
+                errors.append(f"❌ {student_name}: Test score cannot be negative (got {test_score:.1f})")
+            elif test_score > 30:
+                errors.append(f"❌ {student_name}: Test score exceeds maximum of 30 (got {test_score:.1f})")
             
-            if not (0 <= exam_score <= 70):
-                st.error(f"❌ Invalid exam score for {row['Student']}: {exam_score}. Must be between 0 and 70.")
-                return False
+            # Check exam score range
+            if exam_score < 0:
+                errors.append(f"❌ {student_name}: Exam score cannot be negative (got {exam_score:.1f})")
+            elif exam_score > 70:
+                errors.append(f"❌ {student_name}: Exam score exceeds maximum of 70 (got {exam_score:.1f})")
         
-        return True
+        return {
+            "valid": len(errors) == 0,
+            "errors": errors
+        }
     except Exception as e:
         logger.error(f"Error validating scores: {str(e)}")
-        return False
+        return {
+            "valid": False,
+            "errors": [f"❌ Validation error: {str(e)}"]
+        }
 
 def _save_scores_to_database(df: pd.DataFrame, class_name: str, subject: str, term: str, session: str):
     """Save scores to the database"""
@@ -401,7 +428,7 @@ def _render_score_preview_tab(students: List[tuple], score_map: Dict[str, tuple]
 
     # Build preview data - use dict to prevent duplicates
     preview_data = {}
-    for student in students:
+    for idx, student in enumerate(students, 1):
         student_name = student[1]
         
         # Skip if we've already processed this student
@@ -422,6 +449,7 @@ def _render_score_preview_tab(students: List[tuple], score_map: Dict[str, tuple]
             position = "-"
         
         preview_data[student_name] = {
+            "S/N": str(idx),
             "Student": student_name,
             "Test": f"{test:.1f}",
             "Exam": f"{exam:.1f}",
@@ -430,10 +458,9 @@ def _render_score_preview_tab(students: List[tuple], score_map: Dict[str, tuple]
             "Position": position
         }
 
-    # Convert to list and add S/N
+    # Convert to list for DataFrame
     final_preview_data = []
     for idx, (_, data) in enumerate(preview_data.items(), 1):
-        data["S/N"] = str(idx)
         final_preview_data.append(data)
 
     st.dataframe(
