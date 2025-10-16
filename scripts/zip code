@@ -1,0 +1,5 @@
+cd "C:\Users\imosteve\Documents\Result system\python system"
+"C:\Program Files\WinRAR\Rar.exe" a -r -hp"GodisGOD" "C:\Users\imosteve\Documents\student_results_app_secure.rar" "student_results_app"
+
+C:\Users\imosteve\AppData\Local\Temp\ # base temp path
+C:\Users\imosteve\AppData\Local\Temp\rms_app_13453_12160

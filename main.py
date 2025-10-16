@@ -20,6 +20,25 @@ from security_manager import SecurityManager
 from auth.login import login
 from auth.logout import logout
 
+# Import database functions
+from database import create_user, get_user_by_username
+
+def setup_default_users():
+    """Create default superadmin and admin users if they don't exist"""
+    try:
+        # Check and create superadmin
+        if not get_user_by_username("superadmin"):
+            if create_user("superadmin", "superadmin", "superadmin"):
+                logger.info("Default superadmin user created")
+        
+        # Check and create admin
+        if not get_user_by_username("admin"):
+            if create_user("admin", "admin", "admin"):
+                logger.info("Default admin user created")
+                
+    except Exception as e:
+        logger.error(f"Error setting up default users: {str(e)}")
+
 def handle_navigation(app: ApplicationManager, options: dict):
     """Handle navigation logic with error handling"""
     option_keys = list(options.keys())
@@ -139,6 +158,9 @@ def main():
         # Initialize database
         if not app.initialize_database():
             st.stop()
+        
+        # Setup default users (only runs once if users don't exist)
+        setup_default_users()
         
         app.initialize_mobile_support()
 

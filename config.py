@@ -33,6 +33,7 @@ DB_CONFIG = {
 LOG_CONFIG = {
     "level": "INFO",
     "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    "dir": "logs",
     "file": "logs/app.log",
     "max_size": 10 * 1024 * 1024,  # 10MB
     "backup_count": 5

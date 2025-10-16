@@ -1,0 +1,23 @@
+open command prompt
+
+copy and paste the following commands
+
+// creating virtual environment - first time setup
+cd "C:\"
+mkdir venvs
+cd "C:\venvs"
+python -m venv rms
+
+// installing project dependencies - for the first time setting up
+1. rms\Scripts\activate # this will activate the venv for the first time
+2. open the project folder and copy requirement.txt path (make sure to copy as path)
+3. on cmd, run 
+pip install -r <path copied>
+
+// updating project folder path for each new pc
+copy project folder path
+open run_app.bat with vscode
+and replace path
+cd /d <path>
+e.g. -> cd /d "C:\Users\imosteve\Documents\Result system\python system\student_results_app"
+

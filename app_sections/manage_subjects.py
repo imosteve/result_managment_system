@@ -83,7 +83,12 @@ def add_subjects():
     subjects = get_subjects_by_class(class_name, term, session, user_id, role)
 
     # Check if this is SSS2 or SSS3 to show subject selection tab
-    is_senior_class = class_name in ["SSS 2", "SSS 3"]
+    # is_senior_class = class_name in ["SSS 2", "SSS 3"]
+    # is_senior_class = class_name.startswith("SSS")
+
+    import re
+    is_senior_class = bool(re.match(r"SSS [23].*$", class_name))
+
 
     # Confirmation dialog for deleting individual subject
     if st.session_state.show_delete_subject_confirm and st.session_state.subject_to_delete_info:

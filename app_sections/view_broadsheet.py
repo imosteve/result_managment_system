@@ -73,22 +73,22 @@ def generate_broadsheet():
     term = selected_class_data['term']
     session = selected_class_data['session']
 
-    students = get_students_by_class(class_name, term, session, user_id, role)
+    students = get_students_by_class(class_name, term, session, user_id, "admin")
     if not students:
         st.warning(f"⚠️ No students found for {class_name} - {term} - {session}.")
         return
 
-    subjects = get_subjects_by_class(class_name, term, session, user_id, role)
+    subjects = get_subjects_by_class(class_name, term, session, user_id, "admin")
     if not subjects:
         st.warning(f"⚠️ No subjects found for {class_name} - {term} - {session}.")
         return
 
     broadsheet_data = []
-    grand_totals = get_student_grand_totals(class_name, term, session, user_id, role)
+    grand_totals = get_student_grand_totals(class_name, term, session, user_id, "admin")
 
     for idx, student in enumerate(students, 1):
         student_name = student[1]
-        scores = get_student_scores(student_name, class_name, term, session, user_id, role)
+        scores = get_student_scores(student_name, class_name, term, session, user_id, "admin")
         
         # Create dictionaries for test, exam, and total scores
         test_scores = {}
@@ -150,7 +150,7 @@ def generate_broadsheet():
     )
 
     # Create columns with expanded metrics
-    create_metric_5col_broadsheet(subjects, students, class_average, broadsheet_data, class_name, term, session, user_id, role)
+    create_metric_5col_broadsheet(subjects, students, class_average, broadsheet_data, class_name, term, session, user_id, "admin")
 
     # Create DataFrame
     df = pd.DataFrame(broadsheet_data)
@@ -182,3 +182,4 @@ def generate_broadsheet():
             mime="text/csv",
             width="stretch"
         )
+

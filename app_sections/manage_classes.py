@@ -135,7 +135,7 @@ def create_class_section():
             col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
             class_name = col1.selectbox(
                 "Class",
-                ["", "Primary", "SSS"],
+                ["", "KG", "Primary", "JSS", "SSS"],
                 key="class_input"
             )
 
