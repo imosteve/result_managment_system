@@ -1,4 +1,4 @@
-# main.py - Refactored for Production
+# main.py - Refactored for Production with Assignment Navigation Fix
 import streamlit as st
 import logging
 import traceback
@@ -39,19 +39,75 @@ def setup_default_users():
     except Exception as e:
         logger.error(f"Error setting up default users: {str(e)}")
 
-def handle_navigation(app: ApplicationManager, options: dict):
-    """Handle navigation logic with error handling"""
+def get_first_app_section(options: dict, role: str) -> str:
+    """
+    Get the first appropriate app section after assignment selection
+    
+    Args:
+        options: Navigation options dictionary
+        role: User role
+        
+    Returns:
+        First appropriate section key
+    """
+    option_keys = list(options.keys())
+    
+    # Skip Dashboard, Admin Panel, and Change Assignment for initial navigation
+    skip_keys = ["🏠 Dashboard", "👥 Admin Panel", "🔄 Change Assignment"]
+    
+    for key in option_keys:
+        if key not in skip_keys:
+            return key
+    
+    # If all keys are in skip list, return first available
+    return option_keys[0] if option_keys else None
+
+def handle_post_assignment_navigation(app: ApplicationManager, role: str, options: dict) -> str:
+    """
+    Handle navigation after assignment selection
+    
+    Args:
+        app: Application manager instance
+        role: User role
+        options: Navigation options
+        
+    Returns:
+        The page to navigate to
+    """
+    # Check if assignment was just selected
+    if st.session_state.get('assignment_just_selected'):
+        # Clear the flag
+        del st.session_state['assignment_just_selected']
+        
+        # Get the first appropriate section
+        first_section = get_first_app_section(options, role)
+        
+        if first_section:
+            logger.info(f"Navigating to first section after assignment: {first_section}")
+            # Set query parameter to navigate to this page
+            st.query_params["page"] = first_section
+            return first_section
+    
+    return None
+
+def handle_navigation(app: ApplicationManager, options: dict, role: str):
+    """Handle navigation logic with error handling and assignment redirect"""
     option_keys = list(options.keys())
     if not option_keys:
         st.error("❌ No navigation options available for your role.")
         return
 
-    # Handle URL parameters
-    param_page = st.query_params.get("page", None)
-    if param_page in option_keys:
-        current_page = param_page
+    # Handle post-assignment navigation
+    post_assignment_page = handle_post_assignment_navigation(app, role, options)
+    if post_assignment_page:
+        current_page = post_assignment_page
     else:
-        current_page = option_keys[0]
+        # Handle URL parameters
+        param_page = st.query_params.get("page", None)
+        if param_page in option_keys:
+            current_page = param_page
+        else:
+            current_page = option_keys[0]
 
     st.sidebar.header("Navigate to:")
     # Navigation selectbox
@@ -59,7 +115,7 @@ def handle_navigation(app: ApplicationManager, options: dict):
         "🧭 Navigate to:",
         option_keys,
         index=option_keys.index(current_page),
-        label_visibility = "collapsed",
+        label_visibility="collapsed",
     )
 
     # Update URL parameters if choice changed
@@ -76,19 +132,17 @@ def handle_navigation(app: ApplicationManager, options: dict):
         st.error(f"❌ Error loading {choice}. Please try again or contact support.")
         
         # Show error details to admins
-        if st.session_state.get('role') == 'admin':
+        if st.session_state.get('role') in ['superadmin', 'admin']:
             with st.expander("🔧 Error Details (Admin Only)"):
                 st.code(str(e))
 
 def render_logout_button():
-    """Render logout button with confirmation"""
+    """Render logout button"""
     with st.sidebar:
-        # st.markdown("---")
         if st.button("🚪 Logout", type="secondary", use_container_width=True):
             # Clear query parameters
             st.query_params.clear()
             logout()
-            st.rerun()
 
 def validate_session_data(role: str, username: str, user_id: int) -> bool:
     """Validate user session data"""
@@ -97,6 +151,31 @@ def validate_session_data(role: str, username: str, user_id: int) -> bool:
         SecurityManager.force_logout("Invalid session data")
         return False
     return True
+
+# def check_teacher_assignment(role: str) -> bool:
+#     """
+#     Check if teacher has selected an assignment
+    
+#     Args:
+#         role: User role
+        
+#     Returns:
+#         True if assignment check passed, False otherwise
+#     """
+#     # Teachers must have an assignment selected
+#     if role in ["class_teacher", "subject_teacher"]:
+#         if "assignment" not in st.session_state:
+#             logger.warning(f"Teacher {st.session_state.get('username')} has no assignment selected")
+#             st.warning("⚠️ No assignment selected. Please logout and select an assignment.")
+            
+#             # Add logout button for convenience
+#             if st.button("🚪 Logout to Select Assignment"):
+#                 logout()
+            
+#             st.stop()
+#             return False
+    
+#     return True
 
 def render_authenticated_app(app: ApplicationManager):
     """Render the main authenticated application"""
@@ -114,6 +193,10 @@ def render_authenticated_app(app: ApplicationManager):
         if not validate_session_data(role, username, user_id):
             return  # Validation failed, user logged out
         
+        # # Check teacher assignment (if applicable)
+        # if not check_teacher_assignment(role):
+        #     return  # Teacher needs to select assignment
+        
         # Render main application
         st.markdown('<div class="main-content">', unsafe_allow_html=True)
         
@@ -129,8 +212,8 @@ def render_authenticated_app(app: ApplicationManager):
         # Get navigation options based on role
         options = app.get_navigation_options(role)
         
-        # Handle navigation
-        handle_navigation(app, options)
+        # Handle navigation (including post-assignment redirect)
+        handle_navigation(app, options, role)
         
         st.markdown('</div>', unsafe_allow_html=True)
         
@@ -142,7 +225,7 @@ def render_authenticated_app(app: ApplicationManager):
         st.error("❌ An error occurred. Please refresh the page or contact support.")
         
         # Show error details to admins
-        if st.session_state.get('role') == 'admin':
+        if st.session_state.get('role') in ['superadmin', 'admin']:
             with st.expander("🔧 Error Details (Admin Only)"):
                 st.code(f"{str(e)}\n\n{traceback.format_exc()}")
 
@@ -162,6 +245,7 @@ def main():
         # Setup default users (only runs once if users don't exist)
         setup_default_users()
         
+        # Initialize mobile support
         app.initialize_mobile_support()
 
         # Initialize cookies
@@ -186,7 +270,7 @@ def main():
         st.error("❌ A critical error occurred. Please refresh the page or contact support.")
         
         # Show error details to admins
-        if st.session_state.get('role') == 'admin':
+        if st.session_state.get('role') in ['superadmin', 'admin']:
             with st.expander("🔧 Critical Error Details (Admin Only)"):
                 st.code(f"{str(e)}\n\n{traceback.format_exc()}")
 

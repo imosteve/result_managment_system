@@ -47,21 +47,8 @@ def generate_broadsheet():
 
     # Select class
     class_options = [f"{cls['class_name']} - {cls['term']} - {cls['session']}" for cls in classes]
-    if role in ["class_teacher", "subject_teacher"]:
-        assignment = st.session_state.get("assignment")
-        if not assignment:
-            st.warning("⚠️ No class assignment selected. Please select a class in the 'Change Assignment' section.")
-            class_options = []
-            selected_class_display = None
-        else:
-            allowed_class = f"{assignment['class_name']} - {assignment['term']} - {assignment['session']}"
-            if allowed_class not in class_options:
-                st.error("⚠️ Assigned class not found in available classes. Please select a new assignment.")
-                return
-            class_options = [allowed_class]
-            selected_class_display = st.selectbox("Select Class", class_options, disabled=True)
-    else:
-        selected_class_display = st.selectbox("Select Class", class_options)
+    
+    selected_class_display = st.selectbox("Select Class", class_options)
 
     if not class_options:
         return

@@ -141,22 +141,8 @@ def _get_accessible_classes(user_id: int, role: str) -> List[Dict[str, Any]]:
 def _render_class_selection(classes: List[Dict[str, Any]], role: str) -> Optional[Dict[str, Any]]:
     """Render class selection interface"""
     class_options = [f"{cls['class_name']} - {cls['term']} - {cls['session']}" for cls in classes]
-    
-    # For non-admin users, check if they have specific assignments
-    if role in ["class_teacher", "subject_teacher"]:
-        assignment = st.session_state.get("assignment")
-        if assignment:
-            allowed_class = f"{assignment['class_name']} - {assignment['term']} - {assignment['session']}"
-            if allowed_class in class_options:
-                class_options = [allowed_class]
-                selected_class_display = st.selectbox("Select Class", class_options, disabled=True)
-            else:
-                st.error("⚠️ Your assigned class is not available.")
-                return None
-        else:
-            selected_class_display = st.selectbox("Select Class", class_options)
-    else:
-        selected_class_display = st.selectbox("Select Class", class_options)
+
+    selected_class_display = st.selectbox("Select Class", class_options)
 
     # Get selected class details
     try:
@@ -180,17 +166,6 @@ def _render_subject_selection(subjects: List[tuple], role: str) -> Optional[str]
     """Render subject selection interface"""
     subject_names = [s[1] for s in subjects]
     
-    # For subject teachers, restrict to assigned subject
-    if role == "subject_teacher":
-        assignment = st.session_state.get("assignment", {})
-        allowed_subject = assignment.get("subject_name")
-        if allowed_subject and allowed_subject in subject_names:
-            subject_names = [allowed_subject]
-            return st.selectbox("Select Subject", subject_names, disabled=True)
-        elif allowed_subject:
-            st.error("⚠️ Your assigned subject is not available in this class.")
-            return None
-    
     return st.selectbox("Select Subject", subject_names)
 
 def _get_accessible_students(class_name: str, term: str, session: str, user_id: int, role: str, 
@@ -203,6 +178,7 @@ def _get_accessible_students(class_name: str, term: str, session: str, user_id: 
         else:
             # For other classes, get all students
             return get_students_by_class(class_name, term, session, user_id, role)
+        
     except Exception as e:
         logger.error(f"Error fetching students for class {class_name}: {str(e)}")
         st.error("❌ Failed to load students. Please try again.")

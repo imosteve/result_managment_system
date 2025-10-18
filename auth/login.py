@@ -1,3 +1,4 @@
+# auth/login.py
 """Login functionality - IMPROVED VERSION"""
 
 import streamlit as st

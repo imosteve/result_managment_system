@@ -234,6 +234,28 @@ def get_user_assignments(user_id):
         logger.error(f"Error getting assignments for user {user_id}: {str(e)}")
         return []
 
+# # Add this to database.py - REPLACE the existing get_user_assignments function
+# def get_user_assignments(username):
+#     """Get class/subject assignments for a user by USERNAME (not user_id)"""
+#     try:
+#         conn = get_connection()
+#         cursor = conn.cursor()
+#         cursor.execute("""
+#             SELECT ta.id, ta.class_name, ta.term, ta.session, ta.subject_name
+#             FROM teacher_assignments ta
+#             JOIN users u ON ta.user_id = u.id
+#             WHERE u.username = ?
+#             ORDER BY ta.session DESC, ta.term, ta.class_name, ta.subject_name
+#         """, (username,))
+#         assignments = cursor.fetchall()
+#         conn.close()
+        
+#         logger.info(f"Retrieved {len(assignments)} assignments for user: {username}")
+#         return assignments
+#     except Exception as e:
+#         logger.error(f"Error getting assignments for user {username}: {str(e)}")
+#         return []
+
 def assign_teacher(user_id, class_name, term, session, subject_name=None):
     """Assign a class or class/subject to a teacher"""
     conn = get_connection()

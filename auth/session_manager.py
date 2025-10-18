@@ -1,5 +1,5 @@
 # auth/session_manager.py
-"""Session management for authentication with mobile persistence"""
+"""Session management - SIMPLIFIED VERSION with proper cookie expiry"""
 
 import streamlit as st
 import logging
@@ -9,12 +9,12 @@ from typing import Optional, Dict, Any
 logger = logging.getLogger(__name__)
 
 class SessionManager:
-    """Handles user session management with mobile support"""
+    """Handles user session management - SIMPLIFIED"""
     
     @staticmethod
     def create_session(user: Dict[str, Any], cookies) -> bool:
         """
-        Create a new user session with enhanced mobile persistence
+        Create a new user session with proper cookie expiry
         
         Args:
             user: User data from database
@@ -32,31 +32,13 @@ class SessionManager:
             st.session_state.login_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             st.session_state.last_activity = datetime.now()
             
-            # Enhanced cookie settings for mobile persistence
-            cookie_options = {
-                'expires_at': datetime.now().timestamp() + (7 * 24 * 3600),  # 7 days
-                'same_site': 'lax',  # Better for mobile
-                'secure': False,  # Set to True in production with HTTPS
-                'path': '/'
-            }
-            
-            # Set cookies with enhanced options
+            # Set cookies (they will auto-expire based on cookie manager settings)
             cookies["authenticated"] = "true"
             cookies["user_id"] = str(user["id"])
             cookies["role"] = user["role"]
             cookies["username"] = user["username"]
             cookies["login_time"] = st.session_state.login_time
-            
-            # Save with options if supported
-            try:
-                cookies.save()
-            except Exception as cookie_error:
-                logger.warning(f"Cookie save with options failed: {cookie_error}")
-                # Fallback to basic save
-                cookies.save()
-            
-            # Store session backup in session_state instead of localStorage
-            SessionManager._save_to_session_backup(user)
+            cookies.save()
             
             logger.info(f"Session created for user: {user['username']} (ID: {user['id']})")
             return True
@@ -66,52 +48,9 @@ class SessionManager:
             return False
     
     @staticmethod
-    def _save_to_session_backup(user: Dict[str, Any]):
-        """Save session data to session_state as backup for mobile (replaces localStorage)"""
-        try:
-            st.session_state.session_backup = {
-                'authenticated': 'true',
-                'user_id': user["id"],
-                'role': user["role"],
-                'username': user["username"],
-                'timestamp': datetime.now().isoformat()
-            }
-            logger.debug("Session backup saved to session_state")
-        except Exception as e:
-            logger.warning(f"Failed to save session backup: {e}")
-    
-    @staticmethod
-    def restore_session_from_backup():
-        """Attempt to restore session from session_state backup"""
-        try:
-            backup = st.session_state.get('session_backup')
-            if backup:
-                timestamp = datetime.fromisoformat(backup['timestamp'])
-                now = datetime.now()
-                diff_hours = (now - timestamp).total_seconds() / 3600
-                
-                if diff_hours < 168:  # 7 days
-                    st.session_state.authenticated = True
-                    st.session_state.user_id = backup['user_id']
-                    st.session_state.role = backup['role']
-                    st.session_state.username = backup['username']
-                    st.session_state.login_time = backup.get('login_time', '')
-                    st.session_state.last_activity = datetime.now()
-                    logger.info("Session restored from backup")
-                    return True
-                else:
-                    # Clear expired backup
-                    if 'session_backup' in st.session_state:
-                        del st.session_state['session_backup']
-            return False
-        except Exception as e:
-            logger.warning(f"Failed to restore from backup: {e}")
-            return False
-    
-    @staticmethod
     def save_assignment(assignment_data: Dict[str, Any], cookies) -> bool:
         """
-        Save user assignment to session and cookies with mobile persistence
+        Save user assignment to session and cookies
         
         Args:
             assignment_data: Assignment data
@@ -121,7 +60,6 @@ class SessionManager:
             True if saved successfully, False otherwise
         """
         try:
-            # Handle None values properly
             subject_name = assignment_data.get("subject_name") or ""
             
             st.session_state.assignment = {
@@ -131,15 +69,12 @@ class SessionManager:
                 "subject_name": subject_name
             }
             
-            # Ensure all cookie values are strings, not None
+            # Save to cookies
             cookies["assignment_class"] = str(assignment_data["class_name"])
             cookies["assignment_term"] = str(assignment_data["term"])
             cookies["assignment_session"] = str(assignment_data["session"])
             cookies["assignment_subject"] = subject_name
             cookies.save()
-            
-            # Save assignment to session_state backup instead of localStorage
-            SessionManager._save_assignment_to_session_backup(st.session_state.assignment)
             
             logger.info(f"Assignment saved for user {st.session_state.get('username')}: {assignment_data['class_name']}")
             return True
@@ -149,24 +84,9 @@ class SessionManager:
             return False
     
     @staticmethod
-    def _save_assignment_to_session_backup(assignment_data: Dict[str, Any]):
-        """Save assignment data to session_state backup"""
-        try:
-            st.session_state.assignment_backup = {
-                'class_name': assignment_data["class_name"],
-                'term': assignment_data["term"],
-                'session': assignment_data["session"],
-                'subject_name': assignment_data["subject_name"],
-                'timestamp': datetime.now().isoformat()
-            }
-            logger.debug("Assignment backup saved to session_state")
-        except Exception as e:
-            logger.warning(f"Failed to save assignment backup: {e}")
-    
-    @staticmethod
     def clear_session(cookies) -> bool:
         """
-        Clear user session and cookies with mobile cleanup
+        Clear user session and cookies with proper browser cleanup
         
         Args:
             cookies: Cookie manager instance
@@ -175,7 +95,7 @@ class SessionManager:
             True if cleared successfully, False otherwise
         """
         try:
-            # Clear cookies
+            # Clear cookies by setting them to empty and saving
             if cookies:
                 cookie_keys = [
                     "authenticated", "user_id", "role", "username", "login_time",
@@ -184,15 +104,16 @@ class SessionManager:
                 
                 for key in cookie_keys:
                     cookies[key] = ""
+                
                 cookies.save()
                 
-                # Clear browser cookies (without localStorage)
+                # Force browser to delete cookies
                 SessionManager._clear_browser_cookies()
             
             # Clear session state
             session_keys = [
                 "authenticated", "user_id", "role", "username", "login_time",
-                "assignment", "last_activity", "session_id", "session_backup", "assignment_backup"
+                "assignment", "last_activity", "session_id", "assignment_just_selected"
             ]
             
             for key in session_keys:
@@ -211,17 +132,22 @@ class SessionManager:
     
     @staticmethod
     def _clear_browser_cookies():
-        """Clear browser cookies only (removed localStorage clearing)"""
+        """Force browser to delete cookies by setting expiry to past date"""
         cookie_names = [
             "authenticated", "user_id", "role", "username", "login_time",
             "assignment_class", "assignment_term", "assignment_session", "assignment_subject"
         ]
         
+        # Set cookies to expire immediately
         script_parts = []
         for name in cookie_names:
             script_parts.append(
                 f'document.cookie = "{name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax";'
             )
+        
+        # Also clear from local storage (if any scripts added data there)
+        script_parts.append('localStorage.clear();')
+        script_parts.append('sessionStorage.clear();')
         
         script = f"<script>{''.join(script_parts)}</script>"
         st.markdown(script, unsafe_allow_html=True)
@@ -252,10 +178,17 @@ class SessionManager:
             st.session_state.last_activity = datetime.now()
     
     @staticmethod
-    def validate_mobile_session(cookies) -> bool:
-        """Validate session specifically for mobile devices"""
+    def restore_from_cookies(cookies) -> bool:
+        """
+        Restore session from cookies if valid
+        
+        Args:
+            cookies: Cookie manager instance
+            
+        Returns:
+            True if session restored, False otherwise
+        """
         try:
-            # Check cookies first
             if (cookies.get("authenticated") == "true" and 
                 cookies.get("user_id") and 
                 cookies.get("role")):
@@ -279,12 +212,11 @@ class SessionManager:
                         "subject_name": cookies.get("assignment_subject", "")
                     }
                 
-                logger.info(f"Mobile session validated for user: {st.session_state.username}")
+                logger.info(f"Session restored for user: {st.session_state.username}")
                 return True
             
-            # If cookies fail, try session_state backup
-            return SessionManager.restore_session_from_backup()
+            return False
             
         except Exception as e:
-            logger.error(f"Error validating mobile session: {e}")
+            logger.error(f"Error restoring session from cookies: {e}")
             return False

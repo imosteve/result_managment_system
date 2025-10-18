@@ -480,9 +480,9 @@ class ApplicationManager:
                     "📋 View Broadsheet": view_broadsheet.generate_broadsheet,
                 }
             
-            # Add assignment selection for teachers
-            if role in ["class_teacher", "subject_teacher"]:
-                base_options["🔄 Change Assignment"] = select_assignment
+            # # Add assignment selection for teachers
+            # if role in ["class_teacher", "subject_teacher"]:
+            #     base_options["🔄 Change Assignment"] = select_assignment
             
             return base_options
             
@@ -492,6 +492,36 @@ class ApplicationManager:
             return {
                 "🏠 Dashboard": self.render_dashboard
             }
+
+    # Add this method to ApplicationManager class in app_manager.py
+    def handle_post_assignment_navigation(self, role: str):
+        """
+        Handle navigation after assignment selection
+        Should be called in your main app flow
+        """
+        # Check if assignment was just selected
+        if st.session_state.get('assignment_just_selected'):
+            # Clear the flag
+            del st.session_state['assignment_just_selected']
+            
+            # Get the first available section for the role
+            nav_options = self.get_navigation_options(role)
+            
+            if nav_options:
+                # Get the first menu item (skip dashboard/admin panel if exists)
+                first_section = None
+                for key in nav_options.keys():
+                    if "Dashboard" not in key and "Admin Panel" not in key and "Change Assignment" not in key:
+                        first_section = key
+                        break
+                
+                if not first_section:
+                    # If no other option, use the first one
+                    first_section = list(nav_options.keys())[0]
+                
+                # Set this as the selected page
+                st.session_state.selected_page = first_section
+                logger.info(f"Navigating to first section after assignment: {first_section}")
 
     def render_dashboard(self):
         """Render dashboard with system statistics"""

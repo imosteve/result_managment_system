@@ -12,7 +12,7 @@ from database import (
 )
 
 def generate_report_card(student_name, class_name, term, session):
-    """Generate PDF report card for a student"""
+    """Generate PDF report card for a student - ALWAYS ONE PAGE"""
     user_id = st.session_state.user_id
     role = st.session_state.role
 
@@ -109,14 +109,39 @@ def generate_report_card(student_name, class_name, term, session):
             next_term_date="To be announced"  # Static placeholder
         )
 
-        # Generate PDF
+        # Generate PDF - FORCE ONE PAGE
         os.makedirs("data/reports", exist_ok=True)
         safe_name = "".join(c if c.isalnum() or c in (' ', '_') else "_" for c in student_name)
         output_path = os.path.join("data/reports", f"{safe_name.replace(' ', '_')}_{term.replace(' ', '_')}_{session.replace('/', '_')}_report.pdf")
         
+        # Create CSS with page break prevention
+        one_page_css = CSS(string='''
+            @page {
+                size: A4;
+                margin: 10mm;
+            }
+            body {
+                margin: 0;
+                padding: 0;
+            }
+            * {
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+            }
+            table {
+                page-break-inside: avoid !important;
+            }
+            .report-card {
+                page-break-inside: avoid !important;
+            }
+        ''')
+        
         HTML(string=html_out, base_url=os.getcwd()).write_pdf(
             output_path,
-            stylesheets=[CSS('templates/report_card_styles.css')]
+            stylesheets=[
+                CSS('templates/report_card_styles.css'),
+                one_page_css
+            ]
         )
         return output_path
         

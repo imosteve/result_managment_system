@@ -1,5 +1,5 @@
 # auth/assignment_selection.py
-"""Assignment selection for teachers"""
+"""Assignment selection for teachers - IMPROVED VERSION"""
 
 import streamlit as st
 import time
@@ -24,7 +24,6 @@ def format_assignment_display(assignment: Dict[str, Any]) -> str:
         Formatted display string
     """
     class_display = f"{assignment['class_name']} - {assignment['term']} - {assignment['session']}"
-    # Handle sqlite3.Row objects which don't have .get() method
     subject_name = assignment.get('subject_name') if hasattr(assignment, 'get') else assignment['subject_name']
     if subject_name:
         class_display += f" - {subject_name}"
@@ -32,10 +31,10 @@ def format_assignment_display(assignment: Dict[str, Any]) -> str:
 
 def get_user_assignment_options(user_id: int) -> List[Dict[str, Any]]:
     """
-    Get formatted assignment options for user
+    Get formatted assignment options for user by USERNAME
     
     Args:
-        user_id: User ID
+        username: Username (not user_id)
         
     Returns:
         List of assignment data converted to dictionaries
@@ -43,7 +42,7 @@ def get_user_assignment_options(user_id: int) -> List[Dict[str, Any]]:
     try:
         assignments = get_user_assignments(user_id)
         if not assignments:
-            logger.warning(f"No assignments found for user ID: {user_id}")
+            logger.warning(f"No assignments found for user: {user_id}")
             return []
         
         # Convert sqlite3.Row objects to dictionaries
@@ -58,7 +57,7 @@ def get_user_assignment_options(user_id: int) -> List[Dict[str, Any]]:
             }
             assignment_dicts.append(assignment_dict)
         
-        logger.info(f"Found {len(assignment_dicts)} assignments for user ID: {user_id}")
+        logger.info(f"Found {len(assignment_dicts)} assignments for user: {user_id}")
         return assignment_dicts
     except Exception as e:
         logger.error(f"Error getting assignments for user {user_id}: {str(e)}")
@@ -78,13 +77,18 @@ def render_assignment_selection_form(assignments: List[Dict[str, Any]]) -> tuple
     
     selected_assignment = st.selectbox("Select Your Assignment", assignment_options)
     selected_index = assignment_options.index(selected_assignment)
-    confirm_clicked = st.button("Confirm Selection")
     
-    return selected_assignment, selected_index, confirm_clicked
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        confirm_clicked = st.button("Confirm Selection", use_container_width=True)
+    with col2:
+        logout_clicked = st.button("🚪 Logout", use_container_width=True, type="secondary")
+    
+    return selected_assignment, selected_index, confirm_clicked, logout_clicked
 
 def handle_assignment_confirmation(assignment_data: Dict[str, Any]) -> bool:
     """
-    Handle assignment confirmation
+    Handle assignment confirmation - IMPROVED WITH DIRECT NAVIGATION
     
     Args:
         assignment_data: Selected assignment data
@@ -102,6 +106,11 @@ def handle_assignment_confirmation(assignment_data: Dict[str, Any]) -> bool:
         if SessionManager.save_assignment(assignment_data, cookies):
             st.success(MESSAGES["assignment_selected"])
             time.sleep(0.5)  # Brief pause for user feedback
+            
+            # Set flag to indicate assignment was just selected
+            st.session_state.assignment_just_selected = True
+            
+            # Rerun to proceed to main app
             st.rerun()
             return True
         else:
@@ -116,7 +125,7 @@ def select_assignment():
     """
     Display assignment selection for class/subject teachers
     """
-    # Show login form
+    # Show login form styling
     # inject_login_css("templates/login_styles.css")
     st.markdown(f'<div class="{CSS_CLASSES["login_container"]}">', unsafe_allow_html=True)
     st.markdown(f'<h2 class="{CSS_CLASSES["assignment_title"]}">Select Assignment</h2>', unsafe_allow_html=True)
@@ -127,7 +136,7 @@ def select_assignment():
         logout()
         return
     
-    # Get user assignments
+    # Get user assignments by username
     assignments = get_user_assignment_options(user_id)
     
     if not assignments:
@@ -138,7 +147,11 @@ def select_assignment():
     
     # Render selection form
     try:
-        selected_assignment, selected_index, confirm_clicked = render_assignment_selection_form(assignments)
+        selected_assignment, selected_index, confirm_clicked, logout_clicked = render_assignment_selection_form(assignments)
+        
+        if logout_clicked:
+            logout()
+            return
         
         if confirm_clicked:
             selected_assignment_data = assignments[selected_index]

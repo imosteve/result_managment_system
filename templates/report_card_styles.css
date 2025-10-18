@@ -3,8 +3,8 @@ body {
     font-family: Arial, sans-serif;
     margin: 0;
     padding: 20px;
-    font-size: 12px;
-    line-height: 1.0;
+    font-size: 11px;
+    line-height: 0.9;
     color: #000;
     background: transparent;
 }
@@ -63,18 +63,18 @@ body {
 
 .school-name {
     font-weight: bold;
-    font-size: 25px;
+    font-size: 24px;
     margin: 3px 0;
 }
 
 .school-address {
-    font-size: 15px;
+    font-size: 14px;
     margin: 3px 0;
 }
 
 .report-title {
     font-weight: bold;
-    font-size: 17px;
+    font-size: 16px;
     margin: 3px 0;
 }
 
