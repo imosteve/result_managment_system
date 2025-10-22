@@ -1,5 +1,5 @@
 # auth/session_manager.py
-"""Session management - SIMPLIFIED VERSION with proper cookie expiry"""
+"""Session management - UPDATED VERSION for new user model"""
 
 import streamlit as st
 import logging
@@ -9,7 +9,7 @@ from typing import Optional, Dict, Any
 logger = logging.getLogger(__name__)
 
 class SessionManager:
-    """Handles user session management - SIMPLIFIED"""
+    """Handles user session management - UPDATED"""
     
     @staticmethod
     def create_session(user: Dict[str, Any], cookies) -> bool:
@@ -27,7 +27,7 @@ class SessionManager:
             # Set session state
             st.session_state.authenticated = True
             st.session_state.user_id = user["id"]
-            st.session_state.role = user["role"]
+            st.session_state.role = user["role"]  # Will be None for teachers
             st.session_state.username = user["username"]
             st.session_state.login_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             st.session_state.last_activity = datetime.now()
@@ -35,12 +35,12 @@ class SessionManager:
             # Set cookies (they will auto-expire based on cookie manager settings)
             cookies["authenticated"] = "true"
             cookies["user_id"] = str(user["id"])
-            cookies["role"] = user["role"]
+            cookies["role"] = str(user["role"]) if user["role"] else ""  # Handle None role
             cookies["username"] = user["username"]
             cookies["login_time"] = st.session_state.login_time
             cookies.save()
             
-            logger.info(f"Session created for user: {user['username']} (ID: {user['id']})")
+            logger.info(f"Session created for user: {user['username']} (ID: {user['id']}, Role: {user['role'] or 'Teacher'})")
             return True
             
         except Exception as e:
@@ -51,6 +51,7 @@ class SessionManager:
     def save_assignment(assignment_data: Dict[str, Any], cookies) -> bool:
         """
         Save user assignment to session and cookies
+        Also updates the role based on assignment type
         
         Args:
             assignment_data: Assignment data
@@ -61,22 +62,29 @@ class SessionManager:
         """
         try:
             subject_name = assignment_data.get("subject_name") or ""
+            assignment_type = assignment_data.get("assignment_type", "class_teacher")
             
             st.session_state.assignment = {
                 "class_name": assignment_data["class_name"],
                 "term": assignment_data["term"],
                 "session": assignment_data["session"],
-                "subject_name": subject_name
+                "subject_name": subject_name,
+                "assignment_type": assignment_type
             }
             
-            # Save to cookies
+            # Update role based on assignment type
+            st.session_state.role = assignment_type
+            
+            # Save to cookies - DON'T call save() as it will be saved on rerun
             cookies["assignment_class"] = str(assignment_data["class_name"])
             cookies["assignment_term"] = str(assignment_data["term"])
             cookies["assignment_session"] = str(assignment_data["session"])
             cookies["assignment_subject"] = subject_name
-            cookies.save()
+            cookies["assignment_type"] = assignment_type
+            cookies["role"] = assignment_type  # Update role in cookies
+            # cookies.save()  # REMOVED - causes duplicate key error
             
-            logger.info(f"Assignment saved for user {st.session_state.get('username')}: {assignment_data['class_name']}")
+            logger.info(f"Assignment saved for user {st.session_state.get('username')}: {assignment_data['class_name']} ({assignment_type})")
             return True
             
         except Exception as e:
@@ -99,7 +107,8 @@ class SessionManager:
             if cookies:
                 cookie_keys = [
                     "authenticated", "user_id", "role", "username", "login_time",
-                    "assignment_class", "assignment_term", "assignment_session", "assignment_subject"
+                    "assignment_class", "assignment_term", "assignment_session", 
+                    "assignment_subject", "assignment_type"
                 ]
                 
                 for key in cookie_keys:
@@ -135,7 +144,8 @@ class SessionManager:
         """Force browser to delete cookies by setting expiry to past date"""
         cookie_names = [
             "authenticated", "user_id", "role", "username", "login_time",
-            "assignment_class", "assignment_term", "assignment_session", "assignment_subject"
+            "assignment_class", "assignment_term", "assignment_session", 
+            "assignment_subject", "assignment_type"
         ]
         
         # Set cookies to expire immediately
@@ -189,14 +199,15 @@ class SessionManager:
             True if session restored, False otherwise
         """
         try:
-            if (cookies.get("authenticated") == "true" and 
-                cookies.get("user_id") and 
-                cookies.get("role")):
-                
+            if cookies.get("authenticated") == "true" and cookies.get("user_id"):
                 # Restore session state from cookies
                 st.session_state.authenticated = True
                 st.session_state.user_id = int(cookies["user_id"])
-                st.session_state.role = cookies["role"]
+                
+                # Handle role - can be empty string for teachers without assignment
+                role = cookies.get("role", "")
+                st.session_state.role = role if role else None
+                
                 st.session_state.username = cookies.get("username", "")
                 st.session_state.login_time = cookies.get("login_time", "")
                 st.session_state.last_activity = datetime.now()
@@ -209,10 +220,15 @@ class SessionManager:
                         "class_name": cookies["assignment_class"],
                         "term": cookies["assignment_term"],
                         "session": cookies["assignment_session"],
-                        "subject_name": cookies.get("assignment_subject", "")
+                        "subject_name": cookies.get("assignment_subject", ""),
+                        "assignment_type": cookies.get("assignment_type", "class_teacher")
                     }
+                    
+                    # Update role from assignment if not admin
+                    if not st.session_state.role or st.session_state.role not in ["admin", "superadmin"]:
+                        st.session_state.role = cookies.get("assignment_type", "class_teacher")
                 
-                logger.info(f"Session restored for user: {st.session_state.username}")
+                logger.info(f"Session restored for user: {st.session_state.username} (Role: {st.session_state.role or 'Teacher'})")
                 return True
             
             return False

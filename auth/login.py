@@ -9,6 +9,7 @@ from .config import MESSAGES, CSS_CLASSES
 from .validators import validate_credentials, validate_session_cookies, validate_user_input
 from .session_manager import SessionManager
 from .assignment_selection import select_assignment
+from database import get_user_assignments
 
 logger = logging.getLogger(__name__)
 
@@ -112,18 +113,33 @@ def show_loading_screen():
         time.sleep(0.5)
 
 def login(cookies):
-    """
-    Main login function - IMPROVED VERSION
-    """
+    """Main login function - UPDATED VERSION"""
     try:
         # Handle post-login redirect
         if st.session_state.get('login_successful'):
-            # Clear the login success flag
-            del st.session_state.login_successful
+            del st.session_state['login_successful']
             
-            # Check role and handle assignment selection
             role = st.session_state.get('role')
-            if role in ["class_teacher", "subject_teacher"] and "assignment" not in st.session_state:
+            user_id = st.session_state.get('user_id')
+            
+            # Admins go directly to main app
+            if role in ["admin", "superadmin"]:
+                reset_main_app_styles()
+                return
+            
+            # Teachers need assignment selection
+            assignments = get_user_assignments(user_id)
+            
+            if not assignments:
+                st.error("⚠️ You don't have any class or subject assignments yet.")
+                if st.button("🚪 Logout"):
+                    from .logout import logout
+                    logout()
+                st.stop()
+                return
+            
+            # Show assignment selection if needed
+            if "assignment" not in st.session_state:
                 select_assignment()
                 return
             else:
@@ -133,7 +149,23 @@ def login(cookies):
         # Check for existing valid session
         if validate_session_cookies(cookies):
             role = st.session_state.get('role')
-            if role in ["class_teacher", "subject_teacher"] and "assignment" not in st.session_state:
+            user_id = st.session_state.get('user_id')
+            
+            # Admins can proceed
+            if role in ["admin", "superadmin"]:
+                reset_main_app_styles()
+                return
+            
+            # Teachers need assignment
+            if "assignment" not in st.session_state:
+                assignments = get_user_assignments(user_id)
+                if not assignments:
+                    st.error("⚠️ You don't have any assignments yet.")
+                    if st.button("🚪 Logout"):
+                        from .logout import logout
+                        logout()
+                    st.stop()
+                    return
                 select_assignment()
                 return
             else:

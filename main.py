@@ -145,37 +145,41 @@ def render_logout_button():
             logout()
 
 def validate_session_data(role: str, username: str, user_id: int) -> bool:
-    """Validate user session data"""
-    if not all([role, username, user_id]):
+    """Validate user session data - UPDATED to allow None role for teachers"""
+    # Check username and user_id
+    if not username or not user_id:
         logger.error(f"Invalid session data: role={role}, username={username}, user_id={user_id}")
         SecurityManager.force_logout("Invalid session data")
         return False
+    
+    # Role can be None for teachers who haven't selected an assignment yet
+    # This is valid and expected behavior
     return True
 
-# def check_teacher_assignment(role: str) -> bool:
-#     """
-#     Check if teacher has selected an assignment
+def check_teacher_assignment(role: str) -> bool:
+    """
+    Check if teacher has selected an assignment
     
-#     Args:
-#         role: User role
+    Args:
+        role: User role
         
-#     Returns:
-#         True if assignment check passed, False otherwise
-#     """
-#     # Teachers must have an assignment selected
-#     if role in ["class_teacher", "subject_teacher"]:
-#         if "assignment" not in st.session_state:
-#             logger.warning(f"Teacher {st.session_state.get('username')} has no assignment selected")
-#             st.warning("⚠️ No assignment selected. Please logout and select an assignment.")
+    Returns:
+        True if assignment check passed, False otherwise
+    """
+    # Teachers must have an assignment selected
+    if role in ["class_teacher", "subject_teacher"]:
+        if "assignment" not in st.session_state:
+            logger.warning(f"Teacher {st.session_state.get('username')} has no assignment selected")
+            st.warning("⚠️ No assignment selected. Please logout and select an assignment.")
             
-#             # Add logout button for convenience
-#             if st.button("🚪 Logout to Select Assignment"):
-#                 logout()
+            # Add logout button for convenience
+            if st.button("🚪 Logout to Select Assignment"):
+                logout()
             
-#             st.stop()
-#             return False
+            st.stop()
+            return False
     
-#     return True
+    return True
 
 def render_authenticated_app(app: ApplicationManager):
     """Render the main authenticated application"""
@@ -193,9 +197,9 @@ def render_authenticated_app(app: ApplicationManager):
         if not validate_session_data(role, username, user_id):
             return  # Validation failed, user logged out
         
-        # # Check teacher assignment (if applicable)
-        # if not check_teacher_assignment(role):
-        #     return  # Teacher needs to select assignment
+        # Check teacher assignment (if applicable)
+        if not check_teacher_assignment(role):
+            return  # Teacher needs to select assignment
         
         # Render main application
         st.markdown('<div class="main-content">', unsafe_allow_html=True)

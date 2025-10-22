@@ -415,20 +415,29 @@ class ApplicationManager:
         """, unsafe_allow_html=True)
 
     def render_user_info(self, role: str, username: str):
-        """Render user information in sidebar"""
+        """Render user information in sidebar - UPDATED to handle None role"""
         with st.sidebar:
+            # Format role display - handle None for teachers
+            if role is None:
+                role_display = "Teacher (No Assignment)"
+            elif role in ["admin", "superadmin"]:
+                role_display = role.replace('_', ' ').title()
+            else:
+                role_display = role.replace('_', ' ').title()
+            
             st.markdown(f"""
             <div class="user-info-card">
                 <h4>👤 User Information</h4>
                 <p><strong>Username:</strong> {username.title()}</p>
-                <p><strong>Role:</strong> {role.replace('_', ' ').title()}</p>
+                <p><strong>Role:</strong> {role_display}</p>
                 <p><strong>Login Time:</strong> {st.session_state.get('login_time', 'Unknown')}</p>
             </div>
             """, unsafe_allow_html=True)
 
-            if st.button("🔄 Refresh", key="refresh_data", width="stretch"):
-                    st.rerun()
-
+            if st.button("🔄 Refresh", key="refresh_data", use_container_width=True):
+                st.rerun()
+                
+    # app_manager.py - UPDATE the get_navigation_options method
     def get_navigation_options(self, role: str) -> Dict[str, Callable]:
         """Get navigation options based on user role"""
         try:
@@ -472,17 +481,15 @@ class ApplicationManager:
                     "📝 Enter Scores": enter_scores.enter_scores,
                     "📋 View Broadsheet": view_broadsheet.generate_broadsheet,
                     "📝 Manage Comments": manage_comments.manage_comments,
-                    "📄 Generate Reports": generate_reports.report_card_section
+                    "📄 Generate Reports": generate_reports.report_card_section,
+                    "🔄 Change Assignment": select_assignment
                 }
             elif role == "subject_teacher":
                 base_options = {
                     "📝 Enter Scores": enter_scores.enter_scores,
                     "📋 View Broadsheet": view_broadsheet.generate_broadsheet,
+                    "🔄 Change Assignment": select_assignment
                 }
-            
-            # # Add assignment selection for teachers
-            # if role in ["class_teacher", "subject_teacher"]:
-            #     base_options["🔄 Change Assignment"] = select_assignment
             
             return base_options
             

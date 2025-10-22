@@ -1,5 +1,5 @@
 # auth/assignment_selection.py
-"""Assignment selection for teachers - IMPROVED VERSION"""
+"""Assignment selection for teachers - ROLE-BASED VERSION"""
 
 import streamlit as st
 import time
@@ -13,122 +13,136 @@ from utils import inject_login_css
 
 logger = logging.getLogger(__name__)
 
-def format_assignment_display(assignment: Dict[str, Any]) -> str:
+def get_user_roles(user_id: int) -> Dict[str, List[Dict[str, Any]]]:
     """
-    Format assignment data for display
+    Get user's available roles with their assignments
     
-    Args:
-        assignment: Assignment data dictionary
-        
     Returns:
-        Formatted display string
-    """
-    class_display = f"{assignment['class_name']} - {assignment['term']} - {assignment['session']}"
-    subject_name = assignment.get('subject_name') if hasattr(assignment, 'get') else assignment['subject_name']
-    if subject_name:
-        class_display += f" - {subject_name}"
-    return class_display
-
-def get_user_assignment_options(user_id: int) -> List[Dict[str, Any]]:
-    """
-    Get formatted assignment options for user by USERNAME
-    
-    Args:
-        username: Username (not user_id)
-        
-    Returns:
-        List of assignment data converted to dictionaries
+        Dictionary with 'class_teacher' and 'subject_teacher' keys,
+        each containing a list of assignments for that role
     """
     try:
         assignments = get_user_assignments(user_id)
         if not assignments:
             logger.warning(f"No assignments found for user: {user_id}")
-            return []
+            return {"class_teacher": [], "subject_teacher": []}
         
-        # Convert sqlite3.Row objects to dictionaries
-        assignment_dicts = []
+        # Group assignments by role
+        roles = {
+            "class_teacher": [],
+            "subject_teacher": []
+        }
+        
         for assignment in assignments:
             assignment_dict = {
                 'id': assignment['id'],
                 'class_name': assignment['class_name'],
                 'term': assignment['term'],
                 'session': assignment['session'],
-                'subject_name': assignment['subject_name']
+                'subject_name': assignment['subject_name'],
+                'assignment_type': assignment['assignment_type']
             }
-            assignment_dicts.append(assignment_dict)
+            
+            if assignment['assignment_type'] == 'class_teacher':
+                roles['class_teacher'].append(assignment_dict)
+            else:
+                roles['subject_teacher'].append(assignment_dict)
         
-        logger.info(f"Found {len(assignment_dicts)} assignments for user: {user_id}")
-        return assignment_dicts
+        logger.info(f"User {user_id} has {len(roles['class_teacher'])} class teacher assignments and {len(roles['subject_teacher'])} subject teacher assignments")
+        return roles
+        
     except Exception as e:
-        logger.error(f"Error getting assignments for user {user_id}: {str(e)}")
-        return []
+        logger.error(f"Error getting roles for user {user_id}: {str(e)}")
+        return {"class_teacher": [], "subject_teacher": []}
 
-def render_assignment_selection_form(assignments: List[Dict[str, Any]]) -> tuple[str, int, bool]:
-    """
-    Render assignment selection form
+def render_role_selection_form(roles: Dict[str, List[Dict[str, Any]]]) -> tuple[str, bool, bool]:
+    """Render role selection form"""
+    role_options = []
     
-    Args:
-        assignments: List of assignment data
-        
-    Returns:
-        Tuple of (selected_assignment, selected_index, confirm_clicked)
-    """
-    assignment_options = [format_assignment_display(assignment) for assignment in assignments]
+    if roles['class_teacher']:
+        role_options.append("Class Teacher")
+    if roles['subject_teacher']:
+        role_options.append("Subject Teacher")
     
-    selected_assignment = st.selectbox("Select Your Assignment", assignment_options)
-    selected_index = assignment_options.index(selected_assignment)
+    if not role_options:
+        st.error("No valid roles found. Please contact administrator.")
+        return None, False, False
+    
+    # Show role selection
+    selected_role = st.selectbox("**Login as:**", role_options, label_visibility="visible")
     
     col1, col2 = st.columns([3, 1])
     with col1:
-        confirm_clicked = st.button("Confirm Selection", use_container_width=True)
+        confirm_clicked = st.button("Confirm Selection", use_container_width=True, type="primary")
     with col2:
         logout_clicked = st.button("🚪 Logout", use_container_width=True, type="secondary")
     
-    return selected_assignment, selected_index, confirm_clicked, logout_clicked
+    return selected_role, confirm_clicked, logout_clicked
 
-def handle_assignment_confirmation(assignment_data: Dict[str, Any]) -> bool:
+def select_first_assignment_for_role(role_type: str, roles: Dict[str, List[Dict[str, Any]]]) -> Dict[str, Any]:
     """
-    Handle assignment confirmation - IMPROVED WITH DIRECT NAVIGATION
+    Select the first assignment for the given role type
     
     Args:
-        assignment_data: Selected assignment data
+        role_type: Either 'class_teacher' or 'subject_teacher'
+        roles: Dictionary containing assignments grouped by role
         
     Returns:
-        True if successful, False otherwise
+        First assignment for the role
     """
+    if role_type == "class_teacher":
+        return roles['class_teacher'][0] if roles['class_teacher'] else None
+    else:
+        return roles['subject_teacher'][0] if roles['subject_teacher'] else None
+
+def handle_role_confirmation(selected_role: str, roles: Dict[str, List[Dict[str, Any]]]) -> bool:
+    """Handle role confirmation and select first assignment for that role"""
     try:
         cookies = st.session_state.get("cookies")
         if not cookies:
             st.error("Session error. Please login again.")
             return False
         
+        # Determine role type from selection
+        if "Class Teacher" in selected_role:
+            role_type = "class_teacher"
+            assignment_data = select_first_assignment_for_role(role_type, roles)
+        else:
+            role_type = "subject_teacher"
+            assignment_data = select_first_assignment_for_role(role_type, roles)
+        
+        if not assignment_data:
+            st.error("No assignment found for selected role.")
+            return False
+        
         # Save assignment to session
         if SessionManager.save_assignment(assignment_data, cookies):
-            st.success(MESSAGES["assignment_selected"])
-            time.sleep(0.5)  # Brief pause for user feedback
+            st.success(f"✅ Logged in as {selected_role.replace('Login as ', '')}")
+            time.sleep(0.5)
             
-            # Set flag to indicate assignment was just selected
             st.session_state.assignment_just_selected = True
             
-            # Rerun to proceed to main app
+            # Update role in session state
+            st.session_state.role = role_type
+            
+            # Update role in cookies
+            cookies["role"] = role_type
+            
             st.rerun()
             return True
         else:
             st.error("Failed to save assignment. Please try again.")
             return False
+            
     except Exception as e:
-        logger.error(f"Error confirming assignment: {str(e)}")
+        logger.error(f"Error confirming role: {str(e)}")
         st.error("An error occurred while saving assignment. Please try again.")
         return False
 
 def select_assignment():
-    """
-    Display assignment selection for class/subject teachers
-    """
-    # Show login form styling
-    # inject_login_css("templates/login_styles.css")
+    """Display role-based assignment selection for teachers"""
     st.markdown(f'<div class="{CSS_CLASSES["login_container"]}">', unsafe_allow_html=True)
-    st.markdown(f'<h2 class="{CSS_CLASSES["assignment_title"]}">Select Assignment</h2>', unsafe_allow_html=True)
+    st.markdown(f'<h2 class="{CSS_CLASSES["assignment_title"]}">Select Your Role</h2>', unsafe_allow_html=True)
     
     user_id = st.session_state.get('user_id')
     if not user_id:
@@ -136,30 +150,31 @@ def select_assignment():
         logout()
         return
     
-    # Get user assignments by username
-    assignments = get_user_assignment_options(user_id)
+    # Get user roles
+    roles = get_user_roles(user_id)
     
-    if not assignments:
+    # Check if user has any assignments
+    total_assignments = len(roles['class_teacher']) + len(roles['subject_teacher'])
+    if total_assignments == 0:
         st.warning(MESSAGES["no_assignments"])
-        time.sleep(2)  # Brief delay to show warning
-        logout()  # Automatically log out
+        time.sleep(2)
+        logout()
         return
     
-    # Render selection form
+    # User has both roles - show selection
     try:
-        selected_assignment, selected_index, confirm_clicked, logout_clicked = render_assignment_selection_form(assignments)
+        selected_role, confirm_clicked, logout_clicked = render_role_selection_form(roles)
         
         if logout_clicked:
             logout()
             return
         
-        if confirm_clicked:
-            selected_assignment_data = assignments[selected_index]
-            handle_assignment_confirmation(selected_assignment_data)
+        if confirm_clicked and selected_role:
+            handle_role_confirmation(selected_role, roles)
             
     except Exception as e:
-        logger.error(f"Error in assignment selection: {str(e)}")
-        st.error("An error occurred during assignment selection. Please try again.")
+        logger.error(f"Error in role selection: {str(e)}")
+        st.error("An error occurred during role selection. Please try again.")
     
     st.markdown('</div>', unsafe_allow_html=True)
     st.stop()
