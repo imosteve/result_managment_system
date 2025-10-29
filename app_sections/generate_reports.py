@@ -3,13 +3,24 @@
 import streamlit as st
 import os
 import zipfile
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email import encoders
 from jinja2 import Environment, FileSystemLoader
 from weasyprint import HTML, CSS
-from utils import assign_grade, create_metric_5col_report, format_ordinal, render_page_header
+from utils import assign_grade, create_metric_5col_report, format_ordinal, render_page_header, inject_login_css
 from database import (
     get_all_classes, get_students_by_class, get_student_scores, 
     get_class_average, get_student_grand_totals, get_comment, get_subjects_by_class
 )
+
+# Email Configuration
+SMTP_SERVER = os.getenv('SMTP_SERVER', "smtp.gmail.com")
+SMTP_PORT = int(os.getenv('SMTP_PORT', 465))
+EMAIL_SENDER = os.getenv('EMAIL_SENDER', "SUIS Terminal Result <ideas.elites@gmail.com>")
+EMAIL_PASSWORD = os.getenv('EMAIL_PASSWORD', "lkydcrsaritupygu")
 
 def generate_report_card(student_name, class_name, term, session):
     """Generate PDF report card for a student - ALWAYS ONE PAGE"""
@@ -167,24 +178,120 @@ def create_zip_file(pdf_paths, class_name, term, session):
         st.error(f"Error creating zip file: {e}")
         return None
 
-def report_card_section():
-    """Display report card generation section"""
-    if not st.session_state.get("authenticated", False):
-        st.error("⚠️ Please log in first.")
-        st.switch_page("main.py")
-        return
+def send_email(to_email, student_name, pdf_path, term, session):
+    """Send email with PDF attachment using HTML template"""
+    import re
+    import socket
+    from datetime import datetime
+    from jinja2 import Environment, FileSystemLoader
 
-    if st.session_state.role not in ["superadmin", "admin", "class_teacher"]:
-        st.error("⚠️ Access denied. Admins and Class Teachers only.")
-        return
+    msg = MIMEMultipart('alternative')
 
+    # If EMAIL_SENDER contains a display name like "Name <email>", extract raw email for authentication
+    match = re.search(r'<([^>]+)>', EMAIL_SENDER)
+    sender_email = match.group(1) if match else EMAIL_SENDER
+
+    msg["From"] = EMAIL_SENDER
+    msg["To"] = to_email
+    msg["Subject"] = f"Report Card - {student_name} - {term} {session}"
+
+    # Load HTML template
+    try:
+        env = Environment(loader=FileSystemLoader("templates"))
+        template = env.get_template("email_template.html")
+        html_body = template.render(
+            student_name=student_name,
+            term=term,
+            session=session,
+            year=datetime.now().year
+        )
+        
+        # Plain text fallback
+        text_body = f"""Dear Parent/Guardian,
+
+We are pleased to share the academic report card for {student_name} for the recently concluded term.
+
+Report Details:
+- Student: {student_name}
+- Term: {term}
+- Academic Session: {session}
+
+Please find the detailed report card attached to this email in PDF format.
+
+We encourage you to review the report carefully and discuss your child's progress with them. Should you have any questions or concerns regarding the report, please do not hesitate to contact us.
+
+Best regards,
+School Administration
+
+---
+This is an automated message. Please do not reply to this email."""
+
+        # Attach both plain text and HTML versions
+        msg.attach(MIMEText(text_body, "plain"))
+        msg.attach(MIMEText(html_body, "html"))
+        
+    except Exception as e:
+        # Fallback to simple plain text if template loading fails
+        st.warning(f"Could not load email template, using plain text: {e}")
+        body = f"""Dear Parent/Guardian,
+
+Please find attached the report card for {student_name} for {term}, {session}.
+
+Best regards,
+School Administration"""
+        msg.attach(MIMEText(body, "plain"))
+
+    # Ensure attachment exists before attempting to open/send
+    if not pdf_path or not os.path.exists(pdf_path):
+        st.error(f"Attachment not found: {pdf_path}")
+        return False
+
+    try:
+        with open(pdf_path, "rb") as attachment:
+            part = MIMEBase("application", "octet-stream")
+            part.set_payload(attachment.read())
+            encoders.encode_base64(part)
+            part.add_header(
+                "Content-Disposition", f"attachment; filename={os.path.basename(pdf_path)}"
+            )
+            msg.attach(part)
+
+        # Connect and send using SSL for port 465, otherwise use STARTTLS
+        server = None
+        try:
+            if SMTP_PORT == 465:
+                server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT, timeout=30)
+                server.login(sender_email, EMAIL_PASSWORD)
+            else:
+                server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=30)
+                server.ehlo()
+                server.starttls()
+                server.ehlo()
+                server.login(sender_email, EMAIL_PASSWORD)
+
+            # sendmail expects sender and list of recipients
+            server.sendmail(sender_email, [to_email], msg.as_string())
+            server.quit()
+            return True
+
+        except (smtplib.SMTPException, socket.error) as smtp_err:
+            # Attempt to close connection if open
+            try:
+                if server:
+                    server.quit()
+            except Exception:
+                pass
+            st.error(f"SMTP error sending email to {to_email}: {smtp_err}")
+            return False
+
+    except Exception as e:
+        st.error(f"Error attaching/sending email to {to_email}: {e}")
+        return False
+        
+def generate_tab():
+    """Tab 1: Generate Report Cards"""
     user_id = st.session_state.user_id
     role = st.session_state.role
-
-    st.set_page_config(page_title="Generate Report Card")
-    
-    # Subheader
-    render_page_header("Generate Report Card")
 
     classes = get_all_classes(user_id, role)
     if not classes:
@@ -192,19 +299,8 @@ def report_card_section():
         return
 
     class_options = [f"{cls['class_name']} - {cls['term']} - {cls['session']}" for cls in classes]
-    if role == "class_teacher":
-        assignment = st.session_state.get("assignment")
-        if not assignment:
-            st.error("⚠️ Please select a class assignment first.")
-            return
-        allowed_class = f"{assignment['class_name']} - {assignment['term']} - {assignment['session']}"
-        if allowed_class not in class_options:
-            st.error("⚠️ Assigned class not found.")
-            return
-        class_options = [allowed_class]
-        selected_class_display = st.selectbox("Select Class", class_options, disabled=True)
-    else:
-        selected_class_display = st.selectbox("Select Class", class_options)
+    
+    selected_class_display = st.selectbox("Select Class", class_options)
 
     selected_index = class_options.index(selected_class_display)
     selected_class_data = classes[selected_index]
@@ -312,3 +408,144 @@ def report_card_section():
         if failed_students:
             st.warning(f"⚠️ Failed to generate reports for: {', '.join(failed_students)}")
             st.info("Make sure these students have scores entered for at least one subject.")
+
+def email_tab():
+    """Tab 2: Send Report Cards via Email"""
+    user_id = st.session_state.user_id
+    role = st.session_state.role
+
+    st.markdown(
+        """
+        <div style='width: auto; margin: auto; text-align: center; background-color: #c6b7b1;'>
+            <h3 style='color:#000; font-size:20px; margin-top:30px;'>
+                Email Report Cards
+            </h3>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    classes = get_all_classes(user_id, role)
+    if not classes:
+        st.warning("⚠️ No classes found.")
+        return
+
+    class_options = [f"{cls['class_name']} - {cls['term']} - {cls['session']}" for cls in classes]
+    
+    selected_class_display = st.selectbox("Select Class", class_options, key="email_class")
+
+    selected_index = class_options.index(selected_class_display)
+    selected_class_data = classes[selected_index]
+    class_name = selected_class_data['class_name']
+    term = selected_class_data['term']
+    session = selected_class_data['session']
+
+    students = get_students_by_class(class_name, term, session, user_id, role)
+    if not students:
+        st.warning(f"⚠️ No students found for {class_name} - {term} - {session}.")
+        return
+
+    # Filter students with email addresses
+    students_with_email = [s for s in students if s[3]]  # s[3] is email
+    students_without_email = [s for s in students if not s[3]]
+
+    if students_without_email:
+        st.warning(f"⚠️ {len(students_without_email)} student(s) do not have email addresses: {', '.join([s[1] for s in students_without_email])}")
+
+    if not students_with_email:
+        st.error("❌ No students have email addresses. Please add email addresses before sending reports.")
+        return
+
+    st.info(f"📧 {len(students_with_email)} student(s) have email addresses and can receive reports.")
+
+    # Individual Email
+    st.markdown("### 📨 Send Individual Report Card")
+    student_names_with_email = [s[1] for s in students_with_email]
+    selected_student = st.selectbox("Select Student", student_names_with_email, key="email_student")
+    
+    student_data = next((s for s in students_with_email if s[1] == selected_student), None)
+    if student_data:
+        st.info(f"📧 Email: {student_data[3]}")
+
+    if st.button("📧 Send Individual Report Card"):
+        if not student_data or not student_data[3]:
+            st.error("❌ Student email not found.")
+            return
+            
+        with st.spinner(f"Generating and sending report for {selected_student}..."):
+            # Generate PDF
+            pdf_path = generate_report_card(selected_student, class_name, term, session)
+            if pdf_path and os.path.exists(pdf_path):
+                # Send email
+                if send_email(student_data[3], selected_student, pdf_path, term, session):
+                    st.success(f"✅ Report card sent to {student_data[3]}")
+                else:
+                    st.error("❌ Failed to send email. Please check email configuration.")
+            else:
+                st.error("❌ Failed to generate report card. Make sure the student has scores entered.")
+
+    st.markdown("---")
+
+    # Batch Email
+    st.markdown("### 📬 Send All Report Cards via Email")
+    st.warning("⚠️ This will generate and send report cards to all students with email addresses. This may take some time.")
+    
+    if st.button("📬 Send All Report Cards"):
+        st.info(f"Generating and sending report cards for {len(students_with_email)} students...")
+        
+        success_count = 0
+        failed_students = []
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        for i, student in enumerate(students_with_email):
+            student_name = student[1]
+            student_email = student[3]
+            
+            status_text.text(f"Processing {student_name} ({i+1}/{len(students_with_email)})...")
+            
+            # Generate PDF
+            pdf_path = generate_report_card(student_name, class_name, term, session)
+            if pdf_path and os.path.exists(pdf_path):
+                # Send email
+                if send_email(student_email, student_name, pdf_path, term, session):
+                    success_count += 1
+                    status_text.text(f"✅ Sent to {student_name}")
+                else:
+                    failed_students.append(f"{student_name} (email failed)")
+            else:
+                failed_students.append(f"{student_name} (PDF generation failed)")
+                
+            progress_bar.progress((i + 1) / len(students_with_email))
+
+        status_text.text("Complete!")
+        st.success(f"✅ Successfully sent {success_count}/{len(students_with_email)} report cards.")
+        
+        if failed_students:
+            st.error(f"❌ Failed to send reports for: {', '.join(failed_students)}")
+
+def report_card_section():
+    """Display report card generation section with tabs"""
+    if not st.session_state.get("authenticated", False):
+        st.error("⚠️ Please log in first.")
+        st.switch_page("main.py")
+        return
+
+    if st.session_state.role not in ["superadmin", "admin", "class_teacher"]:
+        st.error("⚠️ Access denied. Admins and Class Teachers only.")
+        return
+
+    st.set_page_config(page_title="Generate Report Card")
+    
+    # Page header
+    render_page_header("Generate Report Card")
+
+    inject_login_css("templates/tabs_styles.css")
+    # Create tabs
+    tab1, tab2 = st.tabs(["📄 Generate Reports", "📧 Email Reports"])
+    
+    with tab1:
+        generate_tab()
+    
+    with tab2:
+        email_tab()

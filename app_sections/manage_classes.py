@@ -135,7 +135,7 @@ def create_class_section():
             col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
             class_name = col1.selectbox(
                 "Class",
-                ["", "KG", "Primary", "JSS", "SSS"],
+                ["", "Kindergarten", "Nursery", "Primary", "JSS", "SSS"],
                 key="class_input"
             )
 
@@ -152,10 +152,11 @@ def create_class_section():
                 key="term_input"
             )
 
-            session = col4.text_input(
-                "Session (e.g. 2024/2025)",
+            session = col4.selectbox(
+                "Session",
+                ["2025/2026"],
                 key="session_input"
-            ).strip()
+            )
 
             submitted = st.form_submit_button("➕ Add Class")
 

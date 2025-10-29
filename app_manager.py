@@ -478,7 +478,7 @@ class ApplicationManager:
                 base_options = {
                     "👥 Register Students": register_students.register_students,
                     "📚 Manage Subjects": manage_subjects.add_subjects,
-                    "📝 Enter Scores": enter_scores.enter_scores,
+                    # "📝 Enter Scores": enter_scores.enter_scores,
                     "📋 View Broadsheet": view_broadsheet.generate_broadsheet,
                     "📝 Manage Comments": manage_comments.manage_comments,
                     "📄 Generate Reports": generate_reports.report_card_section,

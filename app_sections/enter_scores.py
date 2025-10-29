@@ -94,10 +94,10 @@ def _render_score_management_interface():
     term = selected_class_data['term']
     session = selected_class_data['session']
 
-    # Get subjects for the selected class
+    # Get subjects for the selected class (filtered by assignment)
     subjects = _get_accessible_subjects(class_name, term, session, user_id, role)
     if not subjects:
-        st.warning(f"⚠️ No subjects found for {class_name} - {term} - {session}.")
+        st.warning(f"⚠️ No subjects found or assigned to you for {class_name} - {term} - {session}.")
         return
 
     # Subject selection interface
@@ -132,7 +132,29 @@ def _render_score_management_interface():
 def _get_accessible_classes(user_id: int, role: str) -> List[Dict[str, Any]]:
     """Get classes accessible to the user based on their role"""
     try:
-        return get_all_classes(user_id, role)
+        # Admins see all classes
+        if role in ["superadmin", "admin"]:
+            return get_all_classes(user_id, role)
+        
+        # Teachers see only their assigned classes
+        assignments = get_user_assignments(user_id)
+        if not assignments:
+            return []
+        
+        # Extract unique classes from assignments
+        seen_classes = set()
+        classes = []
+        for assignment in assignments:
+            class_key = (assignment['class_name'], assignment['term'], assignment['session'])
+            if class_key not in seen_classes:
+                seen_classes.add(class_key)
+                classes.append({
+                    'class_name': assignment['class_name'],
+                    'term': assignment['term'],
+                    'session': assignment['session']
+                })
+        
+        return classes
     except Exception as e:
         logger.error(f"Error fetching classes for user {user_id}: {str(e)}")
         st.error("❌ Failed to load classes. Please try again.")
@@ -156,7 +178,41 @@ def _render_class_selection(classes: List[Dict[str, Any]], role: str) -> Optiona
 def _get_accessible_subjects(class_name: str, term: str, session: str, user_id: int, role: str) -> List[tuple]:
     """Get subjects accessible to the user for the selected class"""
     try:
-        return get_subjects_by_class(class_name, term, session, user_id, role)
+        # Admins see all subjects in the class
+        if role in ["superadmin", "admin"]:
+            return get_subjects_by_class(class_name, term, session, user_id, role)
+        
+        # Class teachers see all subjects in their assigned class
+        if role == "class_teacher":
+            assignments = get_user_assignments(user_id)
+            # Check if user is class teacher for this class
+            for assignment in assignments:
+                if (assignment['assignment_type'] == 'class_teacher' and
+                    assignment['class_name'] == class_name and
+                    assignment['term'] == term and
+                    assignment['session'] == session):
+                    return get_subjects_by_class(class_name, term, session, user_id, role)
+            return []
+        
+        # Subject teachers see only their assigned subjects
+        if role == "subject_teacher":
+            assignments = get_user_assignments(user_id)
+            all_subjects = get_subjects_by_class(class_name, term, session, user_id, role)
+            
+            # Filter to only show assigned subjects
+            assigned_subjects = set()
+            for assignment in assignments:
+                if (assignment['assignment_type'] == 'subject_teacher' and
+                    assignment['class_name'] == class_name and
+                    assignment['term'] == term and
+                    assignment['session'] == session and
+                    assignment['subject_name']):
+                    assigned_subjects.add(assignment['subject_name'])
+            
+            # Return only subjects that match assignments
+            return [subj for subj in all_subjects if subj[1] in assigned_subjects]
+        
+        return []
     except Exception as e:
         logger.error(f"Error fetching subjects for class {class_name}: {str(e)}")
         st.error("❌ Failed to load subjects. Please try again.")
@@ -494,35 +550,6 @@ def _clear_all_scores_from_database(class_name: str, subject: str, term: str, se
         logger.error(f"Error clearing scores: {str(e)}")
         st.error("❌ Failed to clear scores. Please try again.")
         return False
-
-def _get_user_assignment_context() -> Optional[Dict[str, Any]]:
-    """Get the user's assignment context for role-based restrictions"""
-    user_id = st.session_state.get("user_id")
-    role = st.session_state.get("role")
-    
-    if not user_id or role in ["superadmin", "admin"]:
-        return None
-    
-    try:
-        assignments = get_user_assignments(user_id)
-        if assignments:
-            # Return the first assignment for simplicity
-            assignment = assignments[0]
-            return {
-                "class_name": assignment[1],
-                "term": assignment[2], 
-                "session": assignment[3],
-                "subject_name": assignment[4]
-            }
-    except Exception as e:
-        logger.error(f"Error fetching user assignments: {str(e)}")
-    
-    return None
-
-# Initialize assignment context on page load
-if 'assignment_loaded' not in st.session_state:
-    st.session_state.assignment = _get_user_assignment_context()
-    st.session_state.assignment_loaded = True
 
 if __name__ == "__main__":
     enter_scores()

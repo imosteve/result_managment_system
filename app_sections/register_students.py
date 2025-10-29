@@ -34,19 +34,6 @@ def register_students():
         return
 
     class_options = [f"{cls['class_name']} - {cls['term']} - {cls['session']}" for cls in classes]
-    # if role == "class_teacher":
-    #     assignment = st.session_state.get("assignment")
-    #     if not assignment:
-    #         st.error("⚠️ Please select a class assignment first.")
-    #         return
-    #     allowed_class = f"{assignment['class_name']} - {assignment['term']} - {assignment['session']}"
-    #     if allowed_class not in class_options:
-    #         st.error("⚠️ Assigned class not found.")
-    #         return
-    #     class_options = [allowed_class]
-    #     selected_class_display = st.selectbox("Select Class", class_options)
-    # else:
-    #     selected_class_display = st.selectbox("Select Class", class_options)
     
     selected_class_display = st.selectbox("Select Class", class_options)
 
@@ -65,26 +52,29 @@ def register_students():
     # Display class metrics
     create_metric_4col(class_name, term, session, students, "student")
 
-    # Prepare DataFrame for existing students
+    # Prepare DataFrame for existing students - KEEP ID COLUMN
     df_data = []
     for idx, student in enumerate(students, 1):
         df_data.append({
-            "S/N": str(idx),  # Keep ID internally for updates
+            "ID": student[0],  # Keep ID for updates
+            "S/N": str(idx),
             "Name": student[1],
             "Gender": student[2],
             "Email": student[3]
         })
 
-    df = pd.DataFrame(df_data) if df_data else pd.DataFrame(columns=["S/N", "Name", "Gender", "Email"])
+    df = pd.DataFrame(df_data) if df_data else pd.DataFrame(columns=["ID", "S/N", "Name", "Gender", "Email"])
     
     # Tabs for different operations
-    # tab1, tab2, tab3, tab4, tab5 = st.tabs(["View/Edit Students", "Add New Student", "Delete Student", "Batch Add Students", "Delete All Students"])
     tab1, tab2, tab3, tab4 = st.tabs(["View/Edit Students", "Add New Student", "Batch Add Students", "Delete Student(s)"])
 
     with tab1:
         st.subheader("Student List")
-        # Display only Name, Gender, Email in 3 columns
+        # Display Name, Gender, Email but keep ID hidden from users by not including it in the editor.
+        # Preserve a stable id list to map edited rows back to the correct student records.
         display_df = df[["Name", "Gender", "Email"]] if not df.empty else pd.DataFrame(columns=["Name", "Gender", "Email"])
+        original_ids = df["ID"].tolist() if not df.empty else []
+
         edited_df = st.data_editor(
             display_df,
             column_config={
@@ -102,50 +92,62 @@ def register_students():
                 )
             },
             hide_index=True,
-            use_container_width=True,
+            width="stretch",
             key="student_editor"
         )
 
         if st.button("💾 Save Changes", key="save_changes"):
             errors = []
-            processed_names = set()
+            success_count = 0
 
             for idx, row in edited_df.iterrows():
+                # Map row index back to original student ID
+                try:
+                    student_id = original_ids[idx]
+                except IndexError:
+                    errors.append(f"❌ Row {idx + 1}: Unable to determine student ID for this row.")
+                    continue
+
                 name = clean_input(str(row.get("Name", "")), "name")
                 gender = str(row.get("Gender", ""))
                 email = clean_input(str(row.get("Email", "")), "email")
-                # Get student_id from original df using index
-                student_id = df.iloc[idx]["ID"] if not df.empty and idx < len(df) else ""
 
                 # Validation checks
                 if not name:
                     errors.append(f"❌ Row {idx + 1}: Name is required")
                     continue
-                if name.lower() in processed_names:
-                    errors.append(f"❌ Row {idx + 1}: Duplicate student name '{name}'")
-                    continue
                 if gender not in ["M", "F"]:
                     errors.append(f"❌ Row {idx + 1}: Gender must be 'M' or 'F'")
                     continue
-                if email and not "@" in email:
+                if email and "@" not in email:
                     errors.append(f"❌ Row {idx + 1}: Invalid email format")
                     continue
 
-                processed_names.add(name.lower())
-                update_student(student_id, name, gender, email)
-                st.rerun()
+                # Ensure student_id exists
+                if not student_id:
+                    errors.append(f"❌ Row {idx + 1}: Missing student ID; cannot update.")
+                    continue
+
+                # Update student (pass the ID and cleaned fields)
+                try:
+                    update_student(student_id, name, gender, email)
+                    success_count += 1
+                except Exception as e:
+                    # logger.error(f"Failed to update student id={student_id}: {e}")
+                    errors.append(f"❌ Row {idx + 1}: Failed to update student (ID: {student_id})")
 
             if errors:
                 st.markdown('<div class="error-container">', unsafe_allow_html=True)
                 for err in errors:
                     st.error(err)
                 st.markdown('</div>', unsafe_allow_html=True)
-            else:
-                st.markdown('<div class="success-container">✅ Changes saved successfully!</div>', unsafe_allow_html=True)
+
+            if success_count > 0:
+                st.markdown(f'<div class="success-container">✅ Successfully updated {success_count} student(s)!</div>', unsafe_allow_html=True)
                 st.rerun()
 
     with tab2:
-        st.subheader("Add New Student")\
+        st.subheader("Add New Student")
         
         # Initialize form counter for clearing input
         if 'student_form_counter' not in st.session_state:
@@ -164,7 +166,7 @@ def register_students():
 
                 if not new_name:
                     errors.append("❌ Name is required")
-                if new_email and not "@" in new_email:
+                if new_email and "@" not in new_email:
                     errors.append("❌ Invalid email format")
                 if new_name.lower() in {s[1].lower() for s in students}:
                     errors.append("❌ Student name already exists")
@@ -213,7 +215,7 @@ def register_students():
             },
             num_rows="dynamic",
             hide_index=True,
-            use_container_width=True,
+            width="stretch",  # Updated from use_container_width=True
             key=f"batch_student_editor_{st.session_state.batch_form_counter}"
         )
 
@@ -249,7 +251,7 @@ def register_students():
                 if gender not in ["M", "F"]:
                     errors.append(f"❌ Row {idx + 1}: Gender must be 'M' or 'F'")
                     continue
-                if email and not "@" in email:
+                if email and "@" not in email:
                     errors.append(f"❌ Row {idx + 1}: Invalid email format")
                     continue
 
@@ -306,8 +308,7 @@ def register_students():
                         confirm_col1, confirm_col2 = st.columns(2)
                         if confirm_col1.button("✅ Delete", key=f"confirm_delete_student"):
                             if student_id:
-                                st.session_state.delete_single_student = delete_student(student_id)
-                                # if st.session_state.delete_single_student:
+                                delete_student(student_id)
                                 st.markdown('<div class="success-container">✅ Student deleted successfully!</div>', unsafe_allow_html=True)
                                 st.session_state.delete_single_student = None
                                 st.rerun()
@@ -322,6 +323,7 @@ def register_students():
             else:
                 st.info("No students available to delete.")
 
+        st.markdown("---")
         st.subheader("Delete All Students")
         # Delete all students with expander
         with st.expander("**Delete All Students**", expanded=False):  
@@ -341,13 +343,10 @@ def register_students():
 
                         confirm_col1, confirm_col2 = st.columns(2)
                         if confirm_col1.button("✅ Delete", key=f"confirm_delete_all_students"):
-                            st.session_state.delete_all_students_in_class = delete_all_students(class_name, term, session)
-                            # if not students:
+                            delete_all_students(class_name, term, session)
                             st.markdown('<div class="success-container">✅ All students deleted successfully!</div>', unsafe_allow_html=True)
                             st.session_state.delete_all_students_in_class = None
                             st.rerun()
-                            # else:
-                            #     st.markdown('<div class="error-container">❌ Failed to delete all students. Please try again.</div>', unsafe_allow_html=True)
                         elif confirm_col2.button("❌ Cancel", key=f"cancel_delete_all_students"):
                             st.session_state.delete_all_students_in_class = None
                             st.info("Deletion cancelled.")
