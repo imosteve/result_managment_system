@@ -8,7 +8,7 @@ from database import (
     get_students_by_class, get_student_selected_subjects, save_student_subject_selections, 
     get_all_student_subject_selections
 )
-from utils import clean_input, create_metric_4col, inject_login_css, render_page_header
+from utils import clean_input, create_metric_4col, inject_login_css, render_page_header, render_persistent_class_selector
 
 def add_subjects():
     if not st.session_state.get("authenticated", False):
@@ -53,18 +53,19 @@ def add_subjects():
         return
 
     # Select class
-    class_options = [f"{cls['class_name']} - {cls['term']} - {cls['session']}" for cls in classes]
+    selected_class_data = render_persistent_class_selector(
+        classes, 
+        widget_key="manage_subjects_class"  # Use unique key for each section
+    )
 
-    selected_class_display = st.selectbox("Select Class", class_options)
-
-    if not class_options:
+    if not selected_class_data:
+        st.warning("⚠️ No class selected.")
         return
 
-    selected_index = class_options.index(selected_class_display)
-    selected_class_data = classes[selected_index]
     class_name = selected_class_data['class_name']
     term = selected_class_data['term']
     session = selected_class_data['session']
+    
 
     # Get existing subjects
     subjects = get_subjects_by_class(class_name, term, session, user_id, role)

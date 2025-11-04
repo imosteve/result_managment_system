@@ -10,7 +10,10 @@ from email.mime.base import MIMEBase
 from email import encoders
 from jinja2 import Environment, FileSystemLoader
 from weasyprint import HTML, CSS
-from utils import assign_grade, create_metric_5col_report, format_ordinal, render_page_header, inject_login_css
+from utils import (
+    assign_grade, create_metric_5col_report, format_ordinal, 
+    render_page_header, inject_login_css, render_persistent_class_selector
+)
 from database import (
     get_all_classes, get_students_by_class, get_student_scores, 
     get_class_average, get_student_grand_totals, get_comment, get_subjects_by_class
@@ -298,12 +301,15 @@ def generate_tab():
         st.warning("⚠️ No classes found.")
         return
 
-    class_options = [f"{cls['class_name']} - {cls['term']} - {cls['session']}" for cls in classes]
-    
-    selected_class_display = st.selectbox("Select Class", class_options)
+    selected_class_data = render_persistent_class_selector(
+        classes, 
+        widget_key="generate_reports_class"  # Use unique key for each section
+    )
 
-    selected_index = class_options.index(selected_class_display)
-    selected_class_data = classes[selected_index]
+    if not selected_class_data:
+        st.warning("⚠️ No class selected.")
+        return
+
     class_name = selected_class_data['class_name']
     term = selected_class_data['term']
     session = selected_class_data['session']
@@ -430,12 +436,15 @@ def email_tab():
         st.warning("⚠️ No classes found.")
         return
 
-    class_options = [f"{cls['class_name']} - {cls['term']} - {cls['session']}" for cls in classes]
-    
-    selected_class_display = st.selectbox("Select Class", class_options, key="email_class")
+    selected_class_data = render_persistent_class_selector(
+        classes, 
+        widget_key="email_reports_class"  # Use unique key for each section
+    )
 
-    selected_index = class_options.index(selected_class_display)
-    selected_class_data = classes[selected_index]
+    if not selected_class_data:
+        st.warning("⚠️ No class selected.")
+        return
+
     class_name = selected_class_data['class_name']
     term = selected_class_data['term']
     session = selected_class_data['session']

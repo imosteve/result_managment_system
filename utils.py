@@ -235,3 +235,100 @@ def render_page_header(title, background_color="#c6b7b1", text_color="#000", fon
         """,
         unsafe_allow_html=True
     )
+
+
+from typing import List, Dict, Any, Optional
+
+def initialize_class_persistence():
+    """Initialize the global class persistence storage in session state"""
+    if 'class_selection_state' not in st.session_state:
+        st.session_state.class_selection_state = {
+            'class_name': None,
+            'term': None,
+            'session': None,
+            'display_string': None
+        }
+
+def get_persistent_class_data():
+    """Get the currently selected class data from session state"""
+    initialize_class_persistence()
+    return st.session_state.class_selection_state
+
+def set_persistent_class_data(class_name: str, term: str, session: str):
+    """Store the selected class data in session state"""
+    initialize_class_persistence()
+    st.session_state.class_selection_state = {
+        'class_name': class_name,
+        'term': term,
+        'session': session,
+        'display_string': f"{class_name} - {term} - {session}"
+    }
+
+def render_persistent_class_selector(classes: List[Dict[str, Any]], 
+                                    widget_key: str = "global_class_selector") -> Optional[Dict[str, Any]]:
+    """
+    Render a class selector that persists selection across page navigation
+    
+    Args:
+        classes: List of class dictionaries with class_name, term, session
+        widget_key: Unique key for this selector (use different keys if you need multiple selectors)
+        
+    Returns:
+        Dictionary with selected class data (class_name, term, session) or None
+    """
+    if not classes:
+        return None
+    
+    initialize_class_persistence()
+    
+    # Create class options
+    class_options = [f"{cls['class_name']} - {cls['term']} - {cls['session']}" for cls in classes]
+    
+    # Get the last selected class
+    last_selection = st.session_state.class_selection_state.get('display_string')
+    
+    # Find the index of the last selection, default to 0 if not found
+    default_index = 0
+    if last_selection and last_selection in class_options:
+        try:
+            default_index = class_options.index(last_selection)
+        except ValueError:
+            default_index = 0
+    
+    # Render the selectbox with the remembered index
+    selected_class_display = st.selectbox(
+        "Select Class", 
+        class_options,
+        index=default_index,
+        key=widget_key
+    )
+    
+    # Get selected class details
+    try:
+        selected_index = class_options.index(selected_class_display)
+        selected_class_data = classes[selected_index]
+        
+        # Update session state with the new selection
+        set_persistent_class_data(
+            selected_class_data['class_name'],
+            selected_class_data['term'],
+            selected_class_data['session']
+        )
+        
+        return selected_class_data
+    except (ValueError, IndexError):
+        # Fallback to first class if something goes wrong
+        if classes:
+            return classes[0]
+        return None
+
+def clear_persistent_class_selection():
+    """Clear the persistent class selection"""
+    if 'class_selection_state' in st.session_state:
+        st.session_state.class_selection_state = {
+            'class_name': None,
+            'term': None,
+            'session': None,
+            'display_string': None
+        }
+

@@ -3,7 +3,7 @@
 import streamlit as st
 import pandas as pd
 from database import get_all_classes, get_students_by_class, get_subjects_by_class, get_student_scores, get_student_grand_totals
-from utils import assign_grade, create_metric_5col_broadsheet, format_ordinal, render_page_header
+from utils import assign_grade, create_metric_5col_broadsheet, format_ordinal, render_page_header, inject_login_css, render_persistent_class_selector
 
 def generate_broadsheet():
     if not st.session_state.get("authenticated", False):
@@ -46,20 +46,19 @@ def generate_broadsheet():
         return
 
     # Select class
-    class_options = [f"{cls['class_name']} - {cls['term']} - {cls['session']}" for cls in classes]
-    
-    selected_class_display = st.selectbox("Select Class", class_options)
+    selected_class_data = render_persistent_class_selector(
+        classes, 
+        widget_key="view_broadsheet_class"  # Use unique key for each section
+    )
 
-    if not class_options:
+    if not selected_class_data:
+        st.warning("⚠️ No class selected.")
         return
-    
-    # Find the selected class data
-    selected_index = class_options.index(selected_class_display)
-    selected_class_data = classes[selected_index]
+
     class_name = selected_class_data['class_name']
     term = selected_class_data['term']
     session = selected_class_data['session']
-
+    
     students = get_students_by_class(class_name, term, session, user_id, "admin")
     if not students:
         st.warning(f"⚠️ No students found for {class_name} - {term} - {session}.")

@@ -2,7 +2,7 @@
 
 import streamlit as st
 from database import get_all_classes, get_students_by_class, create_comment, get_comment, delete_comment
-from utils import render_page_header, inject_login_css
+from utils import render_page_header, inject_login_css, render_persistent_class_selector
 
 def manage_comments():
     """Manage report card comments for students"""
@@ -34,24 +34,18 @@ def manage_comments():
         return
 
     # Create class display options with all three components
-    class_options = [f"{cls['class_name']} - {cls['term']} - {cls['session']}" for cls in classes]
-    if role == "class_teacher":
-        assignment = st.session_state.get("assignment")
-        if not assignment:
-            st.error("⚠️ Please select a class assignment first.")
-            return
-        allowed_class = f"{assignment['class_name']} - {assignment['term']} - {assignment['session']}"
-        if allowed_class not in class_options:
-            st.error("⚠️ Assigned class not found.")
-            return
-        class_options = [allowed_class]
-        selected_class_display = st.selectbox("Select Class", class_options, disabled=True)
-    else:
-        selected_class_display = st.selectbox("Select Class", class_options)
+    selected_class_data = render_persistent_class_selector(
+        classes, 
+        widget_key="manage_comments_class"  # Use unique key for each section
+    )
 
-    selected_index = class_options.index(selected_class_display)
-    class_data = classes[selected_index]
-    class_name, term, session = class_data['class_name'], class_data['term'], class_data['session']
+    if not selected_class_data:
+        st.warning("⚠️ No class selected.")
+        return
+
+    class_name = selected_class_data['class_name']
+    term = selected_class_data['term']
+    session = selected_class_data['session']
 
     students = get_students_by_class(class_name, term, session, user_id, role)
     if not students:

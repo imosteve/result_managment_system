@@ -3,7 +3,7 @@
 import streamlit as st
 import pandas as pd
 from database import get_all_classes, get_students_by_class, create_student, update_student, delete_student, delete_all_students
-from utils import clean_input, create_metric_4col, inject_login_css, render_page_header
+from utils import clean_input, create_metric_4col, inject_login_css, render_page_header, render_persistent_class_selector
 
 def register_students():
     if not st.session_state.get("authenticated", False):
@@ -33,16 +33,20 @@ def register_students():
         st.warning("⚠️ No classes found.")
         return
 
-    class_options = [f"{cls['class_name']} - {cls['term']} - {cls['session']}" for cls in classes]
+    # ===== UPDATED: Use persistent class selector =====
+    selected_class_data = render_persistent_class_selector(
+        classes, 
+        widget_key="register_students_class"
+    )
     
-    selected_class_display = st.selectbox("Select Class", class_options)
-
-    # Get selected class details
-    selected_index = class_options.index(selected_class_display)
-    selected_class_data = classes[selected_index]
+    if not selected_class_data:
+        st.warning("⚠️ No class selected.")
+        return
+    
     class_name = selected_class_data['class_name']
     term = selected_class_data['term']
     session = selected_class_data['session']
+    # ===== END UPDATE =====
 
     # Load students with proper parameters
     students = get_students_by_class(class_name, term, session, user_id, role)

@@ -161,15 +161,14 @@ def _get_accessible_classes(user_id: int, role: str) -> List[Dict[str, Any]]:
         return []
 
 def _render_class_selection(classes: List[Dict[str, Any]], role: str) -> Optional[Dict[str, Any]]:
-    """Render class selection interface"""
-    class_options = [f"{cls['class_name']} - {cls['term']} - {cls['session']}" for cls in classes]
-
-    selected_class_display = st.selectbox("Select Class", class_options)
-
+    """Render class selection interface with persistence"""
+    from utils import render_persistent_class_selector
     # Get selected class details
     try:
-        selected_index = class_options.index(selected_class_display)
-        return classes[selected_index]
+        return render_persistent_class_selector(
+            classes,
+            widget_key="enter_scores_class"
+        )
     except (ValueError, IndexError) as e:
         logger.error(f"Error selecting class: {str(e)}")
         st.error("❌ Invalid class selection.")
@@ -356,7 +355,7 @@ def _render_score_entry_tab(students: List[tuple], score_map: Dict[str, tuple],
                 ),
             },
             hide_index=True,
-            width=800,
+            width="stretch",
             key=f"score_editor_{class_name}_{subject}_{term}_{session}"
         )
 
