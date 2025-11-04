@@ -337,30 +337,26 @@ def _render_score_entry_tab(students: List[tuple], score_map: Dict[str, tuple],
                 "S/N": st.column_config.TextColumn(
                     "S/N",
                     disabled=True,
-                    width=10
+                    width=20
                 ),
                 "Student": st.column_config.TextColumn(
                     "Student", 
                     disabled=True, 
-                    width="large"
+                    width=300
                 ),
                 "Test (30%)": st.column_config.NumberColumn(
-                    "Test (30%)", 
-                    min_value=0, 
-                    max_value=30, 
+                    "Test (30%)",
                     width="small",
-                    format="%.1f"
+                    format="%d"
                 ),
                 "Exam (70%)": st.column_config.NumberColumn(
-                    "Exam (70%)", 
-                    min_value=0, 
-                    max_value=70, 
+                    "Exam (70%)",
                     width="small",
-                    format="%.1f"
+                    format="%d"
                 ),
             },
             hide_index=True,
-            width="stretch",
+            width=800,
             key=f"score_editor_{class_name}_{subject}_{term}_{session}"
         )
 
@@ -391,15 +387,15 @@ def _validate_scores(df: pd.DataFrame) -> Dict[str, Any]:
             
             # Check test score range
             if test_score < 0:
-                errors.append(f"❌ {student_name}: Test score cannot be negative (got {test_score:.1f})")
+                errors.append(f"❌ {_+1} - {student_name}: Test score cannot be negative (got {test_score:.1f})")
             elif test_score > 30:
-                errors.append(f"❌ {student_name}: Test score exceeds maximum of 30 (got {test_score:.1f})")
+                errors.append(f"❌ {_+1} - {student_name}: Test score exceeds maximum of 30 (got {test_score:.1f})")
             
             # Check exam score range
             if exam_score < 0:
-                errors.append(f"❌ {student_name}: Exam score cannot be negative (got {exam_score:.1f})")
+                errors.append(f"❌ {_+1} - {student_name}: Exam score cannot be negative (got {exam_score:.1f})")
             elif exam_score > 70:
-                errors.append(f"❌ {student_name}: Exam score exceeds maximum of 70 (got {exam_score:.1f})")
+                errors.append(f"❌ {_+1} - {student_name}: Exam score exceeds maximum of 70 (got {exam_score:.1f})")
         
         return {
             "valid": len(errors) == 0,
@@ -452,10 +448,10 @@ def _save_scores_to_database(df: pd.DataFrame, class_name: str, subject: str, te
 
 def _render_score_preview_tab(students: List[tuple], score_map: Dict[str, tuple]):
     """Render the score preview tab"""
-    st.subheader("👀 Preview Scores")
+    st.subheader("Preview Scores")
 
     if not students:
-        st.info("📝 No students available to preview.")
+        st.info("No students available to preview.")
         return
 
     # Build preview data - use dict to prevent duplicates
@@ -470,9 +466,9 @@ def _render_score_preview_tab(students: List[tuple], score_map: Dict[str, tuple]
         existing = score_map.get(student_name)
         
         if existing:
-            test = float(existing[3]) if existing[3] is not None else 0.0
-            exam = float(existing[4]) if existing[4] is not None else 0.0
-            total = float(existing[5]) if existing[5] is not None else test + exam
+            test = int(existing[3]) if existing[3] is not None else 0.0
+            exam = int(existing[4]) if existing[4] is not None else 0.0
+            total = int(existing[5]) if existing[5] is not None else test + exam
             grade = existing[6] if existing[6] else assign_grade(total)
             position = format_ordinal(existing[7]) if existing[7] else "-"
         else:
@@ -483,9 +479,9 @@ def _render_score_preview_tab(students: List[tuple], score_map: Dict[str, tuple]
         preview_data[student_name] = {
             "S/N": str(idx),
             "Student": student_name,
-            "Test": f"{test:.1f}",
-            "Exam": f"{exam:.1f}",
-            "Total": f"{total:.1f}",
+            "Test": f"{test}",
+            "Exam": f"{exam}",
+            "Total": f"{total}",
             "Grade": grade,
             "Position": position
         }

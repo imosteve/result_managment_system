@@ -66,8 +66,8 @@ def generate_report_card(student_name, class_name, term, session):
 
     # Fetch dynamic comments
     comment = get_comment(student_name, class_name, term, session)
-    class_teacher_comment = comment['class_teacher_comment'] if comment and comment['class_teacher_comment'] else "No comment provided."
-    head_teacher_comment = comment['head_teacher_comment'] if comment and comment['head_teacher_comment'] else "No comment provided."
+    class_teacher_comment = comment['class_teacher_comment'] if comment and comment['class_teacher_comment'] else ""
+    head_teacher_comment = comment['head_teacher_comment'] if comment and comment['head_teacher_comment'] else ""
 
     # Create score dictionary for quick lookup
     score_dict = {score[2]: score for score in student_scores}

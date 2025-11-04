@@ -68,9 +68,11 @@ def create_tables():
             term TEXT NOT NULL,
             session TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (class_name, term, session) REFERENCES classes(name, term, session) ON DELETE CASCADE,
+            FOREIGN KEY (class_name, term, session)
+                REFERENCES classes(name, term, session)
+                ON DELETE CASCADE,
             UNIQUE(name, class_name, term, session)
-        )
+        );
     """)
     
     # Subjects table
