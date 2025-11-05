@@ -322,7 +322,7 @@ def generate_tab():
     st.markdown(
         """
         <div style='width: auto; margin: auto; text-align: center; background-color: #c6b7b1;'>
-            <h3 style='color:#000; font-size:20px; margin-top:30px;'>
+            <h3 style='color:#000; font-size:20px; margin-bottom: 15px;'>
                 Report Card Summary
             </h3>
         </div>
@@ -349,7 +349,7 @@ def generate_tab():
     create_metric_5col_report(gender, no_in_class, class_average, pupil_average, position)
 
     # Individual Report Card
-    if st.button("📄 Generate Individual Report Card"):
+    if st.button("📄 Generate Report Card"):
         pdf_path = generate_report_card(selected_student, class_name, term, session)
         if pdf_path and os.path.exists(pdf_path):
             with open(pdf_path, "rb") as f:
@@ -420,17 +420,6 @@ def email_tab():
     user_id = st.session_state.user_id
     role = st.session_state.role
 
-    st.markdown(
-        """
-        <div style='width: auto; margin: auto; text-align: center; background-color: #c6b7b1;'>
-            <h3 style='color:#000; font-size:20px; margin-top:30px;'>
-                Email Report Cards
-            </h3>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
     classes = get_all_classes(user_id, role)
     if not classes:
         st.warning("⚠️ No classes found.")
@@ -454,6 +443,17 @@ def email_tab():
         st.warning(f"⚠️ No students found for {class_name} - {term} - {session}.")
         return
 
+    st.markdown(
+        """
+        <div style='width: auto; margin: auto; text-align: center; background-color: #c6b7b1;'>
+            <h3 style='color:#000; font-size:20px; margin-bottom: 15px;'>
+                Email Report Cards
+            </h3>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
     # Filter students with email addresses
     students_with_email = [s for s in students if s[3]]  # s[3] is email
     students_without_email = [s for s in students if not s[3]]
@@ -468,7 +468,7 @@ def email_tab():
     st.info(f"📧 {len(students_with_email)} student(s) have email addresses and can receive reports.")
 
     # Individual Email
-    st.markdown("### 📨 Send Individual Report Card")
+    st.markdown("### 📨 Send Report Card")
     student_names_with_email = [s[1] for s in students_with_email]
     selected_student = st.selectbox("Select Student", student_names_with_email, key="email_student")
     
@@ -476,7 +476,7 @@ def email_tab():
     if student_data:
         st.info(f"📧 Email: {student_data[3]}")
 
-    if st.button("📧 Send Individual Report Card"):
+    if st.button("📧 Send Report Card"):
         if not student_data or not student_data[3]:
             st.error("❌ Student email not found.")
             return

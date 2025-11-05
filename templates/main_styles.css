@@ -1,6 +1,6 @@
 /* Hide Streamlit default elements */
-/* #MainMenu {visibility: hidden;} */
-/* footer {visibility: hidden;} */
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
 /* header {visibility: hidden;} */
 
 /* Custom background color */

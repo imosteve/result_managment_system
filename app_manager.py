@@ -46,7 +46,7 @@ class ApplicationManager:
 
         st.markdown("""
         <style>
-        MainMenu {visibility: hidden;}
+        #MainMenu {visibility: visible;}
         footer {visibility: hidden;}
         # header {visibility: hidden;}
 
@@ -543,13 +543,23 @@ class ApplicationManager:
             inject_login_css("templates/metrics_styles.css")
             # Display metrics with custom style
             with col1:
-                st.markdown(f"<div class='custom-metric'><div class='label'>🏫 Classes</div><div class='value'>{stats.get('classes', 0)}</div></div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='custom-metric'><div class='label'>Total Classes</div><div class='value'>{stats.get('classes', 0)}</div></div>", unsafe_allow_html=True)
             with col2:
-                st.markdown(f"<div class='custom-metric'><div class='label'>👥 Students</div><div class='value'>{stats.get('students', 0)}</div></div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='custom-metric'><div class='label'>Total Students</div><div class='value'>{stats.get('students', 0)}</div></div>", unsafe_allow_html=True)
             with col3:
-                st.markdown(f"<div class='custom-metric'><div class='label'>📚 Subjects</div><div class='value'>{stats.get('subjects', 0)}</div></div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='custom-metric'><div class='label'>Total Subjects</div><div class='value'>{stats.get('subjects', 0)}</div></div>", unsafe_allow_html=True)
             with col4:
-                st.markdown(f"<div class='custom-metric'><div class='label'>📝 Scores</div><div class='value'>{stats.get('scores', 0)}</div></div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='custom-metric'><div class='label'>Total Scores</div><div class='value'>{stats.get('scores', 0)}</div></div>", unsafe_allow_html=True)
+
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.markdown(f"<div class='custom-metric'><div class='label'>Total Users</div><div class='value'>{stats['users']}</div></div>", unsafe_allow_html=True)
+            with col2:
+                st.markdown(f"<div class='custom-metric'><div class='label'>Total Teachers</div><div class='value'>{stats['teachers']}</div></div>", unsafe_allow_html=True)
+            with col3:
+                st.markdown(f"<div class='custom-metric'><div class='label'>Total Assignments</div><div class='value'>{stats['assignments']}</div></div>", unsafe_allow_html=True)
+            with col4:
+                st.markdown(f"<div class='custom-metric'><div class='label'>Total Comments</div><div class='value'>{stats['comments']}</div></div>", unsafe_allow_html=True)
 
 
             # Role-specific dashboard content

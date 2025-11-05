@@ -1011,18 +1011,16 @@ def get_database_stats(current_user_role=None):
     cursor.execute("SELECT COUNT(*) FROM teacher_assignments")
     stats['assignments'] = cursor.fetchone()[0]
 
-    # Adjust view for current user
-    if current_user_role == 'admin':
-        # Teachers are users NOT in admin_users
-        cursor.execute("""
-            SELECT COUNT(*) 
-            FROM users 
-            WHERE id NOT IN (SELECT user_id FROM admin_users WHERE role IN ('admin', 'superadmin'))
-        """)
-        stats['users'] = cursor.fetchone()[0]
-    else:
-        cursor.execute("SELECT COUNT(*) FROM users")
-        stats['users'] = cursor.fetchone()[0]
+    # Teachers are users NOT in admin_users
+    cursor.execute("""
+        SELECT COUNT(*) 
+        FROM users 
+        WHERE id NOT IN (SELECT user_id FROM admin_users WHERE role IN ('admin', 'superadmin'))
+    """)
+    stats['teachers'] = cursor.fetchone()[0]
+    
+    cursor.execute("SELECT COUNT(*) FROM users")
+    stats['users'] = cursor.fetchone()[0]
 
     conn.close()
     return stats
@@ -1182,8 +1180,8 @@ def validate_score_data(test_score, exam_score):
     errors = []
     
     try:
-        test = float(test_score)
-        exam = float(exam_score)
+        test = int(test_score)
+        exam = int(exam_score)
         
         if test < 0 or test > 30:
             errors.append("Test score must be between 0 and 30")

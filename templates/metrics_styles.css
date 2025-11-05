@@ -7,12 +7,12 @@
     background-color: #f9f9f9;      /* light background */
 }
 .custom-metric .label {
-    font-size: 16px; 
+    font-size: 15px; 
     color: #555;
     /* font-weight: bold; */
 }
 .custom-metric .value {
-    font-size: 30px; 
+    font-size: 22px; 
     /* font-weight: bold; */
     color: #000;
 }

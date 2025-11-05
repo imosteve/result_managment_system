@@ -33,21 +33,24 @@ def admin_panel():
     
     render_page_header("Admin Dashboard")
     
-    inject_login_css("templates/metrics_styles.css")
-
+    
     # Dashboard Metrics
-    stats = get_database_stats(admin_role)
-    col1, col2, col3, col4 = st.columns(4)
+    stats = get_database_stats()
+    
+    inject_login_css("templates/metrics_styles.css")
+    col1, col2, col3, col4, col5, col6 = st.columns(6)
     with col1:
-        st.markdown(f"<div class='custom-metric'><div class='label'>Total Users</div><div class='value'>{stats['users']}</div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='custom-metric'><div class='label'>Total Users</div><div class='value'>{stats['teachers']}</div></div>", unsafe_allow_html=True)
     with col2:
         st.markdown(f"<div class='custom-metric'><div class='label'>Total Classes</div><div class='value'>{stats['classes']}</div></div>", unsafe_allow_html=True)
     with col3:
         st.markdown(f"<div class='custom-metric'><div class='label'>Total Assignments</div><div class='value'>{stats['assignments']}</div></div>", unsafe_allow_html=True)
     with col4:
-        st.markdown(f"<div class='custom-metric'><div class='label'>Total Comments</div><div class='value'>{stats['comments']}</div></div>", unsafe_allow_html=True)
-
-    st.markdown("---")
+        st.markdown(f"<div class='custom-metric'><div class='label'>Total Students</div><div class='value'>{stats['students']}</div></div>", unsafe_allow_html=True)
+    with col5:
+        st.markdown(f"<div class='custom-metric'><div class='label'>Total Subjects</div><div class='value'>{stats.get('subjects', 0)}</div></div>", unsafe_allow_html=True)
+    with col6:
+        st.markdown(f"<div class='custom-metric'><div class='label'>Total Scores</div><div class='value'>{stats.get('scores', 0)}</div></div>", unsafe_allow_html=True)
 
     inject_login_css("templates/tabs_styles.css")
     
