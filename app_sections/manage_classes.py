@@ -96,6 +96,7 @@ def create_class_section():
                         pending = st.session_state["delete_pending"]
                         if pending["index"] == i:
                             st.warning(f"⚠️ Are you sure you want to delete '{pending['class_name']}' for {pending['term']}, {pending['session']}?")
+                            st.error(f"This will also delete all associated students, subjects, and scores.")
                             confirm_col1, confirm_col2 = st.columns(2)
                             if confirm_col1.button("✅ Delete", key=f"confirm_delete_{i}"):
                                 delete_class(pending["class_name"], pending["term"], pending["session"])

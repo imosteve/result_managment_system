@@ -147,12 +147,13 @@ def generate_broadsheet():
         column_config={
             "S/N": st.column_config.TextColumn("S/N", width="small"),
             "Student": st.column_config.TextColumn("Student", width="large"),
-            "Grand Total": st.column_config.TextColumn("Grand Total", width="medium"),
-            "Average": st.column_config.TextColumn("Average", width="medium"),
-            "Position": st.column_config.TextColumn("Position", width="medium")
+            "Grand Total": st.column_config.TextColumn("Grand Total", width="small"),
+            "Average": st.column_config.TextColumn("Average", width="small"),
+            "Position": st.column_config.TextColumn("Position", width="small")
         },
         hide_index=True,
-        width="stretch"
+        width="stretch",
+        height=35 * len(broadsheet_data) + 38
     )
     
     # Download button for CSV

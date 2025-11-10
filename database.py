@@ -70,7 +70,8 @@ def create_tables():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (class_name, term, session)
                 REFERENCES classes(name, term, session)
-                ON DELETE CASCADE,
+                ON DELETE CASCADE
+                ON UPDATE CASCADE,
             UNIQUE(name, class_name, term, session)
         );
     """)
@@ -84,7 +85,10 @@ def create_tables():
             term TEXT NOT NULL,
             session TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (class_name, term, session) REFERENCES classes(name, term, session) ON DELETE CASCADE,
+            FOREIGN KEY (class_name, term, session) 
+                   REFERENCES classes(name, term, session) 
+                   ON DELETE CASCADE
+                   ON UPDATE CASCADE,
             UNIQUE(name, class_name, term, session)
         )
     """)
@@ -105,9 +109,12 @@ def create_tables():
             position INTEGER,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (class_name, term, session) REFERENCES classes(name, term, session) ON DELETE CASCADE,
-            FOREIGN KEY (student_name, class_name, term, session) REFERENCES students(name, class_name, term, session) ON DELETE CASCADE,
-            FOREIGN KEY (subject_name, class_name, term, session) REFERENCES subjects(name, class_name, term, session) ON DELETE CASCADE,
+            FOREIGN KEY (class_name, term, session) 
+                   REFERENCES classes(name, term, session) 
+                   ON DELETE CASCADE
+                   ON UPDATE CASCADE,
+            FOREIGN KEY (student_name, class_name, term, session) REFERENCES students(name, class_name, term, session) ON DELETE CASCADE ON UPDATE CASCADE,
+            FOREIGN KEY (subject_name, class_name, term, session) REFERENCES subjects(name, class_name, term, session) ON DELETE CASCADE ON UPDATE CASCADE,
             UNIQUE(student_name, subject_name, class_name, term, session)
         )
     """)
@@ -133,10 +140,10 @@ def create_tables():
             subject_name TEXT,
             assignment_type TEXT NOT NULL CHECK(assignment_type IN ('class_teacher', 'subject_teacher')),
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-            FOREIGN KEY (class_name, term, session) REFERENCES classes(name, term, session) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE ON UPDATE CASCADE,
+            FOREIGN KEY (class_name, term, session) REFERENCES classes(name, term, session) ON DELETE CASCADE ON UPDATE CASCADE,
             FOREIGN KEY (subject_name, class_name, term, session) 
-                REFERENCES subjects(name, class_name, term, session) ON DELETE CASCADE,
+                REFERENCES subjects(name, class_name, term, session) ON DELETE CASCADE ON UPDATE CASCADE,
             UNIQUE(user_id, class_name, term, session, subject_name, assignment_type)
         )
     """)
@@ -147,7 +154,7 @@ def create_tables():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL UNIQUE,
             role TEXT NOT NULL CHECK(role IN ('superadmin', 'admin')),
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE ON UPDATE CASCADE
         )
     """)
     
@@ -163,12 +170,13 @@ def create_tables():
             head_teacher_comment TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (class_name, term, session) REFERENCES classes(name, term, session) ON DELETE CASCADE,
-            FOREIGN KEY (student_name, class_name, term, session) REFERENCES students(name, class_name, term, session) ON DELETE CASCADE,
+            FOREIGN KEY (class_name, term, session) REFERENCES classes(name, term, session) ON DELETE CASCADE ON UPDATE CASCADE,
+            FOREIGN KEY (student_name, class_name, term, session) REFERENCES students(name, class_name, term, session) ON DELETE CASCADE ON UPDATE CASCADE,
             UNIQUE(student_name, class_name, term, session)
         )
     """)
     
+    create_psychomotor_table()
     create_student_subject_selections_table()
     
     conn.commit()
@@ -296,6 +304,62 @@ def assign_teacher(user_id, class_name, term, session, subject_name=None, assign
         return True
     except sqlite3.IntegrityError:
         logger.warning(f"Assignment already exists for user {user_id}")
+        return False
+    finally:
+        conn.close()
+def assign_teacher(user_id, class_name, term, session, subject_name=None, assignment_type='class_teacher'):
+    """Assign a user as class teacher or subject teacher with proper duplicate checking"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        # Validate assignment_type
+        if assignment_type == 'subject_teacher' and not subject_name:
+            logger.error("Subject teacher assignment requires a subject name")
+            return False
+        
+        if assignment_type == 'class_teacher':
+            subject_name = None  # Class teachers don't have subject_name
+            
+            # Check if this class already has a class teacher
+            cursor.execute("""
+                SELECT user_id FROM teacher_assignments
+                WHERE class_name = ? AND term = ? AND session = ? 
+                AND assignment_type = 'class_teacher'
+            """, (class_name, term, session))
+            existing_class_teacher = cursor.fetchone()
+            
+            if existing_class_teacher:
+                logger.warning(f"Class {class_name}-{term}-{session} already has a class teacher (user_id: {existing_class_teacher[0]})")
+                return False
+        
+        # Check if this user already has this exact assignment
+        if assignment_type == 'class_teacher':
+            cursor.execute("""
+                SELECT id FROM teacher_assignments
+                WHERE user_id = ? AND class_name = ? AND term = ? AND session = ? 
+                AND assignment_type = 'class_teacher'
+            """, (user_id, class_name, term, session))
+        else:
+            cursor.execute("""
+                SELECT id FROM teacher_assignments
+                WHERE user_id = ? AND class_name = ? AND term = ? AND session = ? 
+                AND subject_name = ? AND assignment_type = 'subject_teacher'
+            """, (user_id, class_name, term, session, subject_name))
+        
+        if cursor.fetchone():
+            logger.warning(f"This assignment already exists for user {user_id}")
+            return False
+        
+        # Insert the assignment
+        cursor.execute("""
+            INSERT INTO teacher_assignments (user_id, class_name, term, session, subject_name, assignment_type)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (user_id, class_name, term, session, subject_name, assignment_type))
+        conn.commit()
+        logger.info(f"Successfully assigned user {user_id} as {assignment_type} for {class_name}-{term}-{session}")
+        return True
+    except sqlite3.IntegrityError as e:
+        logger.warning(f"Assignment already exists for user {user_id}: {str(e)}")
         return False
     finally:
         conn.close()
@@ -451,16 +515,45 @@ def create_class(class_name, term, session):
         conn.close()
 
 def update_class(original_class_name, original_term, original_session, new_class_name, new_term, new_session):
-    """Update an existing class entry"""
+    """
+    Update an existing class entry
+    
+    This function handles the update in a transaction with proper ordering
+    to avoid foreign key constraint violations.
+    """
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("""
-        UPDATE classes
-        SET name = ?, term = ?, session = ?
-        WHERE name = ? AND term = ? AND session = ?
-    """, (new_class_name, new_term, new_session, original_class_name, original_term, original_session))
-    conn.commit()
-    conn.close()
+    
+    try:
+        # Start transaction
+        cursor.execute("BEGIN TRANSACTION")
+        
+        # Temporarily disable foreign key constraints
+        cursor.execute("PRAGMA foreign_keys = OFF")
+        
+        # Update the class
+        cursor.execute("""
+            UPDATE classes
+            SET name = ?, term = ?, session = ?
+            WHERE name = ? AND term = ? AND session = ?
+        """, (new_class_name, new_term, new_session, original_class_name, original_term, original_session))
+        
+        # Re-enable foreign key constraints
+        cursor.execute("PRAGMA foreign_keys = ON")
+        
+        # Commit transaction
+        conn.commit()
+        logger.info(f"Class updated from '{original_class_name}-{original_term}-{original_session}' to '{new_class_name}-{new_term}-{new_session}'")
+        return True
+        
+    except sqlite3.Error as e:
+        # Rollback on error
+        conn.rollback()
+        cursor.execute("PRAGMA foreign_keys = ON")  # Re-enable even on error
+        logger.error(f"Error updating class: {str(e)}")
+        return False
+    finally:
+        conn.close()
 
 def delete_class(class_name, term, session):
     """Delete a class and all associated data (CASCADE)"""
@@ -949,39 +1042,159 @@ def clear_all_scores(class_name, subject_name, term, session):
     finally:
         conn.close()
 
-# ==================== UTILITY FUNCTIONS ====================
-# def get_database_stats():
-#     """Get database statistics"""
-#     conn = get_connection()
-#     cursor = conn.cursor()
-    
-#     stats = {}
-    
-#     cursor.execute("SELECT COUNT(*) FROM classes")
-#     stats['classes'] = cursor.fetchone()[0]
-    
-#     cursor.execute("SELECT COUNT(*) FROM students")
-#     stats['students'] = cursor.fetchone()[0]
-    
-#     cursor.execute("SELECT COUNT(*) FROM subjects")
-#     stats['subjects'] = cursor.fetchone()[0]
-    
-#     cursor.execute("SELECT COUNT(*) FROM scores")
-#     stats['scores'] = cursor.fetchone()[0]
-    
-#     cursor.execute("SELECT COUNT(*) FROM users")
-#     stats['users'] = cursor.fetchone()[0]
-    
-#     cursor.execute("SELECT COUNT(*) FROM teacher_assignments")
-#     stats['assignments'] = cursor.fetchone()[0]
-    
-#     cursor.execute("SELECT COUNT(*) FROM comments")
-#     stats['comments'] = cursor.fetchone()[0]
-    
-#     conn.close()
-#     return stats
 
-def get_database_stats(current_user_role=None):
+# ==================== PSYCHOMOTOR RATINGS OPERATIONS ====================
+def create_psychomotor_table():
+    """Create psychomotor_ratings table if it doesn't exist"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS psychomotor_ratings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_name TEXT NOT NULL,
+            class_name TEXT NOT NULL,
+            term TEXT NOT NULL,
+            session TEXT NOT NULL,
+            punctuality INTEGER CHECK(punctuality BETWEEN 1 AND 5),
+            neatness INTEGER CHECK(neatness BETWEEN 1 AND 5),
+            honesty INTEGER CHECK(honesty BETWEEN 1 AND 5),
+            cooperation INTEGER CHECK(cooperation BETWEEN 1 AND 5),
+            leadership INTEGER CHECK(leadership BETWEEN 1 AND 5),
+            perseverance INTEGER CHECK(perseverance BETWEEN 1 AND 5),
+            politeness INTEGER CHECK(politeness BETWEEN 1 AND 5),
+            obedience INTEGER CHECK(obedience BETWEEN 1 AND 5),
+            attentiveness INTEGER CHECK(attentiveness BETWEEN 1 AND 5),
+            attitude_to_work INTEGER CHECK(attitude_to_work BETWEEN 1 AND 5),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (class_name, term, session) 
+                REFERENCES classes(name, term, session) ON DELETE CASCADE ON UPDATE CASCADE,
+            FOREIGN KEY (student_name, class_name, term, session) 
+                REFERENCES students(name, class_name, term, session) ON DELETE CASCADE ON UPDATE CASCADE,
+            UNIQUE(student_name, class_name, term, session)
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+def create_psychomotor_rating(student_name, class_name, term, session, ratings):
+    """
+    Create or update psychomotor rating for a student
+    
+    Args:
+        student_name: Name of the student
+        class_name: Class name
+        term: Term
+        session: Session
+        ratings: Dictionary with category names as keys and ratings (1-5) as values
+                 Example: {"Punctuality": 5, "Neatness": 4, ...}
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        # Convert category names to database column names
+        db_ratings = {
+            'punctuality': ratings.get('Punctuality', 3),
+            'neatness': ratings.get('Neatness', 3),
+            'honesty': ratings.get('Honesty', 3),
+            'cooperation': ratings.get('Cooperation', 3),
+            'leadership': ratings.get('Leadership', 3),
+            'perseverance': ratings.get('Perseverance', 3),
+            'politeness': ratings.get('Politeness', 3),
+            'obedience': ratings.get('Obedience', 3),
+            'attentiveness': ratings.get('Attentiveness', 3),
+            'attitude_to_work': ratings.get('Attitude to work', 3)
+        }
+        
+        cursor.execute("""
+            INSERT OR REPLACE INTO psychomotor_ratings (
+                student_name, class_name, term, session,
+                punctuality, neatness, honesty, cooperation,
+                leadership, perseverance, politeness, obedience,
+                attentiveness, attitude_to_work, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        """, (
+            student_name, class_name, term, session,
+            db_ratings['punctuality'], db_ratings['neatness'],
+            db_ratings['honesty'], db_ratings['cooperation'],
+            db_ratings['leadership'], db_ratings['perseverance'],
+            db_ratings['politeness'], db_ratings['obedience'],
+            db_ratings['attentiveness'], db_ratings['attitude_to_work']
+        ))
+        conn.commit()
+        logger.info(f"Psychomotor rating saved for {student_name}")
+        return True
+    except Exception as e:
+        logger.error(f"Error saving psychomotor rating: {e}")
+        return False
+    finally:
+        conn.close()
+
+def get_psychomotor_rating(student_name, class_name, term, session):
+    """Get psychomotor rating for a student"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT punctuality, neatness, honesty, cooperation,
+               leadership, perseverance, politeness, obedience,
+               attentiveness, attitude_to_work
+        FROM psychomotor_ratings
+        WHERE student_name = ? AND class_name = ? AND term = ? AND session = ?
+    """, (student_name, class_name, term, session))
+    rating = cursor.fetchone()
+    conn.close()
+    
+    if rating:
+        return {
+            'punctuality': rating[0],
+            'neatness': rating[1],
+            'honesty': rating[2],
+            'cooperation': rating[3],
+            'leadership': rating[4],
+            'perseverance': rating[5],
+            'politeness': rating[6],
+            'obedience': rating[7],
+            'attentiveness': rating[8],
+            'attitude_to_work': rating[9]
+        }
+    return None
+
+def delete_psychomotor_rating(student_name, class_name, term, session):
+    """Delete psychomotor rating for a student"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            DELETE FROM psychomotor_ratings
+            WHERE student_name = ? AND class_name = ? AND term = ? AND session = ?
+        """, (student_name, class_name, term, session))
+        conn.commit()
+        return True
+    except Exception as e:
+        logger.error(f"Error deleting psychomotor rating: {e}")
+        return False
+    finally:
+        conn.close()
+
+def get_all_psychomotor_ratings(class_name, term, session):
+    """Get all psychomotor ratings for a class"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT student_name, punctuality, neatness, honesty, cooperation,
+               leadership, perseverance, politeness, obedience,
+               attentiveness, attitude_to_work
+        FROM psychomotor_ratings
+        WHERE class_name = ? AND term = ? AND session = ?
+        ORDER BY student_name
+    """, (class_name, term, session))
+    ratings = cursor.fetchall()
+    conn.close()
+    return ratings
+
+
+# ==================== UTILITY FUNCTIONS ====================
+def get_database_stats():
     """
     Get database statistics.
     Uses new schema (admin_users table).
@@ -1024,7 +1237,6 @@ def get_database_stats(current_user_role=None):
 
     conn.close()
     return stats
-
 
 def get_classes_summary():
     """Get summary of all classes with counts"""
@@ -1194,6 +1406,8 @@ def validate_score_data(test_score, exam_score):
     
     return errors
 
+
+# ==================== STUDENT-SUBJECT OPERATIONS ====================
 def create_student_subject_selections_table():
     """Create student_subject_selections table for SSS2 and SSS3 subject choices"""
     conn = get_connection()
@@ -1207,9 +1421,9 @@ def create_student_subject_selections_table():
             term TEXT NOT NULL,
             session TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (class_name, term, session) REFERENCES classes(name, term, session) ON DELETE CASCADE,
-            FOREIGN KEY (student_name, class_name, term, session) REFERENCES students(name, class_name, term, session) ON DELETE CASCADE,
-            FOREIGN KEY (subject_name, class_name, term, session) REFERENCES subjects(name, class_name, term, session) ON DELETE CASCADE,
+            FOREIGN KEY (class_name, term, session) REFERENCES classes(name, term, session) ON DELETE CASCADE ON UPDATE CASCADE,
+            FOREIGN KEY (student_name, class_name, term, session) REFERENCES students(name, class_name, term, session) ON DELETE CASCADE ON UPDATE CASCADE,
+            FOREIGN KEY (subject_name, class_name, term, session) REFERENCES subjects(name, class_name, term, session) ON DELETE CASCADE ON UPDATE CASCADE,
             UNIQUE(student_name, subject_name, class_name, term, session)
         )
     """)

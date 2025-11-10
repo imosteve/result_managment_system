@@ -20,7 +20,7 @@
                 <div class="header-text">
                    <div class="school-name">SCRIPTURE UNION INTERNATIONAL SCHOOLS</div>
                     <div class="school-address">64 IKOT ABASI STREET, UYO, AKWA IBOM STATE</div>
-                    <div class="report-title">TERMLY REPORT FOR {{ term }}, {{ session }} SESSION</div>
+                    <div class="report-title">TERMLY REPORT FOR {{ term.upper() }}, {{ session }} SESSION</div>
                 </div>
             </div>
             
@@ -35,11 +35,11 @@
                 <div class="info-middle">
                     <div class="info-col">
                         <span class="info-label">Gender:</span>
-                        <span class="info-value">{{ gender }}</span>
+                        <span class="info-value">{{ 'Male' if gender=='M' else 'Female' if gender=='F' else '' }}</span>
                     </div>
                     <div class="info-col2">
                         <span class="info-label">Class:</span>
-                        <span class="info-value">{{ class_name }}</span>
+                        <span class="info-value">{{ class_name.title() }}</span>
                     </div>
                     <div class="info-col">
                         <span class="info-label">No. in Class:</span>
@@ -117,33 +117,33 @@
                                 <tbody>
                                     <tr>
                                         <td>Punctuality</td>
-                                        <td class="rating-cell">0</td>
+                                        <td class="rating-cell">{{ psychomotor.punctuality }}</td>
                                         <td>Neatness</td>
-                                        <td class="rating-cell">0</td>
+                                        <td class="rating-cell">{{ psychomotor.neatness }}</td>
                                     </tr>
                                     <tr>
                                         <td>Honesty</td>
-                                        <td class="rating-cell">0</td>
+                                        <td class="rating-cell">{{ psychomotor.honesty }}</td>
                                         <td>Cooperation</td>
-                                        <td class="rating-cell">0</td>
+                                        <td class="rating-cell">{{ psychomotor.cooperation }}</td>
                                     </tr>
                                     <tr>
                                         <td>Leadership</td>
-                                        <td class="rating-cell">0</td>
+                                        <td class="rating-cell">{{ psychomotor.leadership }}</td>
                                         <td>Perseverance</td>
-                                        <td class="rating-cell">0</td>
+                                        <td class="rating-cell">{{ psychomotor.perseverance }}</td>
                                     </tr>
                                     <tr>
                                         <td>Politeness</td>
-                                        <td class="rating-cell">0</td>
+                                        <td class="rating-cell">{{ psychomotor.politeness }}</td>
                                         <td>Obedience</td>
-                                        <td class="rating-cell">0</td>
+                                        <td class="rating-cell">{{ psychomotor.obedience }}</td>
                                     </tr>
                                     <tr>
                                         <td>Attentiveness</td>
-                                        <td class="rating-cell">0</td>
+                                        <td class="rating-cell">{{ psychomotor.attentiveness }}</td>
                                         <td>Attitude to work</td>
-                                        <td class="rating-cell">0</td>
+                                        <td class="rating-cell">{{ psychomotor.attitude_to_work }}</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -192,7 +192,7 @@
                 </div>
                 
                 <div class="comment-box">
-                    <div class="comment-label">Head Teacher's Comment:</div>
+                    <div class="comment-label">Head Teacher/Principal Comment:</div>
                     <div class="comment-area">{{ head_teacher_comment }}</div>
                 </div>
             </div>

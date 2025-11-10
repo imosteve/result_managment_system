@@ -16,7 +16,8 @@ from utils import (
 )
 from database import (
     get_all_classes, get_students_by_class, get_student_scores, 
-    get_class_average, get_student_grand_totals, get_comment, get_subjects_by_class
+    get_class_average, get_student_grand_totals, get_comment, get_subjects_by_class,
+    get_psychomotor_rating
 )
 
 # Email Configuration
@@ -26,7 +27,7 @@ EMAIL_SENDER = os.getenv('EMAIL_SENDER', "SUIS Terminal Result <ideas.elites@gma
 EMAIL_PASSWORD = os.getenv('EMAIL_PASSWORD', "lkydcrsaritupygu")
 
 def generate_report_card(student_name, class_name, term, session):
-    """Generate PDF report card for a student - ALWAYS ONE PAGE"""
+    """Generate PDF report card for a student"""
     user_id = st.session_state.user_id
     role = st.session_state.role
 
@@ -48,10 +49,10 @@ def generate_report_card(student_name, class_name, term, session):
 
     # Calculate student average and totals (only from actual scores)
     if student_scores:
-        total_score = sum(score[5] for score in student_scores)  # total_score column
-        total_test = sum(int(score[3]) for score in student_scores)  # test_score column as int
-        total_exam = sum(int(score[4]) for score in student_scores)  # exam_score column as int
-        grand_total = int(total_test + total_exam)  # Should match sum of total_score
+        total_score = sum(score[5] for score in student_scores)
+        total_test = sum(int(score[3]) for score in student_scores)
+        total_exam = sum(int(score[4]) for score in student_scores)
+        grand_total = int(total_test + total_exam)
         avg = total_score / len(student_scores) if student_scores else 0
         grade = assign_grade(avg)
     else:
@@ -59,7 +60,7 @@ def generate_report_card(student_name, class_name, term, session):
         avg = 0
         grade = "-"
 
-    # Calculate class average - use the same method as broadsheet for consistency
+    # Calculate class average
     class_average = get_class_average(class_name, term, session, user_id, role)
 
     # Get position based on grand total comparison
@@ -72,10 +73,25 @@ def generate_report_card(student_name, class_name, term, session):
     class_teacher_comment = comment['class_teacher_comment'] if comment and comment['class_teacher_comment'] else ""
     head_teacher_comment = comment['head_teacher_comment'] if comment and comment['head_teacher_comment'] else ""
 
+    # Fetch psychomotor ratings
+    psychomotor = get_psychomotor_rating(student_name, class_name, term, session)
+    psychomotor_ratings = {
+        'punctuality': psychomotor['punctuality'] if psychomotor else 0,
+        'neatness': psychomotor['neatness'] if psychomotor else 0,
+        'honesty': psychomotor['honesty'] if psychomotor else 0,
+        'cooperation': psychomotor['cooperation'] if psychomotor else 0,
+        'leadership': psychomotor['leadership'] if psychomotor else 0,
+        'perseverance': psychomotor['perseverance'] if psychomotor else 0,
+        'politeness': psychomotor['politeness'] if psychomotor else 0,
+        'obedience': psychomotor['obedience'] if psychomotor else 0,
+        'attentiveness': psychomotor['attentiveness'] if psychomotor else 0,
+        'attitude_to_work': psychomotor['attitude_to_work'] if psychomotor else 0
+    }
+
     # Create score dictionary for quick lookup
     score_dict = {score[2]: score for score in student_scores}
 
-    # Prepare data for template with all subjects - convert scores to integers
+    # Prepare data for template with all subjects
     subjects_data = []
     for subject in all_subjects:
         subject_name = subject[1]
@@ -120,7 +136,8 @@ def generate_report_card(student_name, class_name, term, session):
             grand_total=grand_total,
             class_teacher_comment=class_teacher_comment,
             head_teacher_comment=head_teacher_comment,
-            next_term_date="To be announced"  # Static placeholder
+            psychomotor=psychomotor_ratings,
+            next_term_date="To be announced"
         )
 
         # Generate PDF - FORCE ONE PAGE
@@ -132,7 +149,10 @@ def generate_report_card(student_name, class_name, term, session):
         one_page_css = CSS(string='''
             @page {
                 size: A4;
-                margin: 10mm;
+                margin-top: 10mm;
+                margin-bottom: 10mm;
+                margin-left: 15mm;
+                margin-right: 15mm;
             }
             body {
                 margin: 0;
@@ -349,7 +369,7 @@ def generate_tab():
     create_metric_5col_report(gender, no_in_class, class_average, pupil_average, position)
 
     # Individual Report Card
-    if st.button("📄 Generate Report Card"):
+    if st.button("Generate Report Card"):
         pdf_path = generate_report_card(selected_student, class_name, term, session)
         if pdf_path and os.path.exists(pdf_path):
             with open(pdf_path, "rb") as f:
@@ -366,7 +386,7 @@ def generate_tab():
     st.markdown("---")
 
     # Batch Report Cards
-    if st.button("🗂️ Generate All Report Cards for Class"):
+    if st.button("🗂️ Generate All Report Cards"):
         st.info(f"Generating report cards for {class_name} - {term} - {session}...")
         
         success_count = 0
@@ -416,7 +436,7 @@ def generate_tab():
             st.info("Make sure these students have scores entered for at least one subject.")
 
 def email_tab():
-    """Tab 2: Send Report Cards via Email"""
+    """Tab 2: Email All Report Cards"""
     user_id = st.session_state.user_id
     role = st.session_state.role
 
@@ -468,7 +488,7 @@ def email_tab():
     st.info(f"📧 {len(students_with_email)} student(s) have email addresses and can receive reports.")
 
     # Individual Email
-    st.markdown("### 📨 Send Report Card")
+    st.markdown("### Email Report Card")
     student_names_with_email = [s[1] for s in students_with_email]
     selected_student = st.selectbox("Select Student", student_names_with_email, key="email_student")
     
@@ -476,7 +496,7 @@ def email_tab():
     if student_data:
         st.info(f"📧 Email: {student_data[3]}")
 
-    if st.button("📧 Send Report Card"):
+    if st.button("Send"):
         if not student_data or not student_data[3]:
             st.error("❌ Student email not found.")
             return
@@ -496,10 +516,10 @@ def email_tab():
     st.markdown("---")
 
     # Batch Email
-    st.markdown("### 📬 Send All Report Cards via Email")
+    st.markdown("### Send All Report Cards via Email")
     st.warning("⚠️ This will generate and send report cards to all students with email addresses. This may take some time.")
     
-    if st.button("📬 Send All Report Cards"):
+    if st.button("Send All"):
         st.info(f"Generating and sending report cards for {len(students_with_email)} students...")
         
         success_count = 0

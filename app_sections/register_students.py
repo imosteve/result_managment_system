@@ -97,7 +97,8 @@ def register_students():
             },
             hide_index=True,
             width="stretch",
-            key="student_editor"
+            key="student_editor",
+            height=35 * len(display_df) + 38
         )
 
         if st.button("💾 Save Changes", key="save_changes"):

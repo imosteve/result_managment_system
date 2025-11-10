@@ -71,11 +71,11 @@ def render_role_selection_form(roles: Dict[str, List[Dict[str, Any]]]) -> tuple[
     # Show role selection
     selected_role = st.selectbox("**Login as:**", role_options, label_visibility="visible")
     
-    col1, col2 = st.columns([3, 1])
+    col1, col2 = st.columns(2)
     with col1:
-        confirm_clicked = st.button("Confirm Selection", use_container_width=True, type="primary")
+        confirm_clicked = st.button("Confirm Selection", type="primary", width=200)
     with col2:
-        logout_clicked = st.button("🚪 Logout", use_container_width=True, type="secondary")
+        logout_clicked = st.button("Logout", type="secondary", width=200)
     
     return selected_role, confirm_clicked, logout_clicked
 

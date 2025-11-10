@@ -106,7 +106,8 @@ def _render_score_management_interface():
         return
 
     # Check if this is a senior class requiring subject selection consideration
-    is_senior_class = class_name in ["SSS 2", "SSS 3"]
+    import re
+    is_senior_class = bool(re.match(r"SSS [23].*$", class_name))
 
     # Get students for the selected class and subject
     students = _get_accessible_students(class_name, term, session, user_id, role, selected_subject, is_senior_class)
@@ -124,7 +125,7 @@ def _render_score_management_interface():
     
     # Show info message for senior classes
     if is_senior_class:
-        st.info(f"📋 Showing {len(students)} student(s) who selected {selected_subject}")
+        st.info(f"Showing {len(students)} student(s) who selected {selected_subject}")
     
     # Render tabs for different operations
     _render_score_tabs(students, existing_scores, class_name, selected_subject, term, session)
@@ -281,7 +282,7 @@ def _get_existing_scores(class_name: str, subject: str, term: str, session: str,
 def _render_score_tabs(students: List[tuple], score_map: Dict[str, tuple], 
                       class_name: str, subject: str, term: str, session: str):
     """Render the tabs for score management operations"""
-    tab1, tab2, tab3 = st.tabs(["📝 Enter Scores", "👀 Preview Scores", "🗑️ Clear All Scores"])
+    tab1, tab2, tab3 = st.tabs(["Enter Scores", "Preview Scores", "Clear All Scores"])
 
     with tab1:
         _render_score_entry_tab(students, score_map, class_name, subject, term, session)
@@ -295,7 +296,7 @@ def _render_score_tabs(students: List[tuple], score_map: Dict[str, tuple],
 def _render_score_entry_tab(students: List[tuple], score_map: Dict[str, tuple],
                            class_name: str, subject: str, term: str, session: str):
     """Render the score entry tab"""
-    st.subheader("📝 Enter Scores")
+    st.subheader("Enter Scores")
     
     if not students:
         st.warning("⚠️ No students available for score entry.")
@@ -341,7 +342,7 @@ def _render_score_entry_tab(students: List[tuple], score_map: Dict[str, tuple],
                 "Student": st.column_config.TextColumn(
                     "Student", 
                     disabled=True, 
-                    width=300
+                    width=200
                 ),
                 "Test (30%)": st.column_config.NumberColumn(
                     "Test (30%)",
@@ -355,8 +356,9 @@ def _render_score_entry_tab(students: List[tuple], score_map: Dict[str, tuple],
                 ),
             },
             hide_index=True,
-            width="stretch",
-            key=f"score_editor_{class_name}_{subject}_{term}_{session}"
+            width=500,
+            key=f"score_editor_{class_name}_{subject}_{term}_{session}",
+            height=35 * len(editable_rows) + 38  # 35px per row + 38px header (approximate)
         )
 
         # Validate scores before saving
@@ -465,14 +467,14 @@ def _render_score_preview_tab(students: List[tuple], score_map: Dict[str, tuple]
         existing = score_map.get(student_name)
         
         if existing:
-            test = int(existing[3]) if existing[3] is not None else 0.0
-            exam = int(existing[4]) if existing[4] is not None else 0.0
+            test = int(existing[3]) if existing[3] is not None else 0
+            exam = int(existing[4]) if existing[4] is not None else 0
             total = int(existing[5]) if existing[5] is not None else test + exam
             grade = existing[6] if existing[6] else assign_grade(total)
             position = format_ordinal(existing[7]) if existing[7] else "-"
         else:
-            test = exam = total = 0.0
-            grade = assign_grade(0.0)
+            test = exam = total = 0
+            grade = assign_grade(0)
             position = "-"
         
         preview_data[student_name] = {
@@ -494,7 +496,7 @@ def _render_score_preview_tab(students: List[tuple], score_map: Dict[str, tuple]
         pd.DataFrame(final_preview_data),
         column_config={
             "S/N": st.column_config.TextColumn("S/N", width="small"),
-            "Student": st.column_config.TextColumn("Student", width="large"),
+            "Student": st.column_config.TextColumn("Student", width="medium"),
             "Test": st.column_config.TextColumn("Test", width="small"),
             "Exam": st.column_config.TextColumn("Exam", width="small"),
             "Total": st.column_config.TextColumn("Total", width="small"),
@@ -502,7 +504,8 @@ def _render_score_preview_tab(students: List[tuple], score_map: Dict[str, tuple]
             "Position": st.column_config.TextColumn("Position", width="small")
         },
         hide_index=True,
-        width="stretch"
+        width="content",
+        height=35 * len(final_preview_data) + 38  # 35px per row + 38px header (approximate)
     )
 
 def _render_clear_scores_tab(score_map: Dict[str, tuple], class_name: str, 
@@ -535,7 +538,7 @@ def _render_clear_scores_tab(score_map: Dict[str, tuple], class_name: str,
                 logger.info(f"Scores cleared for {subject} in {class_name} - {term} - {session} by user {st.session_state.user_id}")
                 st.rerun()
     else:
-        st.info("📝 No scores available to clear.")
+        st.info("No scores available to clear.")
 
 def _clear_all_scores_from_database(class_name: str, subject: str, term: str, session: str) -> bool:
     """Clear all scores from the database"""

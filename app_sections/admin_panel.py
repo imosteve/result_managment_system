@@ -309,7 +309,7 @@ def admin_panel():
                         
                         classes = get_fresh_classes()
                         
-                        col1, col2 = st.columns(2)
+                        col1, col2 = st.columns(2, vertical_alignment='bottom')
                         with col1:
                             class_options = [f"{cls['class_name']} - {cls['term']} - {cls['session']}" for cls in classes]
                             current_class = f"{selected_assignment['class_name']} - {selected_assignment['term']} - {selected_assignment['session']}"
@@ -363,11 +363,10 @@ def admin_panel():
                 
                 assignment_s_n_to_delete = st.selectbox(
                     "Select Assignment to Delete",
-                    [a["S/N"] for a in assignments],
-                    format_func=lambda x: next(f"{a['Username']} - {a['Class']} - {a['Subject']}" for a in assignments if a["S/N"] == x),
+                    [""] + [a["S/N"] for a in assignments],
+                    format_func=lambda x: "Select an assignment" if x == "" else next(f"{a['Username']} - {a['Class']} - {a['Subject']}" for a in assignments if a["S/N"] == x),
                     key="delete_assignment_select"
                 )
-                
                 if assignment_s_n_to_delete:
                     selected_assignment = next((a for a in assignments if a["S/N"] == assignment_s_n_to_delete), None)
                     if selected_assignment:
@@ -386,7 +385,7 @@ def admin_panel():
                     def confirm_delete_assignment():
                         assignment_info = st.session_state.assignment_to_delete_info
                         st.markdown(f"### Are you sure you want to delete this assignment?")
-                        st.error(f"**Teacher:** {assignment_info['Teacher']}")
+                        st.error(f"**Teacher:** {assignment_info['Username']}")
                         st.error(f"**Class:** {assignment_info['Class']}")
                         st.error(f"**Subject:** {assignment_info['Subject']}")
                         st.markdown("---")

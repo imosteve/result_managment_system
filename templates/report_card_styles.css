@@ -64,18 +64,18 @@ body {
 .school-name {
     font-weight: bold;
     font-size: 24px;
-    margin: 3px 0;
+    margin: 8px 0;
 }
 
 .school-address {
     font-size: 14px;
-    margin: 3px 0;
+    margin: 8px 0;
 }
 
 .report-title {
     font-weight: bold;
     font-size: 16px;
-    margin: 3px 0;
+    margin: 8px 0;
 }
 
 
@@ -115,7 +115,7 @@ body {
     justify-content: space-between;
     align-items: center;
     min-height: 23px; /* Ensure this is here */
-    padding: 0 8px;
+    padding: 0 4px;
     box-sizing: border-box;
 }
 
@@ -165,7 +165,7 @@ body {
 .performance-table th,
 .performance-table td {
     border: 1px solid #000;
-    padding: 4px 6px;
+    padding: 3px 6px;
     text-align: center;
     font-size: 13px;
 }
@@ -311,16 +311,15 @@ body {
 /* Label above comment, centered */
 .comment-label {
     font-weight: bold;
-    font-size: 10px;
-    width: 180px;
-    text-align: center;
+    font-size: 12px;
+    width: 300px;
+    text-align: left;
     padding: 0 5px;
     border-right: 1px solid #000;
     align-self: stretch; /* ✅ THIS is the key fix */
 
     display: flex;               /* Add flex to the label */
     align-items: center;         /* Vertically center content */
-    justify-content: center;     /* Horizontally center text */
 }
 
 
@@ -364,7 +363,8 @@ body {
 /* Print Styles */
 @media print {
     @page {
-    margin: 0.5in;
+    margin: 1in;
+    background-color: #66db070d;
     }
     body {
         padding: 0;
