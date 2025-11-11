@@ -5,7 +5,6 @@ import os
 from typing import Dict, Callable, Optional
 from streamlit_cookies_manager import EncryptedCookieManager
 
-from app_sections import admin_panel
 from config import APP_CONFIG, COOKIE_PASSWORD
 from database import create_tables, get_database_stats
 from utils import inject_login_css, render_page_header
@@ -445,15 +444,15 @@ class ApplicationManager:
             from app_sections import (
                 manage_comments,
                 manage_classes, register_students, manage_subjects, 
-                enter_scores, view_broadsheet, generate_reports
+                enter_scores, view_broadsheet, generate_reports,
+                system_dashboard, admin_panel
             )
             from auth.assignment_selection import select_assignment
-            
             base_options = {}
             
             if role == "superadmin":
                 base_options = {
-                    "🏠 Dashboard": self.render_dashboard,
+                    "🔧 System Dashboard": system_dashboard.system_dashboard,  # NEW
                     "👥 Admin Panel": admin_panel.admin_panel,
                     "🏫 Manage Classes": manage_classes.create_class_section,
                     "👥 Register Students": register_students.register_students,
@@ -497,9 +496,9 @@ class ApplicationManager:
             logger.error(f"Error importing navigation modules: {e}")
             # Return minimal navigation if imports fail
             return {
-                "🏠 Dashboard": self.render_dashboard
+                "🔧 System Dashboard": system_dashboard.system_dashboard
             }
-
+       
     # Add this method to ApplicationManager class in app_manager.py
     def handle_post_assignment_navigation(self, role: str):
         """
@@ -529,151 +528,4 @@ class ApplicationManager:
                 # Set this as the selected page
                 st.session_state.selected_page = first_section
                 logger.info(f"Navigating to first section after assignment: {first_section}")
-
-    def render_dashboard(self):
-        """Render dashboard with system statistics"""
-        render_page_header("📊 System Dashboard")
-        try:
-            # Get database statistics
-            stats = get_database_stats()
-            
-            # Create columns for metrics
-            col1, col2, col3, col4 = st.columns(4)
-            
-            inject_login_css("templates/metrics_styles.css")
-            # Display metrics with custom style
-            with col1:
-                st.markdown(f"<div class='custom-metric'><div class='label'>Total Classes</div><div class='value'>{stats.get('classes', 0)}</div></div>", unsafe_allow_html=True)
-            with col2:
-                st.markdown(f"<div class='custom-metric'><div class='label'>Total Students</div><div class='value'>{stats.get('students', 0)}</div></div>", unsafe_allow_html=True)
-            with col3:
-                st.markdown(f"<div class='custom-metric'><div class='label'>Total Subjects</div><div class='value'>{stats.get('subjects', 0)}</div></div>", unsafe_allow_html=True)
-            with col4:
-                st.markdown(f"<div class='custom-metric'><div class='label'>Total Scores</div><div class='value'>{stats.get('scores', 0)}</div></div>", unsafe_allow_html=True)
-
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.markdown(f"<div class='custom-metric'><div class='label'>Total Users</div><div class='value'>{stats['users']}</div></div>", unsafe_allow_html=True)
-            with col2:
-                st.markdown(f"<div class='custom-metric'><div class='label'>Total Teachers</div><div class='value'>{stats['teachers']}</div></div>", unsafe_allow_html=True)
-            with col3:
-                st.markdown(f"<div class='custom-metric'><div class='label'>Total Assignments</div><div class='value'>{stats['assignments']}</div></div>", unsafe_allow_html=True)
-            with col4:
-                st.markdown(f"<div class='custom-metric'><div class='label'>Total Comments</div><div class='value'>{stats['comments']}</div></div>", unsafe_allow_html=True)
-
-
-            # Role-specific dashboard content
-            role = st.session_state.get('role')
-            self.render_role_specific_dashboard(role)
-            
-        except Exception as e:
-            logger.error(f"Error rendering dashboard: {str(e)}")
-            st.error("❌ Error loading dashboard data.")
-            
-            # Show basic info even if stats fail
-            st.info("📊 Dashboard data temporarily unavailable.")
-
-    def render_role_specific_dashboard(self, role: str):
-        """Render role-specific dashboard content"""
-        st.markdown("---")
-        
-        if role in "superadmin":
-            st.subheader("🔧 Admin Tools")
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                if st.button("📊 System Health Check", type="secondary"):
-                    self.perform_health_check()
-            
-            with col2:
-                if st.button("🗄️ Database Backup", type="secondary"):
-                    st.info("💡 Database backup functionality would be implemented here.")
-            
-            with col3:
-                if st.button("📋 Activity Logs", type="secondary"):
-                    st.info("💡 Activity log viewer would be implemented here.")
-        
-        elif role in ["class_teacher", "subject_teacher"]:
-            st.subheader("📋 Quick Actions")
-            assignment = st.session_state.get('assignment')
-            
-            if assignment:
-                st.info(f"📌 Current Assignment: {assignment.get('class_name', 'N/A')} - {assignment.get('subject_name', 'All Subjects')}")
-            else:
-                st.warning("⚠️ No assignment selected. Logout and login again to select an assignment to continue.")
-
-    def perform_health_check(self):
-        """Perform system health check"""
-        with st.spinner("🔍 Performing health check..."):
-            import time
-            time.sleep(1)  # Simulate health check
-            
-            checks = {
-                "Database Connection": self.check_database_connection(),
-                "Session Management": self.check_session_management(),
-                "File System": self.check_file_system(),
-                "Memory Usage": self.check_memory_usage()
-            }
-            
-            st.subheader("🏥 System Health Report")
-            for check_name, status in checks.items():
-                if status:
-                    st.success(f"✅ {check_name}: OK")
-                else:
-                    st.error(f"❌ {check_name}: Issues detected")
-
-    def check_database_connection(self) -> bool:
-        """Check database connection health"""
-        try:
-            get_database_stats()
-            return True
-        except Exception as e:
-            logger.error(f"Database health check failed: {e}")
-            return False
-
-    def check_session_management(self) -> bool:
-        """Check session management health"""
-        return 'cookies' in st.session_state and st.session_state.cookies is not None
-
-    def check_file_system(self) -> bool:
-        """Check file system health"""
-        try:
-            required_dirs = ['logs', 'data', 'templates']
-            for directory in required_dirs:
-                if not os.path.exists(directory):
-                    try:
-                        os.makedirs(directory, exist_ok=True)
-                        logger.info(f"Created directory: {directory}")
-                    except Exception as e:
-                        logger.warning(f"Could not create directory {directory}: {e}")
-                        return False
-            
-            # Check if directories are writable
-            for directory in required_dirs:
-                if os.path.exists(directory):
-                    test_file = os.path.join(directory, '.test_write')
-                    try:
-                        with open(test_file, 'w') as f:
-                            f.write('test')
-                        os.remove(test_file)
-                    except Exception as e:
-                        logger.warning(f"Directory {directory} is not writable: {e}")
-                        return False
-            
-            return True
-        except Exception as e:
-            logger.error(f"File system check failed: {e}")
-            return False
-
-    def check_memory_usage(self) -> bool:
-        """Check memory usage (simplified)"""
-        try:
-            import psutil
-            memory_percent = psutil.virtual_memory().percent
-            return memory_percent < 80  # Consider healthy if less than 80%
-        except ImportError:
-            logger.info("psutil not available, skipping memory check")
-            return True  # If psutil not available, assume OK
-        except Exception as e:
-            logger.error(f"Memory check failed: {e}")
-            return False
+    
