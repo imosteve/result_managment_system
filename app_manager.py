@@ -6,7 +6,7 @@ from typing import Dict, Callable, Optional
 from streamlit_cookies_manager import EncryptedCookieManager
 
 from config import APP_CONFIG, COOKIE_PASSWORD
-from database import create_tables, get_database_stats
+from database import create_tables, get_database_stats, migrate_add_school_fees_column
 from utils import inject_login_css, render_page_header
 
 logger = logging.getLogger(__name__)
@@ -262,6 +262,10 @@ class ApplicationManager:
         """Initialize database with error handling"""
         try:
             create_tables()
+
+            # Run migration to add school_fees_paid column if it doesn't exist
+            migrate_add_school_fees_column()
+    
             logger.info("Database tables initialized successfully")
             return True
         except Exception as e:

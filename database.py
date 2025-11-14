@@ -64,6 +64,7 @@ def create_tables():
             name TEXT NOT NULL,
             gender TEXT CHECK(gender IN ('M', 'F')),
             email TEXT,
+            school_fees_paid TEXT DEFAULT 'NO' CHECK(school_fees_paid IN ('NO', 'YES')),
             class_name TEXT NOT NULL,
             term TEXT NOT NULL,
             session TEXT NOT NULL,
@@ -75,7 +76,7 @@ def create_tables():
             UNIQUE(name, class_name, term, session)
         );
     """)
-    
+
     # Subjects table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS subjects (
@@ -307,6 +308,7 @@ def assign_teacher(user_id, class_name, term, session, subject_name=None, assign
         return False
     finally:
         conn.close()
+
 def assign_teacher(user_id, class_name, term, session, subject_name=None, assignment_type='class_teacher'):
     """Assign a user as class teacher or subject teacher with proper duplicate checking"""
     conn = get_connection()
@@ -585,7 +587,7 @@ def get_students_by_class(class_name, term, session, user_id=None, role=None):
     
     if role in ["superadmin", "admin"]:
         cursor.execute("""
-            SELECT id, name, gender, email 
+            SELECT id, name, gender, email, school_fees_paid
             FROM students 
             WHERE class_name = ? AND term = ? AND session = ?
             ORDER BY name
@@ -593,7 +595,7 @@ def get_students_by_class(class_name, term, session, user_id=None, role=None):
     elif user_id:
         # Teachers see students in their assigned classes
         cursor.execute("""
-            SELECT DISTINCT s.id, s.name, s.gender, s.email 
+            SELECT DISTINCT s.id, s.name, s.gender, s.email, s.school_fees_paid
             FROM students s
             JOIN teacher_assignments ta ON s.class_name = ta.class_name 
                 AND s.term = ta.term AND s.session = ta.session
@@ -608,15 +610,15 @@ def get_students_by_class(class_name, term, session, user_id=None, role=None):
     conn.close()
     return students
 
-def create_student(name, gender, email, class_name, term, session):
-    """Create a new student"""
+def create_student(name, gender, email, class_name, term, session, school_fees_paid='NO'):
+    """Create a new student with optional school fees status"""
     conn = get_connection()
     cursor = conn.cursor()
     try:
         cursor.execute("""
-            INSERT INTO students (name, gender, email, class_name, term, session) 
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (name, gender or None, email or None, class_name, term, session))
+            INSERT INTO students (name, gender, email, school_fees_paid, class_name, term, session) 
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (name, gender or None, email or None, school_fees_paid, class_name, term, session))
         conn.commit()
         return True
     except sqlite3.IntegrityError:
@@ -630,9 +632,9 @@ def create_students_batch(students_data, class_name, term, session):
     cursor = conn.cursor()
     try:
         cursor.executemany("""
-            INSERT INTO students (name, gender, email, class_name, term, session) 
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, [(s['name'], s.get('gender'), s.get('email'), class_name, term, session) 
+            INSERT INTO students (name, gender, email, school_fees_paid, class_name, term, session) 
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, [(s['name'], s.get('gender'), s.get('email'), s.get('school_fees_paid', 0), class_name, term, session) 
               for s in students_data])
         conn.commit()
         return True
@@ -642,15 +644,15 @@ def create_students_batch(students_data, class_name, term, session):
     finally:
         conn.close()
 
-def update_student(student_id, name, gender, email):
-    """Update student information"""
+def update_student(student_id, name, gender, email, school_fees_paid='NO'):
+    """Update student information including school fees status"""
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
         UPDATE students 
-        SET name = ?, gender = ?, email = ? 
+        SET name = ?, gender = ?, email = ?, school_fees_paid = ?
         WHERE id = ?
-    """, (name, gender or None, email or None, student_id))
+    """, (name, gender or None, email or None, school_fees_paid, student_id))
     conn.commit()
     conn.close()
 
@@ -1406,6 +1408,34 @@ def validate_score_data(test_score, exam_score):
     
     return errors
 
+def migrate_add_school_fees_column():
+    """Add school_fees_paid column to existing students table if it doesn't exist"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        # Check if column exists
+        cursor.execute("PRAGMA table_info(students)")
+        columns = [col[1] for col in cursor.fetchall()]
+        
+        if 'school_fees_paid' not in columns:
+            logger.info("Adding school_fees_paid column to students table...")
+            cursor.execute("""
+                ALTER TABLE students 
+                ADD COLUMN school_fees_paid TEXT DEFAULT 'NO' CHECK(school_fees_paid IN ('NO', 'YES')) 
+            """)
+            conn.commit()
+            logger.info("Successfully added school_fees_paid column with default value 'NO' (unpaid)")
+        else:
+            logger.info("school_fees_paid column already exists")
+        
+        return True
+    except Exception as e:
+        logger.error(f"Error adding school_fees_paid column: {str(e)}")
+        conn.rollback()
+        return False
+    finally:
+        conn.close()
 
 # ==================== STUDENT-SUBJECT OPERATIONS ====================
 def create_student_subject_selections_table():
@@ -1475,3 +1505,36 @@ def get_all_student_subject_selections(class_name, term, session):
     selections = cursor.fetchall()
     conn.close()
     return selections
+
+
+# ==================== Helper function to check fees status ====================
+def get_students_with_paid_fees(class_name, term, session, user_id=None, role=None):
+    """Get only students who have paid school fees and have email addresses"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    if role in ["superadmin", "admin"]:
+        cursor.execute("""
+            SELECT id, name, gender, email, school_fees_paid
+            FROM students 
+            WHERE class_name = ? AND term = ? AND session = ?
+                AND school_fees_paid = 'YES' AND email IS NOT NULL AND email != ''
+            ORDER BY name
+        """, (class_name, term, session))
+    elif user_id:
+        cursor.execute("""
+            SELECT DISTINCT s.id, s.name, s.gender, s.email, s.school_fees_paid
+            FROM students s
+            JOIN teacher_assignments ta ON s.class_name = ta.class_name 
+                AND s.term = ta.term AND s.session = ta.session
+            WHERE s.class_name = ? AND s.term = ? AND s.session = ? 
+                AND ta.user_id = ?
+                AND s.school_fees_paid = 'YES' AND s.email IS NOT NULL AND s.email != ''
+            ORDER BY s.name
+        """, (class_name, term, session, user_id))
+    else:
+        conn.close()
+        return []
+    students = cursor.fetchall()
+    conn.close()
+    return students

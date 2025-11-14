@@ -64,10 +64,11 @@ def register_students():
             "S/N": str(idx),
             "Name": student[1],
             "Gender": student[2],
-            "Email": student[3]
+            "Email": student[3],
+            "Paid Fees": student[4]
         })
 
-    df = pd.DataFrame(df_data) if df_data else pd.DataFrame(columns=["ID", "S/N", "Name", "Gender", "Email"])
+    df = pd.DataFrame(df_data) if df_data else pd.DataFrame(columns=["ID", "S/N", "Name", "Gender", "Email", "Paid Fees"])
     
     # Tabs for different operations
     tab1, tab2, tab3, tab4 = st.tabs(["View/Edit Students", "Add New Student", "Batch Add Students", "Delete Student(s)"])
@@ -76,24 +77,29 @@ def register_students():
         st.subheader("Student List")
         # Display Name, Gender, Email but keep ID hidden from users by not including it in the editor.
         # Preserve a stable id list to map edited rows back to the correct student records.
-        display_df = df[["Name", "Gender", "Email"]] if not df.empty else pd.DataFrame(columns=["Name", "Gender", "Email"])
+        display_df = df[["Name", "Gender", "Email", "Paid Fees"]] if not df.empty else pd.DataFrame(columns=["Name", "Gender", "Email", "Paid Fees"])
         original_ids = df["ID"].tolist() if not df.empty else []
 
         edited_df = st.data_editor(
             display_df,
             column_config={
-                "Name": st.column_config.TextColumn("Name", required=True, width="large"),
+                "Name": st.column_config.TextColumn("Name", required=True, width="medium"),
                 "Gender": st.column_config.SelectboxColumn(
                     "Gender",
                     options=["M", "F"],
                     required=True,
-                    width="medium"
+                    width="small"
                 ),
                 "Email": st.column_config.TextColumn(
                     "Email",
                     help="Enter a valid email address",
-                    width="large"
-                )
+                    width="medium"
+                ),
+                "Paid Fees": st.column_config.SelectboxColumn(
+                    "Paid Fees",
+                    options=["NO", "YES"],
+                    width="small"
+                ),
             },
             hide_index=True,
             width="stretch",
@@ -116,6 +122,7 @@ def register_students():
                 name = clean_input(str(row.get("Name", "")), "name")
                 gender = str(row.get("Gender", ""))
                 email = clean_input(str(row.get("Email", "")), "email")
+                school_fees_paid = str(row.get("Paid Fees", ""))
 
                 # Validation checks
                 if not name:
@@ -127,6 +134,9 @@ def register_students():
                 if email and "@" not in email:
                     errors.append(f"❌ Row {idx + 1}: Invalid email format")
                     continue
+                if school_fees_paid not in ["NO", "YES"]:
+                    errors.append(f"❌ Row {idx + 1}: Paid Fees must be 'NO' or 'YES'")
+                    continue
 
                 # Ensure student_id exists
                 if not student_id:
@@ -135,7 +145,7 @@ def register_students():
 
                 # Update student (pass the ID and cleaned fields)
                 try:
-                    update_student(student_id, name, gender, email)
+                    update_student(student_id, name, gender, email, school_fees_paid)
                     success_count += 1
                 except Exception as e:
                     # logger.error(f"Failed to update student id={student_id}: {e}")
@@ -162,6 +172,7 @@ def register_students():
             new_name = st.text_input("Name", placeholder="Enter student name")
             new_gender = st.selectbox("Gender", ["M", "F"])
             new_email = st.text_input("Email", placeholder="Enter student email")
+            school_fees_paid = st.selectbox("Paid Fees", ["NO", "YES"])
             submit_button = st.form_submit_button("➕ Add Student")
 
             if submit_button:
@@ -177,7 +188,7 @@ def register_students():
                     errors.append("❌ Student name already exists")
 
                 if not errors:
-                    success = create_student(new_name, new_gender, new_email, class_name, term, session)
+                    success = create_student(new_name, new_gender, new_email, class_name, term, session, school_fees_paid)
                     if success:
                         st.markdown('<div class="success-container">✅ Student added successfully!</div>', unsafe_allow_html=True)
                         # Clear the form by incrementing counter
@@ -201,21 +212,28 @@ def register_students():
             st.session_state.batch_form_counter = 0
 
         # Initialize batch DataFrame with counter-based key
-        batch_df = pd.DataFrame(columns=["Name", "Gender", "Email"])
-        batch_df = pd.concat([batch_df, pd.DataFrame({"Name": [""]*3, "Gender": [""]*3, "Email": [""]*3})], ignore_index=True)
+        batch_df = pd.DataFrame(columns=["Name", "Gender", "Email", "Paid Fees"])
+        batch_df = pd.concat([batch_df, pd.DataFrame({"Name": [""]*3, "Gender": [""]*3, "Email": [""]*3, "Paid Fees": [""]*3})], ignore_index=True)
 
         edited_batch_df = st.data_editor(
             batch_df,
             column_config={
-                "Name": st.column_config.TextColumn("Name", required=True),
+                "Name": st.column_config.TextColumn("Name", required=True, width="medium"),
                 "Gender": st.column_config.SelectboxColumn(
                     "Gender",
                     options=["M", "F"],
-                    required=True
+                    required=True,
+                    width="small"
                 ),
                 "Email": st.column_config.TextColumn(
                     "Email",
-                    help="Enter a valid email address"
+                    help="Enter a valid email address",
+                    width="medium"
+                ),
+                "Paid Fees": st.column_config.SelectboxColumn(
+                    "Paid Fees",
+                    options=["NO", "YES"],
+                    width="small"
                 )
             },
             num_rows="dynamic",
@@ -241,6 +259,7 @@ def register_students():
                 name = clean_input(str(row.get("Name", "")), "name")
                 gender = str(row.get("Gender", ""))
                 email = clean_input(str(row.get("Email", "")), "email")
+                school_fees_paid = str(row.get("Paid Fees", ""))
 
                 # Skip empty rows
                 if not name:
@@ -259,9 +278,12 @@ def register_students():
                 if email and "@" not in email:
                     errors.append(f"❌ Row {idx + 1}: Invalid email format")
                     continue
+                if school_fees_paid not in ["NO", "YES"]:
+                    errors.append(f"❌ Row {idx + 1}: Paid Fees must be 'NO' or 'YES'")
+                    continue
 
                 # Attempt to create student
-                success = create_student(name, gender, email, class_name, term, session)
+                success = create_student(name, gender, email, class_name, term, session, school_fees_paid)
                 if success:
                     success_count += 1
                     processed_names.add(name.lower())

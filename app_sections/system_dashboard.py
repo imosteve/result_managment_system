@@ -432,26 +432,9 @@ def render_analytics_tab(stats):
     
     class_summary = get_classes_summary()
     
-    # if class_summary:
-    #     class_data = []
-    #     for row in class_summary:
-    #         class_data.append({
-    #             "Class": row[0],
-    #             "Term": row[1],
-    #             "Session": row[2],
-    #             "Students": row[3],
-    #             "Subjects": row[4],
-    #             "Scores": row[5]
-    #         })
-        
-    #     st.dataframe(class_data, height=35 * len(class_data) + 38, width="stretch")
-    # else:
-    #     st.info("No classes found in the system.")
-    
     import pandas as pd
     from st_aggrid import AgGrid, GridOptionsBuilder
 
-    # Assuming class_summary is available
     if class_summary:
         class_data = [
             {
@@ -465,76 +448,76 @@ def render_analytics_tab(stats):
             for row in class_summary
         ]
 
-        # # Pagination settings
-        # items_per_page = 10
-        # total_items = len(class_data)
-        # total_pages = math.ceil(total_items / items_per_page)
+        # Pagination settings
+        items_per_page = 10
+        total_items = len(class_data)
+        total_pages = math.ceil(total_items / items_per_page)
 
-        # # Page selector
-        # page = st.number_input(
-        #     "Page", min_value=1, max_value=total_pages, step=1, value=1, key="page_selector"
+        # Page selector
+        page = st.number_input(
+            "Page", min_value=1, max_value=total_pages, step=1, value=1, key="page_selector"
+        )
+
+        # Slice data
+        start_idx = (page - 1) * items_per_page
+        end_idx = start_idx + items_per_page
+        page_data = class_data[start_idx:end_idx]
+
+        # Display current page
+        st.dataframe(page_data, width="stretch")
+
+        st.caption(f"Showing {start_idx + 1} – {min(end_idx, total_items)} of {total_items} entries")
+
+
+        # # Convert to DataFrame
+        # df = pd.DataFrame(class_data)
+
+        # # --- User-selectable pagination size ---
+        # page_size = st.selectbox(
+        #     "Rows per page",
+        #     options=[10, 20, 30, 50, 100],
+        #     index=1,
+        #     key="page_size_select"
         # )
 
-        # # Slice data
-        # start_idx = (page - 1) * items_per_page
-        # end_idx = start_idx + items_per_page
-        # page_data = class_data[start_idx:end_idx]
+        # # --- Build grid options ---
+        # gb = GridOptionsBuilder.from_dataframe(df)
+        # gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=page_size)
+        # gb.configure_default_column(resizable=False, filter=True, sortable=True)
+        # gridOptions = gb.build()
 
-        # # Display current page
-        # st.dataframe(page_data, width="stretch")
+        # # --- Custom CSS styling ---
+        # st.markdown("""
+        #     <style>
+        #         .ag-root-wrapper {
+        #             border: 2px solid #dcdcdc !important;
+        #             border-radius: 10px !important;
+        #             overflow: hidden;
+        #         }
+        #         .ag-cell {
+        #             padding: 5px !important;
+        #             font-size: 14px;
+        #         }
+        #     </style>
+        # """, unsafe_allow_html=True)
 
-        # st.caption(f"Showing {start_idx + 1} – {min(end_idx, total_items)} of {total_items} entries")
+        # # --- Dynamic height based on pagination size ---
+        # row_height = 35  # pixels per row
+        # header_height = 38
 
-
-        # Convert to DataFrame
-        df = pd.DataFrame(class_data)
-
-        # --- User-selectable pagination size ---
-        page_size = st.selectbox(
-            "Rows per page",
-            options=[10, 20, 30, 50, 100],
-            index=1,
-            key="page_size_select"
-        )
-
-        # --- Build grid options ---
-        gb = GridOptionsBuilder.from_dataframe(df)
-        gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=page_size)
-        gb.configure_default_column(resizable=False, filter=True, sortable=True)
-        gridOptions = gb.build()
-
-        # --- Custom CSS styling ---
-        st.markdown("""
-            <style>
-                .ag-root-wrapper {
-                    border: 2px solid #dcdcdc !important;
-                    border-radius: 10px !important;
-                    overflow: hidden;
-                }
-                .ag-cell {
-                    padding: 5px !important;
-                    font-size: 14px;
-                }
-            </style>
-        """, unsafe_allow_html=True)
-
-        # --- Dynamic height based on pagination size ---
-        row_height = 35  # pixels per row
-        header_height = 38
-
-        # Height = (row height × rows per page) + header + buffer
-        table_height = row_height * len(df) + header_height
+        # # Height = (row height × rows per page) + header + buffer
+        # table_height = row_height * len(df) + header_height
 
 
-        # --- Render grid ---
-        AgGrid(
-            df,
-            gridOptions=gridOptions,
-            theme='material',
-            fit_columns_on_grid_load=True,
-            height=table_height,
-            allow_unsafe_jscode=True,
-        )
+        # # --- Render grid ---
+        # AgGrid(
+        #     df,
+        #     gridOptions=gridOptions,
+        #     theme='material',
+        #     fit_columns_on_grid_load=True,
+        #     height=table_height,
+        #     allow_unsafe_jscode=True,
+        # )
 
     else:
         st.info("No classes found in the system.")

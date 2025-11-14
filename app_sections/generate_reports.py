@@ -371,17 +371,18 @@ def generate_tab():
     # Individual Report Card
     if st.button("Generate Report Card"):
         pdf_path = generate_report_card(selected_student, class_name, term, session)
-        if pdf_path and os.path.exists(pdf_path):
-            with open(pdf_path, "rb") as f:
-                st.download_button(
-                    label=f"📥 Download {selected_student}'s Report Card",
-                    data=f,
-                    file_name=os.path.basename(pdf_path),
-                    mime="application/pdf"
-                )
-            st.success(f"✅ Report card generated for {selected_student}")
-        else:
-            st.error("❌ Failed to generate report card. Make sure the student has scores entered.")
+        with st.spinner(f"Generating and sending report for {selected_student}..."):
+            if pdf_path and os.path.exists(pdf_path):
+                with open(pdf_path, "rb") as f:
+                    st.download_button(
+                        label=f"📥 Download {selected_student}'s Report Card",
+                        data=f,
+                        file_name=os.path.basename(pdf_path),
+                        mime="application/pdf"
+                    )
+                st.success(f"✅ Report card generated for {selected_student}")
+            else:
+                st.error("❌ Failed to generate report card. Make sure the student has scores entered.")
 
     st.markdown("---")
 
@@ -447,8 +448,7 @@ def email_tab():
 
     selected_class_data = render_persistent_class_selector(
         classes, 
-        widget_key="email_reports_class"  # Use unique key for each section
-    )
+        widget_key="email_reports_class"    )
 
     if not selected_class_data:
         st.warning("⚠️ No class selected.")
@@ -460,7 +460,7 @@ def email_tab():
 
     students = get_students_by_class(class_name, term, session, user_id, role)
     if not students:
-        st.warning(f"⚠️ No students found for {class_name} - {term} - {session}.")
+        st.warning("⚠️ No students found for this class.")
         return
 
     st.markdown(
@@ -474,27 +474,32 @@ def email_tab():
         unsafe_allow_html=True
     )
 
-    # Filter students with email addresses
-    students_with_email = [s for s in students if s[3]]  # s[3] is email
+    # Filter students with email addresses AND who have paid fees (s[4] is school_fees_paid)
+    students_eligible = [s for s in students if s[3] and s[4] == 'YES']  # s[3] is email, s[4] is school_fees_paid
     students_without_email = [s for s in students if not s[3]]
+    students_unpaid_fees = [s for s in students if s[3] and s[4] != 'YES']
 
     if students_without_email:
         st.warning(f"⚠️ {len(students_without_email)} student(s) do not have email addresses: {', '.join([s[1] for s in students_without_email])}")
 
-    if not students_with_email:
-        st.error("❌ No students have email addresses. Please add email addresses before sending reports.")
+    if students_unpaid_fees:
+        st.warning(f"ℹ️ {len(students_unpaid_fees)} student(s) have email but haven't paid school fees (cannot receive reports via email): {', '.join([s[1] for s in students_unpaid_fees])}")
+
+    if not students_eligible:
+        st.warning(f"⚠️ No students are eligible to receive reports via email. Students must have email and paid fees.")
         return
 
-    st.info(f"📧 {len(students_with_email)} student(s) have email addresses and can receive reports.")
+    st.info(f"📧 {len(students_eligible)} student(s) are eligible to receive report cards via email: {', '.join([s[1] for s in students_eligible])}")
 
     # Individual Email
     st.markdown("### Email Report Card")
-    student_names_with_email = [s[1] for s in students_with_email]
-    selected_student = st.selectbox("Select Student", student_names_with_email, key="email_student")
+    student_names_eligible = [s[1] for s in students_eligible]
+    selected_student = st.selectbox("Select Student", student_names_eligible, key="email_student")
     
-    student_data = next((s for s in students_with_email if s[1] == selected_student), None)
+    student_data = next((s for s in students_eligible if s[1] == selected_student), None)
     if student_data:
-        st.info(f"📧 Email: {student_data[3]}")
+        st.write(f"📧 Email: {student_data[3]}")
+
 
     if st.button("Send"):
         if not student_data or not student_data[3]:
@@ -520,18 +525,18 @@ def email_tab():
     st.warning("⚠️ This will generate and send report cards to all students with email addresses. This may take some time.")
     
     if st.button("Send All"):
-        st.info(f"Generating and sending report cards for {len(students_with_email)} students...")
+        st.info(f"Generating and sending report cards for {len(students_eligible)} students...")
         
         success_count = 0
         failed_students = []
         progress_bar = st.progress(0)
         status_text = st.empty()
         
-        for i, student in enumerate(students_with_email):
+        for i, student in enumerate(students_eligible):
             student_name = student[1]
             student_email = student[3]
             
-            status_text.text(f"Processing {student_name} ({i+1}/{len(students_with_email)})...")
+            status_text.text(f"Processing {student_name} ({i+1}/{len(students_eligible)})...")
             
             # Generate PDF
             pdf_path = generate_report_card(student_name, class_name, term, session)
@@ -545,10 +550,10 @@ def email_tab():
             else:
                 failed_students.append(f"{student_name} (PDF generation failed)")
                 
-            progress_bar.progress((i + 1) / len(students_with_email))
+            progress_bar.progress((i + 1) / len(students_eligible))
 
         status_text.text("Complete!")
-        st.success(f"✅ Successfully sent {success_count}/{len(students_with_email)} report cards.")
+        st.success(f"✅ Successfully sent {success_count}/{len(students_eligible)} report cards.")
         
         if failed_students:
             st.error(f"❌ Failed to send reports for: {', '.join(failed_students)}")
