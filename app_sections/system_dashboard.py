@@ -14,8 +14,9 @@ from database import (
     get_classes_summary, database_health_check, backup_database,
     get_connection, create_performance_indexes, get_user_role
 )
-from utils import inject_login_css, render_page_header, format_ordinal
+from utils import inject_login_css, render_page_header, format_ordinal, inject_metric_css
 from config import DB_CONFIG, APP_CONFIG
+from util.paginators import st_aggrid_paginator, streamlit_paginator
 
 logger = logging.getLogger(__name__)
 
@@ -230,7 +231,7 @@ def render_database_management_tab():
                 "Age": backup['age']
             })
         
-        st.dataframe(backup_data, use_container_width=True)
+        streamlit_paginator(backup_data, table_name="backups")
         
         # Initialize session state for confirmations
         if 'show_restore_confirm' not in st.session_state:
@@ -355,8 +356,9 @@ def render_database_management_tab():
     col1, col2 = st.columns(2)
     
     with col1:
+        # Rebuild database file to reclaim unused space and improve performance.
         st.markdown("**Vacuum Database**")
-        st.info("Rebuild database file to reclaim unused space and improve performance.")
+        st.info("Rebuild database file to improve performance.")
         if st.button("🧹 Vacuum Database", use_container_width=True):
             vacuum_database()
     
@@ -392,31 +394,7 @@ def render_analytics_tab(stats):
             user_roles['Teacher'] += 1
     
     # Inject custom CSS for metric styling
-    st.markdown("""
-        <style>
-            /* Make metric boxes look nice and uniform */
-            [data-testid="stMetricValue"] {
-                font-size: 30px !important;
-                color: #1f77b4;
-            }
-            [data-testid="stMetricLabel"] {
-                font-size: 16px !important;
-                color: #555;
-            }
-            div[data-testid="stMetric"] {
-                background: #f8f9fa;
-                border: 2px solid #4CAF50;
-                border-radius: 12px;
-                padding: 12px;
-                text-align: center;
-                box-shadow: 0 2px 6px rgba(0,0,0,0.05);
-            }
-            /* Adjust layout spacing */
-            div[data-testid="stHorizontalBlock"] > div {
-                padding: 5px;
-            }
-        </style>
-    """, unsafe_allow_html=True)
+    inject_metric_css()
 
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -432,9 +410,6 @@ def render_analytics_tab(stats):
     
     class_summary = get_classes_summary()
     
-    import pandas as pd
-    from st_aggrid import AgGrid, GridOptionsBuilder
-
     if class_summary:
         class_data = [
             {
@@ -467,57 +442,6 @@ def render_analytics_tab(stats):
         st.dataframe(page_data, width="stretch")
 
         st.caption(f"Showing {start_idx + 1} – {min(end_idx, total_items)} of {total_items} entries")
-
-
-        # # Convert to DataFrame
-        # df = pd.DataFrame(class_data)
-
-        # # --- User-selectable pagination size ---
-        # page_size = st.selectbox(
-        #     "Rows per page",
-        #     options=[10, 20, 30, 50, 100],
-        #     index=1,
-        #     key="page_size_select"
-        # )
-
-        # # --- Build grid options ---
-        # gb = GridOptionsBuilder.from_dataframe(df)
-        # gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=page_size)
-        # gb.configure_default_column(resizable=False, filter=True, sortable=True)
-        # gridOptions = gb.build()
-
-        # # --- Custom CSS styling ---
-        # st.markdown("""
-        #     <style>
-        #         .ag-root-wrapper {
-        #             border: 2px solid #dcdcdc !important;
-        #             border-radius: 10px !important;
-        #             overflow: hidden;
-        #         }
-        #         .ag-cell {
-        #             padding: 5px !important;
-        #             font-size: 14px;
-        #         }
-        #     </style>
-        # """, unsafe_allow_html=True)
-
-        # # --- Dynamic height based on pagination size ---
-        # row_height = 35  # pixels per row
-        # header_height = 38
-
-        # # Height = (row height × rows per page) + header + buffer
-        # table_height = row_height * len(df) + header_height
-
-
-        # # --- Render grid ---
-        # AgGrid(
-        #     df,
-        #     gridOptions=gridOptions,
-        #     theme='material',
-        #     fit_columns_on_grid_load=True,
-        #     height=table_height,
-        #     allow_unsafe_jscode=True,
-        # )
 
     else:
         st.info("No classes found in the system.")
@@ -572,7 +496,7 @@ def render_maintenance_tab():
     st.markdown("---")
     st.markdown("#### 📝 Log Management")
     
-    col1, col2 = st.columns(2)
+    col1, col2 = st.columns(2, vertical_alignment="bottom")
     
     with col1:
         log_info = get_log_files_info()
@@ -583,7 +507,6 @@ def render_maintenance_tab():
         days_to_keep = st.number_input("Keep logs from last (days)", min_value=1, max_value=365, value=30)
         if st.button("🗑️ Clean Old Logs"):
             clean_old_logs(days_to_keep)
-
 
 def render_security_logs_tab():
     """Render security and logs tab"""

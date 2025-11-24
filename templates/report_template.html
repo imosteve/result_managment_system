@@ -8,14 +8,22 @@
 </head>
 <body>
     <div class="report-container">
+        <img src="static/logos/SU_logo.png" class="watermark" alt="Watermark">
         <!-- Watermark background -->
-        <img src="static/SU_logo.png" class="watermark" alt="Watermark">
-        
+        {% if is_secondary_class %}
+        <img src="static/stamps/su_stamp_sss.png" class="stamp-sss" alt="stamp">
+        <img src="static/stamps/signature_principal.png" class="signature_ht" alt="stamp">
+        {% elif is_primary_class %}
+        <img src="static/stamps/su_stamp_primary.png" class="stamp-primary" alt="stamp">
+        <img src="static/stamps/signature_ht.png" class="signature_ht" alt="stamp">
+        {% endif %}
+        <div class="stamp-date">{{ current_date }}</div>
+
         <div class="content">
             <!-- Header Section -->
             <div class="header">
                 <div>
-                   <img src="static/SU_logo.png" class="logo-placeholder" alt="School Logo">
+                   <img src="static/logos/SU_logo.png" class="logo-placeholder" alt="School Logo">
                 </div>
                 <div class="header-text">
                    <div class="school-name">SCRIPTURE UNION INTERNATIONAL SCHOOLS</div>
@@ -29,17 +37,17 @@
                 <div class="info-top">
                     <div class="info-col">
                         <span class="info-label">Name:</span>
-                        <span class="info-value-name">{{ name }}</span>
+                        <span class="info-value-name">{{ name.upper() }}</span>
                     </div>
                 </div>
                 <div class="info-middle">
                     <div class="info-col">
                         <span class="info-label">Gender:</span>
-                        <span class="info-value">{{ 'Male' if gender=='M' else 'Female' if gender=='F' else '' }}</span>
+                        <span class="info-value">{{ 'MALE' if gender=='M' else 'FEMALE' if gender=='F' else '' }}</span>
                     </div>
                     <div class="info-col2">
                         <span class="info-label">Class:</span>
-                        <span class="info-value">{{ class_name.title() }}</span>
+                        <span class="info-value">{{ class_name.upper() }}</span>
                     </div>
                     <div class="info-col">
                         <span class="info-label">No. in Class:</span>
@@ -48,7 +56,7 @@
                 </div>
                 <div class="info-bottom">
                     <div class="info-col">
-                        <span class="info-label">Pupil's Average:</span>
+                        <span class="info-label">{{"Student's Average:" if is_secondary_class else "Pupil's Average:"}}</span>
                         <span class="info-value">{{ average }}</span>
                     </div>
                     <div class="info-col2">
@@ -56,10 +64,15 @@
                         <span class="info-value">{{ class_average }}</span>
                     </div>
                     <div class="info-col">
+                        <!-- Show grade distribution for SSS2 and SSS3, position for others -->
+                        {% if is_sss2_or_sss3 %}
+                        <span class="info-label">Grades:</span>
+                        <span class="info-value">{{ grade_distribution }}</span>
+                        {% else %}
                         <span class="info-label">Position:</span>
                         <span class="info-value">{{ position }}</span>
+                        {% endif %}
                     </div>
-                </div>
             </div>
             
             <!-- Performance Section -->
@@ -192,7 +205,7 @@
                 </div>
                 
                 <div class="comment-box">
-                    <div class="comment-label">Head Teacher/Principal Comment:</div>
+                    <div class="comment-label">{{"Principal's Comment:" if is_secondary_class else "Head Teacher's Comment:"}}</div>
                     <div class="comment-area">{{ head_teacher_comment }}</div>
                 </div>
             </div>
@@ -201,9 +214,8 @@
             <div class="footer-section">
                 <div class="fees-info">
                     <div class="fees-title">Next Terms School Fees:</div>
-                    <div>- For Nursery 1</div>
-                    <div>- For Nursery 1</div>
-                    <div>- For Primary 5</div>
+                    <div>- For {{ class_name }}</div>
+                    <div class="account-info"> ##### </div>
                 </div>
                 
                 <div class="account-info">

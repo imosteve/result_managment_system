@@ -1,6 +1,8 @@
 # app_sections/generate_reports.py
 
 import streamlit as st
+import re
+from datetime import datetime
 import os
 import zipfile
 import smtplib
@@ -17,7 +19,7 @@ from utils import (
 from database import (
     get_all_classes, get_students_by_class, get_student_scores, 
     get_class_average, get_student_grand_totals, get_comment, get_subjects_by_class,
-    get_psychomotor_rating
+    get_psychomotor_rating, get_grade_distribution, get_next_term_begin_date
 )
 
 # Email Configuration
@@ -26,7 +28,7 @@ SMTP_PORT = int(os.getenv('SMTP_PORT', 465))
 EMAIL_SENDER = os.getenv('EMAIL_SENDER', "SUIS Terminal Result <ideas.elites@gmail.com>")
 EMAIL_PASSWORD = os.getenv('EMAIL_PASSWORD', "lkydcrsaritupygu")
 
-def generate_report_card(student_name, class_name, term, session):
+def generate_report_card(student_name, class_name, term, session, is_secondary_class, is_primary_class):
     """Generate PDF report card for a student"""
     user_id = st.session_state.user_id
     role = st.session_state.role
@@ -66,8 +68,18 @@ def generate_report_card(student_name, class_name, term, session):
     # Get position based on grand total comparison
     grand_totals = get_student_grand_totals(class_name, term, session, user_id, role)
     position_data = next((gt for gt in grand_totals if gt['student_name'] == student_name), None)
-    position = format_ordinal(position_data['position']) if position_data else "-"
+    # Get position or grade distribution based on class
+    is_sss2_or_sss3 = bool(re.match(r"SSS [23].*$", class_name))
+    if is_sss2_or_sss3:
+        # For SSS2 and SSS3, get grade distribution instead of position
+        grade_distribution = get_grade_distribution(student_name, class_name, term, session, user_id, role)
+        position = ""  # Not used for SSS2/SSS3
+    else:
+        grade_distribution = ""
+        position = format_ordinal(position_data['position']) if position_data else "-"   
 
+    current_date = datetime.now().strftime("%d %b %Y")
+    
     # Fetch dynamic comments
     comment = get_comment(student_name, class_name, term, session)
     class_teacher_comment = comment['class_teacher_comment'] if comment and comment['class_teacher_comment'] else ""
@@ -115,6 +127,8 @@ def generate_report_card(student_name, class_name, term, session):
                 'position': "-"
             })
 
+    next_term_date = get_next_term_begin_date(term, session)
+
     # Load and render template
     try:
         env = Environment(loader=FileSystemLoader("templates"))
@@ -124,12 +138,16 @@ def generate_report_card(student_name, class_name, term, session):
             class_name=class_name,
             term=term,
             session=session,
+            is_secondary_class=is_secondary_class,
+            is_primary_class=is_primary_class,
             gender=gender,
             class_size=class_size,
             class_average=class_average,
             average=round(avg, 2),
             grade=grade,
             position=position,
+            is_sss2_or_sss3=is_sss2_or_sss3,
+            grade_distribution=grade_distribution,
             subjects=subjects_data,
             total_test=total_test,
             total_exam=total_exam,
@@ -137,7 +155,9 @@ def generate_report_card(student_name, class_name, term, session):
             class_teacher_comment=class_teacher_comment,
             head_teacher_comment=head_teacher_comment,
             psychomotor=psychomotor_ratings,
-            next_term_date="To be announced"
+            # next_term_date="To be announced",
+            next_term_date=next_term_date,
+            current_date=current_date
         )
 
         # Generate PDF - FORCE ONE PAGE
@@ -334,6 +354,19 @@ def generate_tab():
     term = selected_class_data['term']
     session = selected_class_data['session']
 
+    import re
+    is_senior_class = bool(re.match(r"SSS [123].*$", class_name))
+    is_junior_class = bool(re.match(r"JSS [123].*$", class_name))
+    is_secondary_class = is_senior_class or is_junior_class
+    
+    is_kg_class = bool(re.match(r"KINDERGARTEN [12345].*$", class_name))
+    is_nursery_class = bool(re.match(r"NURSERY [12345].*$", class_name))
+    is_pri_class = bool(re.match(r"PRIMARY [123456].*$", class_name))
+    is_primary_class = is_kg_class or is_nursery_class or is_pri_class
+    
+    # if is_kg_class:
+    #     class_name = class_name.replace("KINDERGARTEN", "KG")
+
     students = get_students_by_class(class_name, term, session, user_id, role)
     if not students:
         st.warning(f"⚠️ No students found for {class_name} - {term} - {session}.")
@@ -359,18 +392,35 @@ def generate_tab():
     no_in_class = len(students)
     student_scores = get_student_scores(selected_student, class_name, term, session, user_id, role)
     total_score = sum(score[5] for score in student_scores) if student_scores else 0
-    pupil_average = round(total_score / len(student_scores), 2) if student_scores else 0
+    student_average = round(total_score / len(student_scores), 2) if student_scores else 0
     class_average = get_class_average(class_name, term, session, user_id, role)
     grand_totals = get_student_grand_totals(class_name, term, session, user_id, role)
     position_data = next((gt for gt in grand_totals if gt['student_name'] == selected_student), None)
-    position = format_ordinal(position_data['position']) if position_data else "-"
+    
+    is_sss2_or_sss3 = bool(re.match(r"SSS [23].*$", class_name))
+    if is_sss2_or_sss3:
+        # For SSS2 and SSS3, get grade distribution instead of position
+        grade_distribution = get_grade_distribution(selected_student, class_name, term, session, user_id, role)
+        position = ""  # Not used for SSS2/SSS3
+    else:
+        grade_distribution = ""
+        position = format_ordinal(position_data['position']) if position_data else "-"
 
     # Create summary metric
-    create_metric_5col_report(gender, no_in_class, class_average, pupil_average, position)
+    create_metric_5col_report(gender, 
+                              no_in_class, 
+                              class_average, 
+                              student_average, 
+                              position,
+                              grade_distribution,
+                              is_secondary_class, 
+                              is_primary_class,
+                              is_sss2_or_sss3
+                              )
 
     # Individual Report Card
     if st.button("Generate Report Card"):
-        pdf_path = generate_report_card(selected_student, class_name, term, session)
+        pdf_path = generate_report_card(selected_student, class_name, term, session, is_secondary_class, is_primary_class)
         with st.spinner(f"Generating and sending report for {selected_student}..."):
             if pdf_path and os.path.exists(pdf_path):
                 with open(pdf_path, "rb") as f:
@@ -382,7 +432,7 @@ def generate_tab():
                     )
                 st.success(f"✅ Report card generated for {selected_student}")
             else:
-                st.error("❌ Failed to generate report card. Make sure the student has scores entered.")
+                st.error("❌ Failed to generate report card. Make sure subjects has been added to class.")
 
     st.markdown("---")
 
@@ -400,7 +450,7 @@ def generate_tab():
             student_name = student[1]
             status_text.text(f"Generating report for {student_name}...")
             
-            pdf_path = generate_report_card(student_name, class_name, term, session)
+            pdf_path = generate_report_card(student_name, class_name, term, session, is_secondary_class, is_primary_class)
             if pdf_path and os.path.exists(pdf_path):
                 success_count += 1
                 pdf_paths.append(pdf_path)
@@ -458,6 +508,16 @@ def email_tab():
     term = selected_class_data['term']
     session = selected_class_data['session']
 
+    import re
+    is_senior_class = bool(re.match(r"SSS [123].*$", class_name))
+    is_junior_class = bool(re.match(r"JSS [123].*$", class_name))
+    is_secondary_class = is_senior_class or is_junior_class
+    
+    is_kg_class = bool(re.match(r"KINDERGARTEN [12345].*$", class_name))
+    is_nursery_class = bool(re.match(r"NURSERY [12345].*$", class_name))
+    is_pri_class = bool(re.match(r"PRIMARY [123456].*$", class_name))
+    is_primary_class = is_kg_class or is_nursery_class or is_pri_class
+
     students = get_students_by_class(class_name, term, session, user_id, role)
     if not students:
         st.warning("⚠️ No students found for this class.")
@@ -483,13 +543,13 @@ def email_tab():
         st.warning(f"⚠️ {len(students_without_email)} student(s) do not have email addresses: {', '.join([s[1] for s in students_without_email])}")
 
     if students_unpaid_fees:
-        st.warning(f"ℹ️ {len(students_unpaid_fees)} student(s) have email but haven't paid school fees (cannot receive reports via email): {', '.join([s[1] for s in students_unpaid_fees])}")
+        st.info(f"ℹ️ {len(students_unpaid_fees)} student(s) have email but haven't paid school fees (cannot receive reports via email): {', '.join([s[1] for s in students_unpaid_fees])}")
 
     if not students_eligible:
         st.warning(f"⚠️ No students are eligible to receive reports via email. Students must have email and paid fees.")
         return
 
-    st.info(f"📧 {len(students_eligible)} student(s) are eligible to receive report cards via email: {', '.join([s[1] for s in students_eligible])}")
+    st.success(f"📧 {len(students_eligible)} student(s) are eligible to receive report cards via email: {', '.join([s[1] for s in students_eligible])}")
 
     # Individual Email
     st.markdown("### Email Report Card")
@@ -508,7 +568,7 @@ def email_tab():
             
         with st.spinner(f"Generating and sending report for {selected_student}..."):
             # Generate PDF
-            pdf_path = generate_report_card(selected_student, class_name, term, session)
+            pdf_path = generate_report_card(selected_student, class_name, term, session, is_secondary_class, is_primary_class)
             if pdf_path and os.path.exists(pdf_path):
                 # Send email
                 if send_email(student_data[3], selected_student, pdf_path, term, session):
@@ -539,7 +599,7 @@ def email_tab():
             status_text.text(f"Processing {student_name} ({i+1}/{len(students_eligible)})...")
             
             # Generate PDF
-            pdf_path = generate_report_card(student_name, class_name, term, session)
+            pdf_path = generate_report_card(student_name, class_name, term, session, is_secondary_class, is_primary_class)
             if pdf_path and os.path.exists(pdf_path):
                 # Send email
                 if send_email(student_email, student_name, pdf_path, term, session):

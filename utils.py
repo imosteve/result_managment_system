@@ -38,6 +38,33 @@ def inject_login_css(file_path):
     if css_content:
         st.markdown(f"<style>{css_content}</style>", unsafe_allow_html=True)
 
+def inject_metric_css():
+    # Inject custom CSS for metric styling
+    st.markdown("""
+        <style>
+            /* Make metric boxes look nice and uniform */
+            [data-testid="stMetricValue"] {
+                font-size: 30px !important;
+                color: #1f77b4;
+            }
+            [data-testid="stMetricLabel"] {
+                font-size: 16px !important;
+                color: #555;
+            }
+            div[data-testid="stMetric"] {
+                background: #f8f9fa;
+                border: 2px solid #4CAF50;
+                border-radius: 12px;
+                padding: 12px;
+                text-align: center;
+                box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+            }
+            /* Adjust layout spacing */
+            div[data-testid="stHorizontalBlock"] > div {
+                padding: 5px;
+            }
+        </style>
+    """, unsafe_allow_html=True)
 
 def create_metric_4col(class_name, term, session, subjects_or_students, type):
     col1, col2, col3, col4 = st.columns(4)
@@ -110,7 +137,7 @@ def create_metric_5col_broadsheet(subjects, students, class_average, broadsheet_
         st.markdown("---")
 
 
-def create_metric_5col_report(gender, no_in_class, class_average, pupil_average, position):
+def create_metric_5col_report(gender, no_in_class, class_average, student_average, position, grade_distribution, is_secondary_class, is_primary_class, is_sss2_or_sss3):
 
     # Create summary metric
     col1, col2, col3, col4, col5 = st.columns(5)
@@ -126,9 +153,15 @@ def create_metric_5col_report(gender, no_in_class, class_average, pupil_average,
     with col3:
         st.markdown(f"<div class='custom-metric'><div class='label'>Class Average</div><div class='value'>{class_average}</div></div>", unsafe_allow_html=True)
     with col4:
-        st.markdown(f"<div class='custom-metric'><div class='label'>Pupil Average</div><div class='value'>{pupil_average}</div></div>", unsafe_allow_html=True)
+        if is_secondary_class:
+            st.markdown(f"<div class='custom-metric'><div class='label'>Student Average</div><div class='value'>{student_average}</div></div>", unsafe_allow_html=True)
+        else:
+            st.markdown(f"<div class='custom-metric'><div class='label'>Pupil Average</div><div class='value'>{student_average}</div></div>", unsafe_allow_html=True)
     with col5:
-        st.markdown(f"<div class='custom-metric'><div class='label'>Position</div><div class='value'>{position}</div></div>", unsafe_allow_html=True)
+        if is_sss2_or_sss3:
+            st.markdown(f"<div class='custom-metric'><div class='label'>Grade</div><div class='value'>{grade_distribution}</div></div>", unsafe_allow_html=True)
+        else:
+            st.markdown(f"<div class='custom-metric'><div class='label'>Position</div><div class='value'>{position}</div></div>", unsafe_allow_html=True)
 
 
 def clean_input(value, input_type):

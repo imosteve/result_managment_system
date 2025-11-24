@@ -23,7 +23,7 @@ body {
     left: 50%;
     width: 600px;
     height: 600px;
-    background-image: url('static/SU_logo.png'); /* Adjust path if needed */
+    background-image: url('static/logos/SU_logo.png'); /* Adjust path if needed */
     background-repeat: no-repeat;
     background-position: center;
     background-size: 300px 300px; /* Adjust size as needed */
@@ -33,6 +33,43 @@ body {
     transform: translate(-50%, -50%) rotate(0deg); /* Horizontal + vertical center */
 }
 
+/* stamp placeholder */
+.stamp-sss,
+.stamp-primary,
+.signature_ht,
+.stamp-date {
+    position: fixed;
+    top: 90%;
+    left: 80%;
+    z-index: 90;
+    opacity: 0.8; /* Adjust transparency */
+    pointer-events: none;
+    transform: translate(-50%, -50%) rotate(345deg) scale(0.25); /* scale 150% */
+}
+
+.stamp-sss {
+    top: 90.5%;
+    left: 79%;
+}
+
+.stamp-date {
+    top: 90.9%;
+    left: 82%;
+    font-size: 32px;
+    font-weight: bold;
+    color: #00064a;
+    text-align: center;
+    opacity: 1;
+    width: 200px;
+    margin-top: 0px;
+    white-space: nowrap; 
+}
+
+.signature_ht {
+    top: 88%;
+    opacity: 1.5; 
+    transform: translate(-50%, -50%) rotate(345deg) scale(0.2);
+}
 
 .content {
     position: relative;
@@ -95,7 +132,7 @@ body {
 /* Only info-top is flex (no grid) */
 .info-top {
     display: flex;
-    align-items: center;
+    /* align-items: center; */
     min-height: 30px;
     padding: 0 8px;
 }
@@ -104,7 +141,7 @@ body {
 .info-middle,
 .info-bottom {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: 1fr 1.3fr 1.2fr;
     padding: 0;
 }
 
@@ -134,13 +171,13 @@ body {
 .info-value,
 .info-value-name {
     flex: 1;
-    font-size: 15px;
+    font-size: 14px;
     text-align: center;
-    padding: 2px 5px;
+    padding: 2px 6px;
 }
 
 .info-value-name {
-    font-size: 20px;
+    font-size: 19px;
     font-weight: bold;
 }
 
@@ -312,7 +349,7 @@ body {
 .comment-label {
     font-weight: bold;
     font-size: 12px;
-    width: 300px;
+    width: 250px;
     text-align: left;
     padding: 0 5px;
     border-right: 1px solid #000;
@@ -330,7 +367,6 @@ body {
     padding: 5px 5px;
     font-size: 14px;
 }
-
 
 
 /* Footer Section */

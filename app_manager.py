@@ -6,7 +6,7 @@ from typing import Dict, Callable, Optional
 from streamlit_cookies_manager import EncryptedCookieManager
 
 from config import APP_CONFIG, COOKIE_PASSWORD
-from database import create_tables, get_database_stats, migrate_add_school_fees_column
+from database import create_tables, migrate_add_school_fees_column
 from utils import inject_login_css, render_page_header
 
 logger = logging.getLogger(__name__)
@@ -449,15 +449,18 @@ class ApplicationManager:
                 manage_comments,
                 manage_classes, register_students, manage_subjects, 
                 enter_scores, view_broadsheet, generate_reports,
-                system_dashboard, admin_panel
+                system_dashboard, admin_panel, manage_comment_templates,
+                next_term_info
             )
             from auth.assignment_selection import select_assignment
             base_options = {}
             
             if role == "superadmin":
                 base_options = {
-                    "🔧 System Dashboard": system_dashboard.system_dashboard,  # NEW
+                    "🔧 System Dashboard": system_dashboard.system_dashboard,
                     "👥 Admin Panel": admin_panel.admin_panel,
+                    "🗓️ Next Term Info": next_term_info.next_term_info,
+                    "📝 Comments Template": manage_comment_templates.manage_comment_templates,
                     "🏫 Manage Classes": manage_classes.create_class_section,
                     "👥 Register Students": register_students.register_students,
                     "📚 Manage Subjects": manage_subjects.add_subjects,
@@ -469,6 +472,8 @@ class ApplicationManager:
             elif role == "admin":
                 base_options = {
                     "👥 Admin Panel": admin_panel.admin_panel,
+                    "🗓️ Next Term Info": next_term_info.next_term_info,
+                    "📝 Comments Template": manage_comment_templates.manage_comment_templates,
                     "🏫 Manage Classes": manage_classes.create_class_section,
                     "👥 Register Students": register_students.register_students,
                     "📚 Manage Subjects": manage_subjects.add_subjects,

@@ -1,13 +1,17 @@
 # app_sections/admin_panel.py
 
 import streamlit as st
+import math
 import time
+import pandas as pd
+from st_aggrid import AgGrid, GridOptionsBuilder
 from database import (
     get_all_classes, get_subjects_by_class,
     create_user, get_all_users, delete_user, assign_teacher, get_user_assignments,
     delete_assignment, get_database_stats, update_user, update_assignment, get_user_role
 )
 from utils import inject_login_css, render_page_header
+from util.paginators import st_aggrid_paginator, streamlit_paginator
 
 def admin_panel():
     """Admin panel for user management and assignments"""
@@ -90,8 +94,9 @@ def admin_panel():
                     "Password": password
                 })
             
-            st.dataframe(user_data, width="stretch")
-            
+            # st_aggrid_paginator(user_data, table_name="users")
+            streamlit_paginator(user_data, table_name="users")
+
             if 'show_delete_user_confirm' not in st.session_state:
                 st.session_state.show_delete_user_confirm = False
             if 'user_to_delete_info' not in st.session_state:
@@ -284,7 +289,7 @@ def admin_panel():
                 
         if assignments:
             display_assignments = [{k: v for k, v in a.items() if k in ["S/N", "Username", "Role", "Class", "Subject"]} for a in assignments]
-            st.dataframe(display_assignments, width="stretch")
+            streamlit_paginator(display_assignments, table_name="teacher_assignments")
             
             if 'show_delete_assignment_confirm' not in st.session_state:
                 st.session_state.show_delete_assignment_confirm = False

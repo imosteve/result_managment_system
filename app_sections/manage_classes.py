@@ -29,7 +29,37 @@ def create_class_section():
 
     with tab1:
         st.subheader("View/Edit Classes")
-        if classes:
+
+        
+        with st.container(border=True):
+            # Filter options
+            col1, col2, col3 = st.columns([1, 1, 1])
+            with col1:
+                filter_type = st.selectbox(
+                    "Filter by Class",
+                    ["All", "Kindergarten", "Nursery", "Primary", "JSS", "SSS"],
+                    key="filter_class_view"
+                )
+            
+            with col3:
+                search_query = st.text_input(
+                    "🔍 Search",
+                    placeholder="Search class...",
+                    key="search_class_view"
+                )
+        
+        # Filter classes by type and search query
+        filtered_classes = classes
+        
+        # Apply class type filter
+        if filter_type != "All":
+            filtered_classes = [cls for cls in filtered_classes if cls['class_name'].upper().startswith(filter_type.upper())]
+        
+        # Apply search filter
+        if search_query:
+            filtered_classes = [cls for cls in filtered_classes if search_query.lower() in cls['class_name'].lower() or search_query.lower() in cls['term'].lower() or search_query.lower() in cls['session'].lower()]
+
+        if filtered_classes:
             header_cols = st.columns([3, 3, 3, 1.2, 1.2])
             header_cols[0].markdown("**Class Name**")
             header_cols[1].markdown("**Term**")
@@ -37,7 +67,7 @@ def create_class_section():
             header_cols[3].markdown("**Update**")
             header_cols[4].markdown("**Delete**")
 
-            for i, cls in enumerate(classes):
+            for i, cls in enumerate(filtered_classes):
                 col1, col2, col3, col4, col5 = st.columns([3, 3, 3, 1.2, 1.2], gap="small", vertical_alignment="bottom")
                 new_class = col1.text_input("Class", 
                                             value=cls['class_name'], 
@@ -110,7 +140,7 @@ def create_class_section():
                     confirm_delete_class()
                     break
         else:
-            st.info("No classes found. Add one in the 'Add Class' tab.")
+            st.info("No classes found matching your filters.")
 
     with tab2:
         st.subheader("Add Class")

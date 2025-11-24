@@ -359,7 +359,7 @@ def add_subjects():
                         pd.DataFrame(summary_data),
                         column_config={
                             "S/N": st.column_config.TextColumn("S/N", width="small"),
-                            "Student Name": st.column_config.TextColumn("Student Name", width="large"),
+                            "Student Name": st.column_config.TextColumn("Student Name", width="medium"),
                             "Selected Subjects": st.column_config.TextColumn("Selected Subjects", width="large"),
                             "Number of Subjects": st.column_config.NumberColumn("Number of Subjects", width="small")
                         },
