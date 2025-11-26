@@ -357,6 +357,54 @@ def render_persistent_class_selector(classes: List[Dict[str, Any]],
             return classes[0]
         return None
 
+def render_persistent_next_term_selector(
+    classes: List[Dict[str, Any]], 
+    widget_key: str = "global_term_session_selector"
+) -> Optional[Dict[str, Any]]:
+
+    if not classes:
+        return None
+
+    initialize_class_persistence()
+    
+    seen = set()
+    class_options = []
+    unique_map = {}   # maps display → (term, session)
+
+    for cls in classes:
+        display = f"{cls['term']} - {cls['session']}"
+        if display not in seen:
+            seen.add(display)
+            class_options.append(display)
+            unique_map[display] = {
+                "term": cls["term"],
+                "session": cls["session"]
+            }
+            
+    last_selection = st.session_state.class_selection_state.get("display_string")
+    default_index = class_options.index(last_selection) if last_selection in class_options else 0
+
+    selected_display = st.selectbox(
+        "Select Term / Session",
+        class_options,
+        index=default_index,
+        key=widget_key
+    )
+    
+    selected = unique_map.get(selected_display)
+
+    if selected:
+        # For persistence, store minimal data (no class name needed)
+        set_persistent_class_data(
+            None,                   # class_name not needed in this selector
+            selected["term"],
+            selected["session"]
+        )
+
+        return selected
+
+    return None
+
 def clear_persistent_class_selection():
     """Clear the persistent class selection"""
     if 'class_selection_state' in st.session_state:

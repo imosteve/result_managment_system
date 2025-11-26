@@ -11,7 +11,7 @@ from database import (
     delete_assignment, get_database_stats, update_user, update_assignment, get_user_role
 )
 from utils import inject_login_css, render_page_header
-from util.paginators import st_aggrid_paginator, streamlit_paginator
+from util.paginators import streamlit_paginator
 
 def admin_panel():
     """Admin panel for user management and assignments"""

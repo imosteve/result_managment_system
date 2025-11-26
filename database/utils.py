@@ -6,6 +6,7 @@ import shutil
 import sqlite3
 import logging
 from .connection import get_connection, DB_PATH, BACKUP_PATH
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -308,3 +309,91 @@ def migrate_add_school_fees_column():
         return False
     finally:
         conn.close()
+
+def migrate_reduce_next_term_info_table():
+    """
+    Migration to replace the old large next_term_info table with the new minimal structure:
+        term, session, next_term_begins, fees_json, updated_at, updated_by
+
+    This migration:
+    1. Creates a DB backup
+    2. Checks if migration is needed
+    3. Extracts minimal usable data from the old table
+    4. Drops old table
+    5. Recreates new minimal table
+    6. Reinserts minimal records
+    """
+    from .schema import create_tables  # safe import
+
+    backup_path = DB_PATH + ".bak"
+
+    try:
+        shutil.copy2(DB_PATH, backup_path)
+        logger.info(f"Backup created at: {backup_path}")
+    except Exception as e:
+        logger.error(f"Backup failed: {e}")
+        return False
+
+    conn = get_connection()
+    cur = conn.cursor()
+
+    # Step 1: detect if migration needed
+    cur.execute("PRAGMA table_info(next_term_info)")
+    cols = [c[1] for c in cur.fetchall()]
+
+    # New minimal structure = exactly 7 columns including fees_json
+    if "fees_json" in cols and "next_term_begins" in cols and len(cols) == 7:
+        logger.info("Next term info table already in new minimal format.")
+        conn.close()
+        return True
+
+    logger.warning("Old next_term_info structure detected — migrating...")
+
+    # Step 2: Try extracting useful data
+    try:
+        cur.execute("SELECT term, session, next_term_begins FROM next_term_info")
+        old_data = cur.fetchall()
+        logger.info(f"Extracted {len(old_data)} record(s) from old table.")
+    except Exception:
+        logger.warning("Old table has incompatible structure. Migrating without preserving data.")
+        old_data = []
+
+    # Step 3: Drop old table
+    try:
+        cur.execute("DROP TABLE IF EXISTS next_term_info")
+        conn.commit()
+    except Exception as e:
+        logger.error(f"Failed dropping old next_term_info: {e}")
+        conn.rollback()
+        conn.close()
+        return False
+
+    # Step 4: Recreate new minimal table
+    try:
+        create_tables()
+        logger.info("New minimal next_term_info table created.")
+    except Exception as e:
+        logger.error(f"Failed to recreate schema: {e}")
+        conn.rollback()
+        conn.close()
+        return False
+
+    # Step 5: Reinsert minimal data
+    try:
+        for (term, session, begin_date) in old_data:
+            fees_json = json.dumps({})
+            cur.execute("""
+                INSERT INTO next_term_info (term, session, next_term_begins, fees_json)
+                VALUES (?, ?, ?, ?)
+            """, (term, session, begin_date, fees_json))
+        conn.commit()
+        logger.info("Old next term data migrated successfully.")
+    except Exception as e:
+        logger.error(f"Error reinserting migrated data: {e}")
+        conn.rollback()
+        conn.close()
+        return False
+
+    conn.close()
+    logger.info("Minimal next_term_info migration completed.")
+    return True

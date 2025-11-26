@@ -275,7 +275,7 @@ def render_psychomotor_comments_tab(students, class_name, term, session, is_seco
             head_teacher_comment = existing_comment['head_teacher_comment'] or ""
         
         # ============ CLASS TEACHER COMMENT ============
-        st.markdown("#### Class Teacher Comment")
+        st.markdown("##### Class Teacher Comment")
         
         # Get templates
         ct_templates = get_all_comment_templates('class_teacher')
@@ -339,7 +339,7 @@ def render_psychomotor_comments_tab(students, class_name, term, session, is_seco
         st.markdown("---")
         
         # ============ HEAD TEACHER COMMENT ============
-        st.markdown(f"### {"Principal Comment" if is_secondary_class else "Head Teacher Comment" if is_primary_class else ""}")
+        st.markdown(f"##### {"Principal Comment" if is_secondary_class else "Head Teacher Comment" if is_primary_class else ""}")
         
         # Get templates
         ht_templates = get_all_comment_templates('head_teacher')
@@ -408,77 +408,133 @@ def render_batch_add_ct_tab(students, class_name, term, session):
     
     ct_templates = get_all_comment_templates('class_teacher')
     
-    if 'batch_ct_counter' not in st.session_state:
-        st.session_state.batch_ct_counter = 0
+    # Initialize session state for batch CT comments
+    if 'batch_ct_comments' not in st.session_state:
+        st.session_state.batch_ct_comments = {}
     
-    with st.expander("Batch Class Teacher Comments", expanded=True):
-        batch_comments = {}
+    # Process students in pairs for 2-column layout
+    for i in range(0, len(students), 2):
+        col1, col2 = st.columns(2)
         
-        for idx, student in enumerate(students):
+        # First student in the pair
+        with col1:
+            student = students[i]
             student_name = student[1]
             existing_comment = get_comment(student_name, class_name, term, session)
             existing_ct = existing_comment['class_teacher_comment'] or "" if existing_comment else ""
             
+            # Initialize in session state if not exists
+            if student_name not in st.session_state.batch_ct_comments:
+                st.session_state.batch_ct_comments[student_name] = existing_ct
+            
             with st.container(border=True):
                 st.markdown(f"#### {student_name}")
                 
-                # Template selection or custom
-                col_mode_ct, col_template_ct = st.columns([1, 3], vertical_alignment="bottom")
-                
-                with col_mode_ct:
-                    batch_ct_mode = st.radio(
-                        "Mode",
-                        ["Custom", "Template"],
-                        key=f"batch_ct_mode_{idx}_{student_name}",
-                        horizontal=True
-                    )
-                
-                ct_comment = existing_ct
-                
-                with col_template_ct:
-                    if batch_ct_mode == "Template":
-                        if ct_templates:
-                            template_options = ["-- Select a template --"] + [t[1] for t in ct_templates]
-                            selected_ct_template = st.selectbox(
-                                "Choose template",
-                                template_options,
-                                key=f"ct_template_{idx}_{student_name}",
-                                label_visibility="collapsed"
-                            )
-                            
-                            if selected_ct_template != "-- Select a template --":
-                                ct_comment = selected_ct_template
-                        else:
-                            st.info("No templates available")
-                
-                ct_comment = st.text_area(
-                    "Comment",
-                    value=ct_comment,
-                    height=80,
-                    key=f"ct_comment_{idx}_{student_name}",
-                    placeholder="Type your comment here..."
+                # Mode selection
+                ct_mode = st.radio(
+                    "Mode",
+                    ["Custom", "Template"],
+                    key=f"batch_ct_mode_{i}_{student_name}",
+                    horizontal=True,
+                    label_visibility="collapsed"
                 )
                 
-                batch_comments[student_name] = ct_comment
+                # Template selection
+                if ct_mode == "Template" and ct_templates:
+                    template_options = ["-- Select a template --"] + [t[1] for t in ct_templates]
+                    selected_template = st.selectbox(
+                        "Choose template",
+                        template_options,
+                        key=f"batch_ct_template_{i}_{student_name}",
+                        label_visibility="collapsed"
+                    )
+                    
+                    if selected_template != "-- Select a template --":
+                        st.session_state.batch_ct_comments[student_name] = selected_template
+                elif ct_mode == "Template" and not ct_templates:
+                    st.info("No templates available")
+                
+                # Text area with session state value
+                comment = st.text_area(
+                    "Comment",
+                    value=st.session_state.batch_ct_comments[student_name],
+                    height=50,
+                    key=f"batch_ct_comment_{i}_{student_name}",
+                    label_visibility="collapsed",
+                    placeholder="Type your comment here...",
+                    on_change=lambda sn=student_name, key=f"batch_ct_comment_{i}_{student_name}": 
+                        st.session_state.batch_ct_comments.update({sn: st.session_state[key]})
+                )
         
-        st.markdown("---")
-        submit = st.button("💾 Save All CT Comments", key="save_batch_ct_comment", type="primary", use_container_width=True)
+        # Second student in the pair (if exists)
+        with col2:
+            if i + 1 < len(students):
+                student = students[i + 1]
+                student_name = student[1]
+                existing_comment = get_comment(student_name, class_name, term, session)
+                existing_ct = existing_comment['class_teacher_comment'] or "" if existing_comment else ""
+                
+                # Initialize in session state if not exists
+                if student_name not in st.session_state.batch_ct_comments:
+                    st.session_state.batch_ct_comments[student_name] = existing_ct
+                
+                with st.container(border=True):
+                    st.markdown(f"#### {student_name}")
+                    
+                    # Mode selection
+                    ct_mode = st.radio(
+                        "Mode",
+                        ["Custom", "Template"],
+                        key=f"batch_ct_mode_{i+1}_{student_name}",
+                        horizontal=True,
+                        label_visibility="collapsed"
+                    )
+                    
+                    # Template selection
+                    if ct_mode == "Template" and ct_templates:
+                        template_options = ["-- Select a template --"] + [t[1] for t in ct_templates]
+                        selected_template = st.selectbox(
+                            "Choose template",
+                            template_options,
+                            key=f"batch_ct_template_{i+1}_{student_name}",
+                            label_visibility="collapsed"
+                        )
+                        
+                        if selected_template != "-- Select a template --":
+                            st.session_state.batch_ct_comments[student_name] = selected_template
+                    elif ct_mode == "Template" and not ct_templates:
+                        st.info("No templates available")
+                    
+                    # Text area with session state value
+                    comment = st.text_area(
+                        "Comment",
+                        value=st.session_state.batch_ct_comments[student_name],
+                        height=50,
+                        key=f"batch_ct_comment_{i+1}_{student_name}",
+                        label_visibility="collapsed",
+                        placeholder="Type your comment here...",
+                        on_change=lambda sn=student_name, key=f"batch_ct_comment_{i+1}_{student_name}": 
+                            st.session_state.batch_ct_comments.update({sn: st.session_state[key]})
+                    )
+    
+    st.markdown("---")
+    
+    if st.button("💾 Save All CT Comments", type="primary", key="save_all_batch_ct"):
+        success_count = 0
+        for student_name, ct_comment in st.session_state.batch_ct_comments.items():
+            if ct_comment and ct_comment.strip():
+                existing = get_comment(student_name, class_name, term, session)
+                existing_ht = existing['head_teacher_comment'] if existing else ""
+                if create_comment(student_name, class_name, term, session, ct_comment, existing_ht):
+                    success_count += 1
         
-        if submit:
-            success_count = 0
-            for student_name, ct_comment in batch_comments.items():
-                if ct_comment.strip():
-                    existing = get_comment(student_name, class_name, term, session)
-                    existing_ht = existing['head_teacher_comment'] if existing else ""
-                    if create_comment(student_name, class_name, term, session, ct_comment, existing_ht):
-                        success_count += 1
-            
-            if success_count > 0:
-                st.success(f"✅ Successfully saved CT comments for {success_count} student(s).")
-                st.session_state.batch_ct_counter += 1
-                st.rerun()
-            else:
-                st.warning("⚠️ No CT comments to save.")
+        if success_count > 0:
+            st.success(f"✅ Successfully saved CT comments for {success_count} student(s).")
+            # Clear session state after successful save
+            st.session_state.batch_ct_comments = {}
+            st.rerun()
+        else:
+            st.warning("⚠️ No CT comments to save.")
 
 
 def render_batch_add_ht_tab(students, class_name, term, session, is_secondary_class, is_primary_class):
@@ -489,78 +545,127 @@ def render_batch_add_ht_tab(students, class_name, term, session, is_secondary_cl
     
     ht_templates = get_all_comment_templates('head_teacher')
     
-    if 'batch_ht_counter' not in st.session_state:
-        st.session_state.batch_ht_counter = 0
+    # Initialize session state for batch HT comments
+    if 'batch_ht_comments' not in st.session_state:
+        st.session_state.batch_ht_comments = {}
     
-    with st.expander("Batch Principal Comments", expanded=True):
-        batch_comments = {}
+    # Process students in pairs for 2-column layout
+    for i in range(0, len(students), 2):
+        col1, col2 = st.columns(2)
         
-        for idx, student in enumerate(students):
+        # First student in the pair
+        with col1:
+            student = students[i]
             student_name = student[1]
             existing_comment = get_comment(student_name, class_name, term, session)
             existing_ht = existing_comment['head_teacher_comment'] or "" if existing_comment else ""
             
+            # Initialize in session state if not exists
+            if student_name not in st.session_state.batch_ht_comments:
+                st.session_state.batch_ht_comments[student_name] = existing_ht
+            
             with st.container(border=True):
                 st.markdown(f"#### {student_name}")
                 
-                # Template selection or custom
-                col_mode_ht, col_template_ht = st.columns([1, 3], vertical_alignment="bottom")
+                # Mode selection
+                ht_mode = st.radio(
+                    "Mode",
+                    ["Custom", "Template"],
+                    key=f"batch_ht_mode_{i}_{student_name}",
+                    horizontal=True
+                )
                 
-                with col_mode_ht:
+                # Template selection
+                if ht_mode == "Template" and ht_templates:
+                    template_options = ["-- Select a template --"] + [t[1] for t in ht_templates]
+                    selected_template = st.selectbox(
+                        "Choose template",
+                        template_options,
+                        key=f"batch_ht_template_{i}_{student_name}"
+                    )
+                    
+                    if selected_template != "-- Select a template --":
+                        st.session_state.batch_ht_comments[student_name] = selected_template
+                elif ht_mode == "Template" and not ht_templates:
+                    st.info("No templates available")
+                
+                # Text area with session state value
+                comment = st.text_area(
+                    "Comment",
+                    value=st.session_state.batch_ht_comments[student_name],
+                    height=100,
+                    key=f"batch_ht_comment_{i}_{student_name}",
+                    placeholder="Type your comment here...",
+                    on_change=lambda sn=student_name, key=f"batch_ht_comment_{i}_{student_name}": 
+                        st.session_state.batch_ht_comments.update({sn: st.session_state[key]})
+                )
+        
+        # Second student in the pair (if exists)
+        with col2:
+            if i + 1 < len(students):
+                student = students[i + 1]
+                student_name = student[1]
+                existing_comment = get_comment(student_name, class_name, term, session)
+                existing_ht = existing_comment['head_teacher_comment'] or "" if existing_comment else ""
+                
+                # Initialize in session state if not exists
+                if student_name not in st.session_state.batch_ht_comments:
+                    st.session_state.batch_ht_comments[student_name] = existing_ht
+                
+                with st.container(border=True):
+                    st.markdown(f"#### {student_name}")
+                    
+                    # Mode selection
                     ht_mode = st.radio(
                         "Mode",
                         ["Custom", "Template"],
-                        key=f"ht_mode_{idx}_{student_name}",
-                        label_visibility="collapsed",
+                        key=f"batch_ht_mode_{i+1}_{student_name}",
                         horizontal=True
                     )
-                
-                ht_comment = existing_ht
-                
-                with col_template_ht:
-                    if ht_mode == "Template":
-                        if ht_templates:
-                            template_options = ["-- Select a template --"] + [t[1] for t in ht_templates]
-                            selected_ht_template = st.selectbox(
-                                "Choose template",
-                                template_options,
-                                key=f"ht_template_{idx}_{student_name}",
-                                label_visibility="collapsed"
-                            )
-                            
-                            if selected_ht_template != "-- Select a template --":
-                                ht_comment = selected_ht_template
-                        else:
-                            st.info("No templates available")
-                
-                ht_comment = st.text_area(
-                    "Comment",
-                    value=ht_comment,
-                    height=80,
-                    key=f"ht_comment_{idx}_{student_name}",
-                    placeholder="Type your comment here..."
-                )
-                
-                batch_comments[student_name] = ht_comment
+                    
+                    # Template selection
+                    if ht_mode == "Template" and ht_templates:
+                        template_options = ["-- Select a template --"] + [t[1] for t in ht_templates]
+                        selected_template = st.selectbox(
+                            "Choose template",
+                            template_options,
+                            key=f"batch_ht_template_{i+1}_{student_name}"
+                        )
+                        
+                        if selected_template != "-- Select a template --":
+                            st.session_state.batch_ht_comments[student_name] = selected_template
+                    elif ht_mode == "Template" and not ht_templates:
+                        st.info("No templates available")
+                    
+                    # Text area with session state value
+                    comment = st.text_area(
+                        "Comment",
+                        value=st.session_state.batch_ht_comments[student_name],
+                        height=100,
+                        key=f"batch_ht_comment_{i+1}_{student_name}",
+                        placeholder="Type your comment here...",
+                        on_change=lambda sn=student_name, key=f"batch_ht_comment_{i+1}_{student_name}": 
+                            st.session_state.batch_ht_comments.update({sn: st.session_state[key]})
+                    )
+    
+    st.markdown("---")
+    
+    if st.button(f"💾 Save All {ht_label}", type="primary", use_container_width=True, key="save_all_batch_ht"):
+        success_count = 0
+        for student_name, ht_comment in st.session_state.batch_ht_comments.items():
+            if ht_comment and ht_comment.strip():
+                existing = get_comment(student_name, class_name, term, session)
+                existing_ct = existing['class_teacher_comment'] if existing else ""
+                if create_comment(student_name, class_name, term, session, existing_ct, ht_comment):
+                    success_count += 1
         
-        st.markdown("---")
-        submit = st.button(f"💾 Save All {ht_label}", key=f"save_batch_{ht_label}_comment", type="primary", use_container_width=True)
-        
-        if submit:
-            success_count = 0
-            for student_name, ht_comment in batch_comments.items():
-                if ht_comment.strip():
-                    existing = get_comment(student_name, class_name, term, session)
-                    existing_ct = existing['class_teacher_comment'] if existing else ""
-                    if create_comment(student_name, class_name, term, session, existing_ct, ht_comment):
-                        success_count += 1
-            
-            if success_count > 0:
-                st.success(f"✅ Successfully saved {ht_label} for {success_count} student(s).")
-                st.session_state.batch_ht_counter += 1
-                st.rerun()
-            else:
-                st.warning(f"⚠️ No {ht_label} to save.")        
+        if success_count > 0:
+            st.success(f"✅ Successfully saved {ht_label} for {success_count} student(s).")
+            # Clear session state after successful save
+            st.session_state.batch_ht_comments = {}
+            st.rerun()
+        else:
+            st.warning(f"⚠️ No {ht_label} to save.")
 
 
 def render_batch_delete_tab(students, class_name, term, session, is_secondary_class, is_primary_class):

@@ -6,7 +6,7 @@ from typing import Dict, Callable, Optional
 from streamlit_cookies_manager import EncryptedCookieManager
 
 from config import APP_CONFIG, COOKIE_PASSWORD
-from database import create_tables, migrate_add_school_fees_column
+from database import create_tables, get_all_classes
 from utils import inject_login_css, render_page_header
 
 logger = logging.getLogger(__name__)
@@ -263,9 +263,6 @@ class ApplicationManager:
         try:
             create_tables()
 
-            # Run migration to add school_fees_paid column if it doesn't exist
-            migrate_add_school_fees_column()
-    
             logger.info("Database tables initialized successfully")
             return True
         except Exception as e:
@@ -492,6 +489,7 @@ class ApplicationManager:
                     "📄 Generate Reports": generate_reports.report_card_section,
                     "🔄 Change Assignment": select_assignment
                 }
+                
             elif role == "subject_teacher":
                 base_options = {
                     "📝 Enter Scores": enter_scores.enter_scores,
@@ -537,4 +535,3 @@ class ApplicationManager:
                 # Set this as the selected page
                 st.session_state.selected_page = first_section
                 logger.info(f"Navigating to first section after assignment: {first_section}")
-    

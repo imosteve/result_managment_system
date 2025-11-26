@@ -17,6 +17,7 @@ from .users import (
     update_user,
     get_user_assignments,
     assign_teacher,
+    batch_assign_subject_teacher,
     delete_assignment,
     update_assignment,
 )

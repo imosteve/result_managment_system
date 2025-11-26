@@ -16,7 +16,7 @@ from database import (
 )
 from utils import inject_login_css, render_page_header, format_ordinal, inject_metric_css
 from config import DB_CONFIG, APP_CONFIG
-from util.paginators import st_aggrid_paginator, streamlit_paginator
+from util.paginators import streamlit_paginator
 
 logger = logging.getLogger(__name__)
 

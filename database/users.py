@@ -226,17 +226,17 @@ def assign_teacher(user_id, class_name, term, session, subject_name=None, assign
         if assignment_type == 'class_teacher':
             subject_name = None  # Class teachers don't have subject_name
             
-            # Check if this class already has a class teacher
-            cursor.execute("""
-                SELECT user_id FROM teacher_assignments
-                WHERE class_name = ? AND term = ? AND session = ? 
-                AND assignment_type = 'class_teacher'
-            """, (class_name, term, session))
-            existing_class_teacher = cursor.fetchone()
+            # # Check if this class already has a class teacher
+            # cursor.execute("""
+            #     SELECT user_id FROM teacher_assignments
+            #     WHERE class_name = ? AND term = ? AND session = ? 
+            #     AND assignment_type = 'class_teacher'
+            # """, (class_name, term, session))
+            # existing_class_teacher = cursor.fetchone()
             
-            if existing_class_teacher:
-                logger.warning(f"Class {class_name}-{term}-{session} already has a class teacher (user_id: {existing_class_teacher[0]})")
-                return False
+            # if existing_class_teacher:
+            #     logger.warning(f"Class {class_name}-{term}-{session} already has a class teacher (user_id: {existing_class_teacher[0]})")
+            #     return False
         
         # Check if this user already has this exact assignment
         if assignment_type == 'class_teacher':
