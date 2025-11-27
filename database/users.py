@@ -225,18 +225,6 @@ def assign_teacher(user_id, class_name, term, session, subject_name=None, assign
         
         if assignment_type == 'class_teacher':
             subject_name = None  # Class teachers don't have subject_name
-            
-            # # Check if this class already has a class teacher
-            # cursor.execute("""
-            #     SELECT user_id FROM teacher_assignments
-            #     WHERE class_name = ? AND term = ? AND session = ? 
-            #     AND assignment_type = 'class_teacher'
-            # """, (class_name, term, session))
-            # existing_class_teacher = cursor.fetchone()
-            
-            # if existing_class_teacher:
-            #     logger.warning(f"Class {class_name}-{term}-{session} already has a class teacher (user_id: {existing_class_teacher[0]})")
-            #     return False
         
         # Check if this user already has this exact assignment
         if assignment_type == 'class_teacher':
@@ -269,6 +257,33 @@ def assign_teacher(user_id, class_name, term, session, subject_name=None, assign
         return False
     finally:
         conn.close()
+
+
+def batch_assign_subject_teacher(user_id, class_name, term, session, subject_names):
+    """
+    Batch assign a user as subject teacher for multiple subjects at once
+    
+    Args:
+        user_id: User ID to assign
+        class_name: Class name
+        term: Term
+        session: Session
+        subject_names: List of subject names
+    
+    Returns:
+        tuple: (success_count, failed_subjects)
+    """
+    success_count = 0
+    failed_subjects = []
+    
+    for subject_name in subject_names:
+        if assign_teacher(user_id, class_name, term, session, subject_name, 'subject_teacher'):
+            success_count += 1
+        else:
+            failed_subjects.append(subject_name)
+    
+    logger.info(f"Batch assignment: {success_count}/{len(subject_names)} subjects assigned successfully")
+    return success_count, failed_subjects
 
 
 def delete_assignment(assignment_id):

@@ -8,7 +8,8 @@ from st_aggrid import AgGrid, GridOptionsBuilder
 from database import (
     get_all_classes, get_subjects_by_class,
     create_user, get_all_users, delete_user, assign_teacher, get_user_assignments,
-    delete_assignment, get_database_stats, update_user, update_assignment, get_user_role
+    delete_assignment, get_database_stats, update_user, update_assignment, get_user_role,
+    batch_assign_subject_teacher
 )
 from utils import inject_login_css, render_page_header
 from util.paginators import streamlit_paginator
@@ -94,7 +95,6 @@ def admin_panel():
                     "Password": password
                 })
             
-            # st_aggrid_paginator(user_data, table_name="users")
             streamlit_paginator(user_data, table_name="users")
 
             if 'show_delete_user_confirm' not in st.session_state:
@@ -454,14 +454,14 @@ def admin_panel():
                     selected_index = class_options.index(selected_class)
                     class_data = classes[selected_index]
                     class_name, term, session = class_data['class_name'], class_data['term'], class_data['session']
-                    submitted = st.form_submit_button("Assign")
+                    submitted = st.form_submit_button("Assign Class Teacher")
                     if submitted:
                         if assign_teacher(selected_user_id, class_name, term, session, None, 'class_teacher'):
                             st.success(f"✅ Class teacher assigned: {next(u[1] for u in teacher_users if u[0] == selected_user_id)}.")
                             st.rerun()
                         else:
                             st.error("❌ Failed to assign class teacher. Assignment may already exist.")
-        
+
     # Assign Subject Teacher Tab
     with tabs[4]:
         st.subheader("Assign Subject Teacher")
@@ -507,28 +507,91 @@ def admin_panel():
                 
                 if not subjects:
                     st.warning("⚠️ No subjects available for this class. Add subjects in the Manage Subjects section.")
-                    subject_name = None
                 else:
-                    with col3:
-                        subject_options = [s[1] for s in subjects]
-                        subject_name = st.selectbox(
-                            "Select Subject",
-                            [""] + subject_options,
-                            key=f"subject_select_{selected_class}"
-                        )
-                
-                with st.form("assign_subject_teacher_form"):
-                    submitted = st.form_submit_button(
-                        "Assign Subject Teacher",
-                        disabled=not subject_name
-                    )
-                    if submitted and subject_name:
-                        if assign_teacher(selected_user_id, class_name, term, session, subject_name, 'subject_teacher'):
-                            st.success(f"✅ Subject teacher assigned: {next(u[1] for u in teacher_users if u[0] == selected_user_id)} to {subject_name}.")
-                            st.rerun()
-                        else:
-                            st.error("❌ Failed to assign subject teacher. Assignment may already exist.")
-
+                    # Check if this is Kindergarten or Nursery for batch assignment
+                    is_kindergarten_nursery = class_name.upper().startswith("KINDERGARTEN") or class_name.upper().startswith("NURSERY")
+                    
+                    if is_kindergarten_nursery:
+                        # Show batch assignment button for Kindergarten/Nursery
+                        st.info(f"💡 **Tip:** For {class_name.split()[0]} classes, you can assign all subjects at once using the button below.")
+                        
+                        with col3:
+                            subject_options = [s[1] for s in subjects]
+                            subject_name = st.selectbox(
+                                "Select Subject",
+                                [""] + subject_options,
+                                key=f"subject_select_{selected_class}"
+                            )
+                        
+                        with st.form("assign_subject_teacher_form"):
+                            col_single, col_batch = st.columns([1, 1])
+                            
+                            with col_single:
+                                st.markdown("**Assign Single Subject**")
+                                submitted_single = st.form_submit_button(
+                                    "Assign Subject Teacher",
+                                    disabled=not subject_name,
+                                    width=200
+                                )
+                            
+                            with col_batch:
+                                st.markdown("**Assign All Subjects**")
+                                st.caption(f"This will assign **{len(subjects)} subjects** to the selected teacher.")
+                                submitted_all = st.form_submit_button(
+                                    "Assign All Subjects", 
+                                    type="primary",
+                                    width=200
+                                )
+                            
+                            # Handle single subject assignment
+                            if submitted_single and subject_name:
+                                if assign_teacher(selected_user_id, class_name, term, session, subject_name, 'subject_teacher'):
+                                    st.success(f"✅ Subject teacher assigned: {next(u[1] for u in teacher_users if u[0] == selected_user_id)} to {subject_name}.")
+                                    time.sleep(1)
+                                    st.rerun()
+                                else:
+                                    st.error("❌ Failed to assign subject teacher. Assignment may already exist.")
+                            
+                            # Handle batch assignment
+                            if submitted_all:
+                                subject_names = [s[1] for s in subjects]
+                                success_count, failed_subjects = batch_assign_subject_teacher(
+                                    selected_user_id, class_name, term, session, subject_names
+                                )
+                                
+                                if success_count == len(subjects):
+                                    st.success(f"✅ All {success_count} subjects assigned successfully to {next(u[1] for u in teacher_users if u[0] == selected_user_id)}!")
+                                elif success_count > 0:
+                                    st.warning(f"⚠️ {success_count} subjects assigned. {len(failed_subjects)} subjects already existed or failed.")
+                                    if failed_subjects:
+                                        st.info(f"Skipped subjects: {', '.join(failed_subjects)}")
+                                else:
+                                    st.error("❌ No subjects were assigned. They may already exist.")
+                                
+                                time.sleep(1)
+                                st.rerun()
+                    else:
+                        # Regular single subject assignment for other classes
+                        with col3:
+                            subject_options = [s[1] for s in subjects]
+                            subject_name = st.selectbox(
+                                "Select Subject",
+                                [""] + subject_options,
+                                key=f"subject_select_{selected_class}"
+                            )
+                        
+                        with st.form("assign_subject_teacher_form_regular"):
+                            submitted = st.form_submit_button(
+                                "Assign Subject Teacher",
+                                disabled=not subject_name
+                            )
+                            if submitted and subject_name:
+                                if assign_teacher(selected_user_id, class_name, term, session, subject_name, 'subject_teacher'):
+                                    st.success(f"✅ Subject teacher assigned: {next(u[1] for u in teacher_users if u[0] == selected_user_id)} to {subject_name}.")
+                                    time.sleep(1)
+                                    st.rerun()
+                                else:
+                                    st.error("❌ Failed to assign subject teacher. Assignment may already exist.")
 
 if __name__ == "__main__":
     admin_panel()

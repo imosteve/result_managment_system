@@ -133,27 +133,11 @@ def _render_score_management_interface():
 def _get_accessible_classes(user_id: int, role: str) -> List[Dict[str, Any]]:
     """Get classes accessible to the user based on their role"""
     try:
-        # Admins see all classes
-        if role in ["superadmin", "admin"]:
-            return get_all_classes(user_id, role)
+        classes = get_all_classes(user_id, role)
         
-        # Teachers see only their assigned classes
-        assignments = get_user_assignments(user_id)
-        if not assignments:
+        if not classes:
+            st.warning("⚠️ No classes found.")
             return []
-        
-        # Extract unique classes from assignments
-        seen_classes = set()
-        classes = []
-        for assignment in assignments:
-            class_key = (assignment['class_name'], assignment['term'], assignment['session'])
-            if class_key not in seen_classes:
-                seen_classes.add(class_key)
-                classes.append({
-                    'class_name': assignment['class_name'],
-                    'term': assignment['term'],
-                    'session': assignment['session']
-                })
         
         return classes
     except Exception as e:

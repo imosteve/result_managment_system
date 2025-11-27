@@ -319,8 +319,19 @@ def render_persistent_class_selector(classes: List[Dict[str, Any]],
     # Create class options
     class_options = [f"{cls['class_name']} - {cls['term']} - {cls['session']}" for cls in classes]
     
-    # Get the last selected class
-    last_selection = st.session_state.class_selection_state.get('display_string')
+    # Create a mapping from display string to class data
+    class_map = {f"{cls['class_name']} - {cls['term']} - {cls['session']}": cls for cls in classes}
+    
+    # Get the last selected class from widget state (if exists) or session state
+    # Widget state takes precedence to handle immediate updates
+    widget_state_key = f"{widget_key}_value"
+    
+    if widget_state_key in st.session_state:
+        # Use the widget's current value
+        last_selection = st.session_state[widget_state_key]
+    else:
+        # Use the persisted session state
+        last_selection = st.session_state.class_selection_state.get('display_string')
     
     # Find the index of the last selection, default to 0 if not found
     default_index = 0
@@ -330,20 +341,33 @@ def render_persistent_class_selector(classes: List[Dict[str, Any]],
         except ValueError:
             default_index = 0
     
-    # Render the selectbox with the remembered index
+    # Callback function to update session state immediately when selection changes
+    def on_class_change():
+        selected_display = st.session_state[widget_key]
+        if selected_display in class_map:
+            selected_data = class_map[selected_display]
+            set_persistent_class_data(
+                selected_data['class_name'],
+                selected_data['term'],
+                selected_data['session']
+            )
+            # Store in widget state as well
+            st.session_state[widget_state_key] = selected_display
+    
+    # Render the selectbox with the remembered index and callback
     selected_class_display = st.selectbox(
         "Select Class", 
         class_options,
         index=default_index,
-        key=widget_key
+        key=widget_key,
+        on_change=on_class_change
     )
     
     # Get selected class details
-    try:
-        selected_index = class_options.index(selected_class_display)
-        selected_class_data = classes[selected_index]
+    if selected_class_display in class_map:
+        selected_class_data = class_map[selected_class_display]
         
-        # Update session state with the new selection
+        # Update session state with the new selection (in case callback wasn't triggered)
         set_persistent_class_data(
             selected_class_data['class_name'],
             selected_class_data['term'],
@@ -351,11 +375,11 @@ def render_persistent_class_selector(classes: List[Dict[str, Any]],
         )
         
         return selected_class_data
-    except (ValueError, IndexError):
-        # Fallback to first class if something goes wrong
-        if classes:
-            return classes[0]
-        return None
+    
+    # Fallback to first class if something goes wrong
+    if classes:
+        return classes[0]
+    return None
 
 def render_persistent_next_term_selector(
     classes: List[Dict[str, Any]], 
@@ -380,15 +404,35 @@ def render_persistent_next_term_selector(
                 "term": cls["term"],
                 "session": cls["session"]
             }
-            
-    last_selection = st.session_state.class_selection_state.get("display_string")
+    
+    # Get the last selected value from widget state or session state
+    widget_state_key = f"{widget_key}_value"
+    
+    if widget_state_key in st.session_state:
+        last_selection = st.session_state[widget_state_key]
+    else:
+        last_selection = st.session_state.class_selection_state.get("display_string")
+    
     default_index = class_options.index(last_selection) if last_selection in class_options else 0
+
+    # Callback function to update session state immediately
+    def on_term_change():
+        selected_display = st.session_state[widget_key]
+        selected = unique_map.get(selected_display)
+        if selected:
+            set_persistent_class_data(
+                None,  # class_name not needed
+                selected["term"],
+                selected["session"]
+            )
+            st.session_state[widget_state_key] = selected_display
 
     selected_display = st.selectbox(
         "Select Term / Session",
         class_options,
         index=default_index,
-        key=widget_key
+        key=widget_key,
+        on_change=on_term_change
     )
     
     selected = unique_map.get(selected_display)
@@ -414,4 +458,3 @@ def clear_persistent_class_selection():
             'session': None,
             'display_string': None
         }
-

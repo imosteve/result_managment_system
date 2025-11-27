@@ -30,14 +30,24 @@ def get_all_classes(user_id=None, role=None):
             FROM classes 
             ORDER BY session DESC, term, name
         """)
-    elif user_id:
-        # Teachers see only their assigned classes
+    elif role == "class_teacher" and user_id:
+        # Class teachers see only their class teacher assignments
         cursor.execute("""
             SELECT DISTINCT c.name, c.term, c.session
             FROM classes c
             JOIN teacher_assignments ta ON c.name = ta.class_name 
                 AND c.term = ta.term AND c.session = ta.session
-            WHERE ta.user_id = ?
+            WHERE ta.user_id = ? AND ta.assignment_type = 'class_teacher'
+            ORDER BY c.session DESC, c.term, c.name
+        """, (user_id,))
+    elif role == "subject_teacher" and user_id:
+        # Subject teachers see only their subject teacher assignments
+        cursor.execute("""
+            SELECT DISTINCT c.name, c.term, c.session
+            FROM classes c
+            JOIN teacher_assignments ta ON c.name = ta.class_name 
+                AND c.term = ta.term AND c.session = ta.session
+            WHERE ta.user_id = ? AND ta.assignment_type = 'subject_teacher'
             ORDER BY c.session DESC, c.term, c.name
         """, (user_id,))
     else:
