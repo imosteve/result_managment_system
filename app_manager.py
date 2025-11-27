@@ -434,9 +434,9 @@ class ApplicationManager:
             </div>
             """, unsafe_allow_html=True)
 
-            if st.button("🔄 Refresh", key="refresh_data", use_container_width=True):
+            if st.button("🔄 Refresh", key="refresh_data", width="stretch", type="secondary"):
                 st.rerun()
-                
+
     # app_manager.py - UPDATE the get_navigation_options method
     def get_navigation_options(self, role: str) -> Dict[str, Callable]:
         """Get navigation options based on user role"""

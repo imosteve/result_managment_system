@@ -91,7 +91,7 @@ def handle_post_assignment_navigation(app: ApplicationManager, role: str, option
     return None
 
 def handle_navigation(app: ApplicationManager, options: dict, role: str):
-    """Handle navigation logic with error handling and assignment redirect"""
+    """Handle navigation logic with clickable menu buttons"""
     option_keys = list(options.keys())
     if not option_keys:
         st.error("❌ No navigation options available for your role.")
@@ -109,27 +109,44 @@ def handle_navigation(app: ApplicationManager, options: dict, role: str):
         else:
             current_page = option_keys[0]
 
-    st.sidebar.header("Navigate to:")
-    # Navigation selectbox
-    choice = st.sidebar.selectbox(
-        "🧭 Navigate to:",
-        option_keys,
-        index=option_keys.index(current_page),
-        label_visibility="collapsed",
-    )
+    # Navigation with clickable buttons
+    st.markdown("""
+        <style>
+            .sidebar-title {
+                font-family: 'Arial', sans-serif;
+                # background: #0a84ff22;
+                padding: 6px 10px;
+                border-radius: 6px;
+                font-size: 19px;
+                # font-weight: 10;
+            }
+        </style>
+    """, unsafe_allow_html=True)
 
-    # Update URL parameters if choice changed
-    if choice != st.query_params.get("page"):
-        st.query_params["page"] = choice
-        st.rerun()
+    st.sidebar.markdown("<div class='sidebar-title'>NAVIGATION</div>", unsafe_allow_html=True)
+
+    for page in option_keys:
+        # Check if this is the current page
+        is_current = (page == current_page)
+        
+        # Create button with different styling for current page
+        if st.sidebar.button(
+            page,
+            key=f"nav_{page}",
+            # width="stretch",
+            type="secondary" if is_current else "tertiary",
+        ):
+            # Update URL and navigate
+            st.query_params["page"] = page
+            st.rerun()
 
     # Execute selected function
     try:
-        logger.info(f"User {st.session_state.get('username')} accessed {choice}")
-        options[choice]()
+        logger.info(f"User {st.session_state.get('username')} accessed {current_page}")
+        options[current_page]()
     except Exception as e:
-        logger.error(f"Error in {choice}: {str(e)}\n{traceback.format_exc()}")
-        st.error(f"❌ Error loading {choice}. Please try again or contact support.")
+        logger.error(f"Error in {current_page}: {str(e)}\n{traceback.format_exc()}")
+        st.error(f"❌ Error loading {current_page}. Please try again or contact support.")
         
         # Show error details to admins
         if st.session_state.get('role') in ['superadmin', 'admin']:
@@ -139,7 +156,7 @@ def handle_navigation(app: ApplicationManager, options: dict, role: str):
 def render_logout_button():
     """Render logout button"""
     with st.sidebar:
-        if st.button("🚪 Logout", type="secondary", use_container_width=True):
+        if st.button("🚪 Logout", type="primary", use_container_width=True):
             # Clear query parameters
             st.query_params.clear()
             logout()
@@ -210,14 +227,14 @@ def render_authenticated_app(app: ApplicationManager):
         # Render user info
         app.render_user_info(role, username)
         
-        # Render logout button
-        render_logout_button()
-        
         # Get navigation options based on role
         options = app.get_navigation_options(role)
         
         # Handle navigation (including post-assignment redirect)
         handle_navigation(app, options, role)
+        
+        # Render logout button
+        render_logout_button()
         
         st.markdown('</div>', unsafe_allow_html=True)
         

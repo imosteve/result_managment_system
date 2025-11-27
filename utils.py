@@ -263,7 +263,7 @@ def render_page_header(title, background_color="#c6b7b1", text_color="#000", fon
     st.markdown(
         f"""
         <div style='width: auto; margin: auto; text-align: center; background-color: {background_color};'>
-            <h2 style='color:{text_color}; font-size:{font_size}; margin-top:30px; margin-bottom:20px;'>
+            <h2 style='color:{text_color}; font-size:{font_size}; margin-top:10px; margin-bottom:20px;'>
                 {title}
             </h2>
         </div>
