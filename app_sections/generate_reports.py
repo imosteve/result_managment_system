@@ -12,6 +12,7 @@ from email.mime.base import MIMEBase
 from email import encoders
 from jinja2 import Environment, FileSystemLoader
 from weasyprint import HTML, CSS
+from PyPDF2 import PdfMerger  # Add this import
 from utils import (
     assign_grade, create_metric_5col_report, format_ordinal, 
     render_page_header, inject_login_css, render_persistent_class_selector
@@ -158,8 +159,10 @@ def generate_report_card(student_name, class_name, term, session, is_secondary_c
     if next_term_info:
         if next_term_info['fees'] is not None:
             next_term_fee = next_term_info['fees'].get(class_name, "#")
+            if next_term_fee == "0":
+                next_term_fee = "-"
         else:
-            next_term_fee = "#"
+            next_term_fee = "-"
     else:
         next_term_fee = "-"
     # Load and render template
@@ -236,8 +239,29 @@ def generate_report_card(student_name, class_name, term, session, is_secondary_c
         st.error(f"Error generating PDF: {e}")
         return None
 
+def merge_pdfs_into_single_file(pdf_paths, class_name, term, session):
+    """Merge all PDFs into a single PDF file"""
+    try:
+        os.makedirs("data/reports", exist_ok=True)
+        merged_filename = f"{class_name.replace(' ', '_')}_{term.replace(' ', '_')}_{session.replace('/', '_')}_All_Reports.pdf"
+        merged_path = os.path.join("data/reports", merged_filename)
+        
+        merger = PdfMerger()
+        
+        for pdf_path in pdf_paths:
+            if os.path.exists(pdf_path):
+                merger.append(pdf_path)
+        
+        merger.write(merged_path)
+        merger.close()
+        
+        return merged_path
+    except Exception as e:
+        st.error(f"Error merging PDFs: {e}")
+        return None
+
 def create_zip_file(pdf_paths, class_name, term, session):
-    """Create a zip file containing all generated PDFs"""
+    """Create a zip file containing all generated PDFs - kept for email functionality"""
     try:
         os.makedirs("data/reports", exist_ok=True)
         zip_filename = f"{class_name.replace(' ', '_')}_{term.replace(' ', '_')}_{session.replace('/', '_')}_Reports.zip"
@@ -470,8 +494,8 @@ def generate_tab():
 
     st.markdown("---")
 
-    # Batch Report Cards
-    if st.button("🗂️ Generate All Report Cards"):
+    # Batch Report Cards - MODIFIED TO CREATE SINGLE PDF
+    if st.button("Generate All Report Cards"):
         st.info(f"Generating report cards for {class_name} - {term} - {session}...")
         
         success_count = 0
@@ -493,25 +517,25 @@ def generate_tab():
                 
             progress_bar.progress((i + 1) / len(students))
 
-        status_text.text("Creating zip file...")
+        status_text.text("Merging all reports into a single PDF...")
         
         if pdf_paths:
-            zip_path = create_zip_file(pdf_paths, class_name, term, session)
+            merged_pdf_path = merge_pdfs_into_single_file(pdf_paths, class_name, term, session)
             
-            if zip_path and os.path.exists(zip_path):
+            if merged_pdf_path and os.path.exists(merged_pdf_path):
                 status_text.text("Complete!")
-                st.success(f"✅ Generated {success_count}/{len(students)} report cards successfully.")
+                st.success(f"✅ Generated {success_count}/{len(students)} report cards successfully and merged into single PDF.")
                 
-                with open(zip_path, "rb") as f:
+                with open(merged_pdf_path, "rb") as f:
                     st.download_button(
-                        label=f"📥 Download All Report Cards (ZIP)",
+                        label=f"📥 Download All Report Cards (Single PDF)",
                         data=f,
-                        file_name=os.path.basename(zip_path),
-                        mime="application/zip"
+                        file_name=os.path.basename(merged_pdf_path),
+                        mime="application/pdf"
                     )
             else:
                 status_text.text("Complete!")
-                st.error("❌ Failed to create zip file.")
+                st.error("❌ Failed to merge PDFs into single file.")
         else:
             status_text.text("Complete!")
             st.error("❌ No report cards were generated successfully.")
