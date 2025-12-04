@@ -9,9 +9,10 @@ from database import (
     get_all_classes, get_subjects_by_class,
     create_user, get_all_users, delete_user, assign_teacher, get_user_assignments,
     delete_assignment, get_database_stats, update_user, update_assignment, get_user_role,
-    batch_assign_subject_teacher
+    batch_assign_subject_teacher, get_classes_summary
 )
-from utils import inject_login_css, render_page_header
+from .system_dashboard import get_activity_statistics
+from utils import inject_login_css, render_page_header, inject_metric_css
 from util.paginators import streamlit_paginator
 
 def admin_panel():
@@ -64,7 +65,8 @@ def admin_panel():
         "Add New User",
         "View/Edit Assignment",
         "Assign Class Teacher",
-        "Assign Subject Teacher"
+        "Assign Subject Teacher",
+        "Analytics & Reports",
     ])
 
     def get_fresh_classes():
@@ -592,6 +594,56 @@ def admin_panel():
                                     st.rerun()
                                 else:
                                     st.error("❌ Failed to assign subject teacher. Assignment may already exist.")
+
+    # Analytics & Reports
+    with tabs[5]:
+        render_analytics_tab(stats)
+    
+
+def render_analytics_tab(stats):
+    """Render analytics and reports tab"""
+    
+    # Inject custom CSS for metric styling
+    inject_metric_css()
+
+    # Class distribution
+    st.markdown("#### Class Overview")
+    
+    class_summary = get_classes_summary()
+    
+    if class_summary:
+        class_data = [
+            {
+                "Class": row[0],
+                "Term": row[1],
+                "Session": row[2],
+                "Students": row[3],
+                "Subjects": row[4],
+                "Scores": row[5]
+            }
+            for row in class_summary
+        ]
+
+        streamlit_paginator(class_data, table_name="class_summary_analytics")
+    else:
+        st.info("No classes found in the system.")
+
+    # Activity statistics
+    st.markdown("---")
+    st.markdown("#### 📈 Activity Statistics")
+    
+    activity_stats = get_activity_statistics()
+    
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Active Classes", activity_stats['active_classes'])
+    with col2:
+        st.metric("Active Students", activity_stats['active_students'])
+    with col3:
+        st.metric("Score Completion", f"{activity_stats['score_completion']}%")
+    with col4:
+        st.metric("Assignments", stats['assignments'])
+
 
 if __name__ == "__main__":
     admin_panel()

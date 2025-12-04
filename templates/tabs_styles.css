@@ -22,7 +22,7 @@
 /* Reliable selector for Streamlit tabs (recent versions) */
 div[data-testid="stTabs"] button[role="tab"] {
     font-size: 25px !important;
-    padding: 18px 18px !important;
+    padding: 12px 12px !important;
     border-radius: 2px !important;
     text-align: center !important;
     color: #111 !important;

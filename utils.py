@@ -127,7 +127,7 @@ def create_metric_5col_broadsheet(subjects, students, class_average, broadsheet_
     with col4:
         st.markdown(f"<div class='custom-metric'><div class='label'>Total Students</div><div class='value'>{len(students)}</div></div>", unsafe_allow_html=True)
     with col5:
-        st.markdown(f"<div class='custom-metric'><div class='label'>Class Average</div><div class='value'>{class_average}</div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='custom-metric'><div class='label'>Class Average</div><div class='value'>{class_average:.1f}</div></div>", unsafe_allow_html=True)
     
     # Display subjects without scores if any
     if subjects_without_scores:

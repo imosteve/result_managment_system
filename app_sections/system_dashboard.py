@@ -423,26 +423,7 @@ def render_analytics_tab(stats):
             for row in class_summary
         ]
 
-        # Pagination settings
-        items_per_page = 10
-        total_items = len(class_data)
-        total_pages = math.ceil(total_items / items_per_page)
-
-        # Page selector
-        page = st.number_input(
-            "Page", min_value=1, max_value=total_pages, step=1, value=1, key="page_selector"
-        )
-
-        # Slice data
-        start_idx = (page - 1) * items_per_page
-        end_idx = start_idx + items_per_page
-        page_data = class_data[start_idx:end_idx]
-
-        # Display current page
-        st.dataframe(page_data, width="stretch")
-
-        st.caption(f"Showing {start_idx + 1} – {min(end_idx, total_items)} of {total_items} entries")
-
+        streamlit_paginator(class_data, table_name="class_summary_analytics")
     else:
         st.info("No classes found in the system.")
 

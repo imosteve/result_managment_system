@@ -19,7 +19,7 @@ from utils import (
 from database import (
     get_all_classes, get_students_by_class, get_student_scores, 
     get_class_average, get_student_grand_totals, get_comment, get_subjects_by_class,
-    get_psychomotor_rating, get_grade_distribution, get_next_term_begin_date
+    get_psychomotor_rating, get_grade_distribution, get_next_term_begin_date, get_next_term_info
 )
 
 # Email Configuration
@@ -27,6 +27,25 @@ SMTP_SERVER = os.getenv('SMTP_SERVER', "smtp.gmail.com")
 SMTP_PORT = int(os.getenv('SMTP_PORT', 465))
 EMAIL_SENDER = os.getenv('EMAIL_SENDER', "SUIS Terminal Result <ideas.elites@gmail.com>")
 EMAIL_PASSWORD = os.getenv('EMAIL_PASSWORD', "lkydcrsaritupygu")
+
+def calculate_next_term(current_term, current_session):
+    """Intelligently calculate the next term and session"""
+    term_map = {"1st Term": "2nd Term", "2nd Term": "3rd Term", "3rd Term": "1st Term"}
+    next_term = term_map.get(current_term, "1st Term")
+    
+    # If moving from 3rd term to 1st term, increment session
+    if current_term == "3rd Term":
+        year_parts = current_session.split('/')
+        if len(year_parts) == 2:
+            start_year = int(year_parts[0])
+            end_year = int(year_parts[1])
+            next_session = f"{start_year + 1}/{end_year + 1}"
+        else:
+            next_session = current_session
+    else:
+        next_session = current_session
+    
+    return next_term, next_session
 
 def generate_report_card(student_name, class_name, term, session, is_secondary_class, is_primary_class):
     """Generate PDF report card for a student"""
@@ -49,13 +68,18 @@ def generate_report_card(student_name, class_name, term, session, is_secondary_c
     if not all_subjects:
         return None
 
-    # Calculate student average and totals (only from actual scores)
+    # Calculate student average and totals (only from actual scores, filtering None values)
     if student_scores:
-        total_score = sum(score[5] for score in student_scores)
-        total_test = sum(int(score[3]) for score in student_scores)
-        total_exam = sum(int(score[4]) for score in student_scores)
+        # Filter out None values
+        valid_totals = [score[5] for score in student_scores if score[5] is not None]
+        valid_tests = [int(score[3]) for score in student_scores if score[3] is not None]
+        valid_exams = [int(score[4]) for score in student_scores if score[4] is not None]
+        
+        total_score = sum(valid_totals) if valid_totals else 0
+        total_test = sum(valid_tests) if valid_tests else 0
+        total_exam = sum(valid_exams) if valid_exams else 0
         grand_total = int(total_test + total_exam)
-        avg = total_score / len(student_scores) if student_scores else 0
+        avg = total_score / len(valid_totals) if valid_totals else 0
         grade = assign_grade(avg)
     else:
         total_score = total_test = total_exam = grand_total = 0
@@ -114,7 +138,7 @@ def generate_report_card(student_name, class_name, term, session, is_secondary_c
                 'test': int(score[3]) if score[3] is not None else "-",
                 'exam': int(score[4]) if score[4] is not None else "-",
                 'total': int(score[5]) if score[5] is not None else "-",
-                'grade': score[6],
+                'grade': score[6] if score[6] else "-",
                 'position': format_ordinal(position_data['position']) if position_data else "-"
             })
         else:
@@ -127,8 +151,17 @@ def generate_report_card(student_name, class_name, term, session, is_secondary_c
                 'position': "-"
             })
 
-    next_term_date = get_next_term_begin_date(term, session)
+    next_term, next_session = calculate_next_term(term, session)
+    next_term_date = get_next_term_begin_date(next_term, next_session)
+    next_term_info = get_next_term_info(next_term, next_session)
 
+    if next_term_info:
+        if next_term_info['fees'] is not None:
+            next_term_fee = next_term_info['fees'].get(class_name, "#")
+        else:
+            next_term_fee = "#"
+    else:
+        next_term_fee = "-"
     # Load and render template
     try:
         env = Environment(loader=FileSystemLoader("templates"))
@@ -155,8 +188,8 @@ def generate_report_card(student_name, class_name, term, session, is_secondary_c
             class_teacher_comment=class_teacher_comment,
             head_teacher_comment=head_teacher_comment,
             psychomotor=psychomotor_ratings,
-            # next_term_date="To be announced",
             next_term_date=next_term_date,
+            next_term_fee=f"₦{next_term_fee}",
             current_date=current_date
         )
 
@@ -343,7 +376,7 @@ def generate_tab():
 
     selected_class_data = render_persistent_class_selector(
         classes, 
-        widget_key="generate_reports_class"  # Use unique key for each section
+        widget_key="generate_reports_class"
     )
 
     if not selected_class_data:
@@ -363,9 +396,6 @@ def generate_tab():
     is_nursery_class = bool(re.match(r"NURSERY [12345].*$", class_name))
     is_pri_class = bool(re.match(r"PRIMARY [123456].*$", class_name))
     is_primary_class = is_kg_class or is_nursery_class or is_pri_class
-    
-    # if is_kg_class:
-    #     class_name = class_name.replace("KINDERGARTEN", "KG")
 
     students = get_students_by_class(class_name, term, session, user_id, role)
     if not students:
@@ -391,8 +421,12 @@ def generate_tab():
     gender = student_data[2] if student_data else "-"
     no_in_class = len(students)
     student_scores = get_student_scores(selected_student, class_name, term, session, user_id, role)
-    total_score = sum(score[5] for score in student_scores) if student_scores else 0
-    student_average = round(total_score / len(student_scores), 2) if student_scores else 0
+    
+    # Filter out None values when calculating totals
+    valid_scores = [score[5] for score in student_scores if score[5] is not None] if student_scores else []
+    total_score = sum(valid_scores) if valid_scores else 0
+    student_average = round(total_score / len(valid_scores), 2) if valid_scores else 0
+    
     class_average = get_class_average(class_name, term, session, user_id, role)
     grand_totals = get_student_grand_totals(class_name, term, session, user_id, role)
     position_data = next((gt for gt in grand_totals if gt['student_name'] == selected_student), None)
@@ -498,7 +532,7 @@ def email_tab():
 
     selected_class_data = render_persistent_class_selector(
         classes, 
-        widget_key="email_reports_class"    )
+        widget_key="email_reports_class")
 
     if not selected_class_data:
         st.warning("⚠️ No class selected.")

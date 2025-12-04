@@ -424,15 +424,20 @@ class ApplicationManager:
                 role_display = role.replace('_', ' ').title()
             else:
                 role_display = role.replace('_', ' ').title()
-            
-            st.markdown(f"""
-            <div class="user-info-card">
-                <h4>👤 User Information</h4>
-                <p><strong>Username:</strong> {username.title()}</p>
-                <p><strong>Role:</strong> {role_display}</p>
-                <p><strong>Login Time:</strong> {st.session_state.get('login_time', 'Unknown')}</p>
-            </div>
-            """, unsafe_allow_html=True)
+
+            with st.expander("👤 User Information"):
+                st.write(f"**Username**: {username.title()}")
+                st.write(f"**Role**: {role_display}")
+                st.write(f"**Login Time**: {st.session_state.get('login_time', 'Unknown')}")
+
+            # st.markdown(f"""
+            # <div class="user-info-card">
+            #     <h4>👤 User Information</h4>
+            #     <p><strong>Username:</strong> {username.title()}</p>
+            #     <p><strong>Role:</strong> {role_display}</p>
+            #     <p><strong>Login Time:</strong> {st.session_state.get('login_time', 'Unknown')}</p>
+            # </div>
+            # """, unsafe_allow_html=True)
 
             if st.button("🔄 Refresh", key="refresh_data", width="stretch", type="secondary"):
                 st.rerun()
@@ -462,8 +467,8 @@ class ApplicationManager:
                     "👥 Register Students": register_students.register_students,
                     "📚 Manage Subjects": manage_subjects.add_subjects,
                     "📝 Enter Scores": enter_scores.enter_scores,
-                    "📋 View Broadsheet": view_broadsheet.generate_broadsheet,
                     "📝 Manage Comments": manage_comments.manage_comments,
+                    "📋 View Broadsheet": view_broadsheet.generate_broadsheet,
                     "📄 Generate Reports": generate_reports.report_card_section
                 }
             elif role == "admin":
@@ -475,17 +480,16 @@ class ApplicationManager:
                     "👥 Register Students": register_students.register_students,
                     "📚 Manage Subjects": manage_subjects.add_subjects,
                     "📝 Enter Scores": enter_scores.enter_scores,
-                    "📋 View Broadsheet": view_broadsheet.generate_broadsheet,
                     "📝 Manage Comments": manage_comments.manage_comments,
+                    "📋 View Broadsheet": view_broadsheet.generate_broadsheet,
                     "📄 Generate Reports": generate_reports.report_card_section
                 }
             elif role == "class_teacher":
                 base_options = {
                     "👥 Register Students": register_students.register_students,
                     "📚 Manage Subjects": manage_subjects.add_subjects,
-                    # "📝 Enter Scores": enter_scores.enter_scores,
-                    "📋 View Broadsheet": view_broadsheet.generate_broadsheet,
                     "📝 Manage Comments": manage_comments.manage_comments,
+                    "📋 View Broadsheet": view_broadsheet.generate_broadsheet,
                     "📄 Generate Reports": generate_reports.report_card_section,
                     "🔄 Change Assignment": select_assignment
                 }

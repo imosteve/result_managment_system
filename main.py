@@ -156,7 +156,7 @@ def handle_navigation(app: ApplicationManager, options: dict, role: str):
 def render_logout_button():
     """Render logout button"""
     with st.sidebar:
-        if st.button("🚪 Logout", type="primary", use_container_width=True):
+        if st.button("Logout", type="primary", use_container_width=True):
             # Clear query parameters
             st.query_params.clear()
             logout()
@@ -190,7 +190,7 @@ def check_teacher_assignment(role: str) -> bool:
             st.warning("⚠️ No assignment selected. Please logout and select an assignment.")
             
             # Add logout button for convenience
-            if st.button("🚪 Logout to Select Assignment"):
+            if st.button("Logout to Select Assignment"):
                 logout()
             
             st.stop()

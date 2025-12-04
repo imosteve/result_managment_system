@@ -132,7 +132,7 @@ def login(cookies):
             
             if not assignments:
                 st.error("⚠️ You don't have any class or subject assignments yet.")
-                if st.button("🚪 Logout"):
+                if st.button("Logout"):
                     from .logout import logout
                     logout()
                 st.stop()

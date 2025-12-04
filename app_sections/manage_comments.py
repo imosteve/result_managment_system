@@ -78,27 +78,36 @@ def manage_comments():
     inject_login_css("templates/tabs_styles.css")
 
     # Create tabs
-    tabs = st.tabs([
-        "View/Delete Comments", 
-        "Psychomotor & Comments", 
-        "Batch CT Comments",
-        "Batch HT Comments",
-        "Batch Delete"
-    ])
+    if role in ["admin", "superadmin"]:
+        tab1, tab2, tab3, tab4, tab5 = st.tabs([
+            "View/Delete Comments", 
+            "Psychomotor & Comments", 
+            "Batch CT Comments", 
+            "Batch HT Comments", 
+            "Batch Delete"
+        ])
+    else:
+        tab1, tab2, tab3, tab5 = st.tabs([
+            "View/Delete Comments", 
+            "Psychomotor & Comments", 
+            "Batch CT Comments",
+            "Batch Delete"
+        ])
 
-    with tabs[0]:
+    with tab1:
         render_view_delete_tab(students, class_name, term, session, is_secondary_class, is_primary_class)
 
-    with tabs[1]:
-        render_psychomotor_comments_tab(students, class_name, term, session, is_secondary_class, is_primary_class)
+    with tab2:
+        render_psychomotor_comments_tab(role, students, class_name, term, session, is_secondary_class, is_primary_class)
 
-    with tabs[2]:
+    with tab3:
         render_batch_add_ct_tab(students, class_name, term, session)
 
-    with tabs[3]:
-        render_batch_add_ht_tab(students, class_name, term, session, is_secondary_class, is_primary_class)
+    if role in ["admin", "superadmin"]:
+        with tab4:
+            render_batch_add_ht_tab(students, class_name, term, session, is_secondary_class, is_primary_class)
 
-    with tabs[4]:
+    with tab5:
         render_batch_delete_tab(students, class_name, term, session, is_secondary_class, is_primary_class)
 
 
@@ -180,7 +189,7 @@ def render_view_delete_tab(students, class_name, term, session, is_secondary_cla
             st.info("No data available to delete.")
 
 
-def render_psychomotor_comments_tab(students, class_name, term, session, is_secondary_class, is_primary_class):
+def render_psychomotor_comments_tab(role, students, class_name, term, session, is_secondary_class, is_primary_class):
     """Render the Psychomotor Rating & Add Single Comment tab"""
     
     # Student selection
@@ -336,69 +345,70 @@ def render_psychomotor_comments_tab(students, class_name, term, session, is_seco
                 st.success(f"✅ Applied to {success_count}/{len(students)} students")
                 st.rerun()
         
-        st.markdown("---")
-        
-        # ============ HEAD TEACHER COMMENT ============
-        st.markdown(f"##### {"Principal Comment" if is_secondary_class else "Head Teacher Comment" if is_primary_class else ""}")
-        
-        # Get templates
-        ht_templates = get_all_comment_templates('head_teacher')
-        
-        # Template selection or custom
-        col_mode_ht, col_template_ht = st.columns([1, 3])
-        
-        with col_mode_ht:
-            ht_mode = st.radio(
-                "Mode",
-                ["Custom", "Template"],
-                key=f"ht_mode_{selected_student}",
-                label_visibility="collapsed",
-                horizontal=True
-            )
-        
-        with col_template_ht:
-            if ht_mode == "Template" and ht_templates:
-                ht_template_options = ["-- Select a template --"] + [t[1] for t in ht_templates]
-                selected_ht_template = st.selectbox(
-                    "Choose template",
-                    ht_template_options,
-                    key=f"ht_template_{selected_student}",
-                    label_visibility="collapsed"
+        if role in ["admin", "superadmin"]:
+            st.markdown("---")
+            
+            # ============ HEAD TEACHER COMMENT ============
+            st.markdown(f"##### {"Principal Comment" if is_secondary_class else "Head Teacher Comment" if is_primary_class else ""}")
+            
+            # Get templates
+            ht_templates = get_all_comment_templates('head_teacher')
+            
+            # Template selection or custom
+            col_mode_ht, col_template_ht = st.columns([1, 3])
+            
+            with col_mode_ht:
+                ht_mode = st.radio(
+                    "Modes",
+                    ["Custom", "Template"],
+                    key=f"ht_mode_{selected_student}",
+                    label_visibility="collapsed",
+                    horizontal=True
                 )
-                
-                if selected_ht_template != "-- Select a template --":
-                    head_teacher_comment = selected_ht_template
-        
-        # Comment text area
-        ht_comment = st.text_area(
-            f"{"Principal Comment" if is_secondary_class else "Head Teacher Comment" if is_primary_class else ""}",
-            value=head_teacher_comment,
-            height=80,
-            key=f"ht_comment_{selected_student}",
-            placeholder="Type your comment here or select from template above..."
-        )
-        
-        # Action buttons
-        col_save_ht, col_space_ht, col_apply_ht = st.columns(3)
-        
-        with col_save_ht:
-            if st.button(f"{"💾 Save Principal Comment" if is_secondary_class else "💾 Save HT Comment" if is_primary_class else ""}", key="save_ht_comment", use_container_width=True):
-                if create_comment(selected_student, class_name, term, session, ct_comment, ht_comment):
-                    st.success(f"✅ Head Teacher comment saved")
+            
+            with col_template_ht:
+                if ht_mode == "Template" and ht_templates:
+                    ht_template_options = ["-- Select a template --"] + [t[1] for t in ht_templates]
+                    selected_ht_template = st.selectbox(
+                        "Choose template",
+                        ht_template_options,
+                        key=f"ht_template_{selected_student}",
+                        label_visibility="collapsed"
+                    )
+                    
+                    if selected_ht_template != "-- Select a template --":
+                        head_teacher_comment = selected_ht_template
+            
+            # Comment text area
+            ht_comment = st.text_area(
+                f"{"Principal Comment" if is_secondary_class else "Head Teacher Comment" if is_primary_class else ""}",
+                value=head_teacher_comment,
+                height=80,
+                key=f"ht_comment_{selected_student}",
+                placeholder="Type your comment here or select from template above..."
+            )
+            
+            # Action buttons
+            col_save_ht, col_space_ht, col_apply_ht = st.columns(3)
+            
+            with col_save_ht:
+                if st.button(f"{"💾 Save Principal Comment" if is_secondary_class else "💾 Save HT Comment" if is_primary_class else ""}", key="save_ht_comment", use_container_width=True):
+                    if create_comment(selected_student, class_name, term, session, ct_comment, ht_comment):
+                        st.success(f"✅ Head Teacher comment saved")
+                        st.rerun()
+                    else:
+                        st.error("❌ Failed to save comment")
+            
+            with col_apply_ht:
+                if st.button("Apply to All Students", key="apply_ht_all", use_container_width=True):
+                    success_count = 0
+                    for student in students:
+                        existing = get_comment(student[1], class_name, term, session)
+                        ct_existing = existing['class_teacher_comment'] if existing else ""
+                        if create_comment(student[1], class_name, term, session, ct_existing, ht_comment):
+                            success_count += 1
+                    st.success(f"✅ Applied to {success_count}/{len(students)} students")
                     st.rerun()
-                else:
-                    st.error("❌ Failed to save comment")
-        
-        with col_apply_ht:
-            if st.button("Apply to All Students", key="apply_ht_all", use_container_width=True):
-                success_count = 0
-                for student in students:
-                    existing = get_comment(student[1], class_name, term, session)
-                    ct_existing = existing['class_teacher_comment'] if existing else ""
-                    if create_comment(student[1], class_name, term, session, ct_existing, ht_comment):
-                        success_count += 1
-                st.success(f"✅ Applied to {success_count}/{len(students)} students")
-                st.rerun()
 
 
 def render_batch_add_ct_tab(students, class_name, term, session):
