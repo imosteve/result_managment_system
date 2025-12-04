@@ -156,68 +156,169 @@ def next_term_info():
     # Tab 2: All Configurations
     # ---------------------------
     with tab2:
+        st.subheader("All Next Term Configurations")
+        
+        # Initialize session state for delete dialogs
+        if 'show_delete_basic_dialog' not in st.session_state:
+            st.session_state.show_delete_basic_dialog = False
+        if 'show_delete_fees_dialog' not in st.session_state:
+            st.session_state.show_delete_fees_dialog = False
+        if 'config_to_delete' not in st.session_state:
+            st.session_state.config_to_delete = None
+        if 'delete_type' not in st.session_state:
+            st.session_state.delete_type = None
+        
         all_infos = get_all_next_term_info()
         
         if not all_infos:
-            st.info("📭 No configurations found yet. Create one in the 'Configure Next Term' tab.")
+            st.info("📭 No configurations found yet. Create one in the 'Manage Information' tab.")
             return
 
-        # Search and filter
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            search = st.text_input("🔍 Search", placeholder="Filter by term or session...", label_visibility="collapsed")
-        with col2:
-            st.metric("Total", len(all_infos))
+        # Search filter
+        search = st.text_input(
+            "🔍 Search",
+            placeholder="Search by term or session...",
+            key="search_configs"
+        )
         
-        st.divider()
-
         # Filter entries
-        filtered = [
-            info for info in all_infos
-            if not search or search.lower() in info['term'].lower() or search.lower() in info['session'].lower()
-        ]
+        if search:
+            filtered = [
+                info for info in all_infos
+                if search.lower() in info['term'].lower() or search.lower() in info['session'].lower()
+            ]
+        else:
+            filtered = all_infos
 
-        # Display as elegant cards
-        for info in filtered:
-            with st.container():
-                # Header row
-                head_col1, head_col2, head_col3 = st.columns([3, 2, 1])
-                
-                with head_col1:
-                    st.markdown(f"### {info['term']} — {info['session']}")
-                
-                with head_col2:
-                    st.metric("Resumption Date", info['next_term_begins'])
-                
-                with head_col3:
-                    delete_key = f"del_{info['id']}"
-                    if st.button("🗑️ Delete", key=delete_key, type="secondary"):
-                        confirm_key = f"confirm_{delete_key}"
-                        if st.session_state.get(confirm_key, False):
-                            if delete_next_term_info(info['term'], info['session']):
-                                st.success("✅ Deleted")
-                                del st.session_state[confirm_key]
+        if not filtered:
+            st.info("📭 No configurations found. Try adjusting your search.")
+        else:
+            st.success(f"📊 Found **{len(filtered)}** configuration(s)")
+
+            # Display configurations in cards
+            for info in filtered:
+                with st.container(border=True):
+                    # Main header
+                    col1, col2 = st.columns([2.5, 1])
+                    with col1:
+                        st.markdown(f"##### Next term Information")
+                    with col2:
+                        st.caption(f"🕒 Last updated: {info['updated_at']}")
+                    
+                    # Basic Information Container
+                    with st.container(border=True):
+                        col_label, col_content, col_action = st.columns([1, 6, 0.5])
+                        
+                        with col_label:
+                            st.markdown("**Basic Info**")
+                        
+                        with col_content:
+                            col_1_1, col_1_2 = st.columns(2)
+                            with col_1_1:
+                                st.markdown(f"**Next Term — Session:** {info['term']} — {info['session']}")
+                            with col_1_2:
+                                st.markdown(f"**Next Term Begins:** {info['next_term_begins']}")
+                        
+                        with col_action:
+                            if st.button("🗑️", key=f"del_basic_{info['id']}", help="Delete basic information", type="primary"):
+                                st.session_state.config_to_delete = info
+                                st.session_state.delete_type = "basic"
+                                st.session_state.show_delete_basic_dialog = True
                                 st.rerun()
+                    
+                    # Fee Structure Container
+                    fees_map = json.loads(info.get('fees_json', '{}'))
+                    
+                    with st.container(border=True):
+                        col_label, col_content, col_action = st.columns([1, 6, 0.5])
+                        
+                        with col_label:
+                            st.markdown("**Fee Structure**")
+                        
+                        with col_content:
+                            if fees_map:
+                                # Display fees in compact grid
+                                fee_items = list(fees_map.items())
+                                for i in range(0, len(fee_items), 4):
+                                    fee_cols = st.columns(4)
+                                    for j, col in enumerate(fee_cols):
+                                        idx = i + j
+                                        if idx < len(fee_items):
+                                            class_name, amount = fee_items[idx]
+                                            with col:
+                                                st.caption(f"**{class_name}:** ₦{amount}")
                             else:
-                                st.error("❌ Failed")
-                        else:
-                            st.session_state[confirm_key] = True
-                            st.warning("⚠️ Click again to confirm")
+                                st.caption("_No fees configured_")
+                        
+                        with col_action:
+                            if fees_map:
+                                if st.button("🗑️", key=f"del_fees_{info['id']}", help="Delete fee structure", type="primary"):
+                                    st.session_state.config_to_delete = info
+                                    st.session_state.delete_type = "fees"
+                                    st.session_state.show_delete_fees_dialog = True
+                                    st.rerun()
+
+        # Delete Basic Information Confirmation Dialog
+        if st.session_state.show_delete_basic_dialog and st.session_state.config_to_delete:
+            info = st.session_state.config_to_delete
+            
+            @st.dialog("⚠️ Confirm Delete Basic Information")
+            def confirm_delete_basic():
+                st.warning(f"Are you sure you want to delete the entire configuration for:")
+                st.info(f"**{info['term']} — {info['session']}**")
+                st.error("⚠️ This will delete ALL information including fees for this term/session!")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("✅ Yes, Delete Everything", type="primary", use_container_width=True):
+                        if delete_next_term_info(info['term'], info['session']):
+                            st.success("✅ Configuration deleted successfully!")
+                            st.session_state.show_delete_basic_dialog = False
+                            st.session_state.config_to_delete = None
                             st.rerun()
+                        else:
+                            st.error("❌ Failed to delete configuration")
                 
-                # Fees section
-                st.markdown("**Fee Structure:**")
-                fees_map = json.loads(info.get('fees_json', '{}'))
+                with col2:
+                    if st.button("❌ Cancel", use_container_width=True):
+                        st.session_state.show_delete_basic_dialog = False
+                        st.session_state.config_to_delete = None
+                        st.rerun()
+            
+            confirm_delete_basic()
+
+        # Delete Fees Confirmation Dialog
+        if st.session_state.show_delete_fees_dialog and st.session_state.config_to_delete:
+            info = st.session_state.config_to_delete
+            
+            @st.dialog("⚠️ Confirm Delete Fee Structure")
+            def confirm_delete_fees():
+                st.warning(f"Are you sure you want to delete the fee structure for:")
+                st.info(f"**{info['term']} — {info['session']}**")
+                st.caption("This will clear all class fees but keep the basic information.")
                 
-                if fees_map:
-                    # Display fees in compact grid
-                    fee_cols = st.columns(4)
-                    for idx, (class_name, amount) in enumerate(fees_map.items()):
-                        with fee_cols[idx % 4]:
-                            st.caption(f"**{class_name}**")
-                            st.write(f"₦{amount}")
-                else:
-                    st.caption("No fees configured")
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("✅ Yes, Delete Fees", type="primary", use_container_width=True):
+                        # Update with empty fees
+                        if create_or_update_next_term_info(
+                            info['term'], 
+                            info['session'], 
+                            info['next_term_begins'], 
+                            json.dumps({}), 
+                            user_id
+                        ):
+                            st.success("✅ Fee structure deleted successfully!")
+                            st.session_state.show_delete_fees_dialog = False
+                            st.session_state.config_to_delete = None
+                            st.rerun()
+                        else:
+                            st.error("❌ Failed to delete fee structure")
                 
-                st.caption(f"🕒 Last updated: {info['updated_at']}")
-                st.divider()
+                with col2:
+                    if st.button("❌ Cancel", use_container_width=True):
+                        st.session_state.show_delete_fees_dialog = False
+                        st.session_state.config_to_delete = None
+                        st.rerun()
+            
+            confirm_delete_fees()
