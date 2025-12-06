@@ -30,7 +30,8 @@ class SessionManager:
             st.session_state.role = user["role"]  # Will be None for teachers
             st.session_state.username = user["username"]
             st.session_state.login_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            st.session_state.last_activity = datetime.now()
+            if "last_activity" not in st.session_state:
+                st.session_state.last_activity = datetime.now()
             
             # Set cookies (they will auto-expire based on cookie manager settings)
             cookies["authenticated"] = "true"
@@ -210,8 +211,8 @@ class SessionManager:
                 
                 st.session_state.username = cookies.get("username", "")
                 st.session_state.login_time = cookies.get("login_time", "")
-                st.session_state.last_activity = datetime.now()
-                
+                # st.session_state.last_activity = datetime.now()
+
                 # Restore assignment if exists
                 if (cookies.get("assignment_class") and 
                     cookies.get("assignment_term") and 

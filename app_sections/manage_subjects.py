@@ -93,12 +93,12 @@ def add_subjects():
             
             col1, col2 = st.columns(2)
             with col1:
-                if st.button("🚫 Cancel", key="cancel_delete_subject", type="secondary", use_container_width=True):
+                if st.button("🚫 Cancel", key="cancel_delete_subject", type="secondary", width='stretch'):
                     st.session_state.show_delete_subject_confirm = False
                     st.session_state.subject_to_delete_info = None
                     st.rerun()
             with col2:
-                if st.button("❌ Delete Subject", key="confirm_delete_subject", type="primary", use_container_width=True):
+                if st.button("❌ Delete Subject", key="confirm_delete_subject", type="primary", width='stretch'):
                     delete_subject(subject_info['subject_id'])
                     st.session_state.show_delete_subject_confirm = False
                     st.session_state.subject_to_delete_info = None
@@ -125,12 +125,12 @@ def add_subjects():
             
             col1, col2 = st.columns(2)
             with col1:
-                if st.button("🚫 Cancel", key="cancel_clear_subjects", type="secondary", use_container_width=True):
+                if st.button("🚫 Cancel", key="cancel_clear_subjects", type="secondary", width='stretch'):
                     st.session_state.show_clear_subjects_confirm = False
                     st.session_state.clear_subjects_info = None
                     st.rerun()
             with col2:
-                if st.button("🗑️ Clear All Subjects", key="confirm_clear_subjects", type="primary", use_container_width=True):
+                if st.button("🗑️ Clear All Subjects", key="confirm_clear_subjects", type="primary", width='stretch'):
                     success = clear_all_subjects(info['class_name'], info['term'], info['session'])
                     st.session_state.show_clear_subjects_confirm = False
                     st.session_state.clear_subjects_info = None
@@ -159,12 +159,12 @@ def add_subjects():
             
             col1, col2 = st.columns(2)
             with col1:
-                if st.button("🚫 Cancel", key="cancel_clear_selections", type="secondary", use_container_width=True):
+                if st.button("🚫 Cancel", key="cancel_clear_selections", type="secondary", width='stretch'):
                     st.session_state.show_clear_selections_confirm = False
                     st.session_state.clear_selections_info = None
                     st.rerun()
             with col2:
-                if st.button("🗑️ Clear All Selections", key="confirm_clear_selections", type="primary", use_container_width=True):
+                if st.button("🗑️ Clear All Selections", key="confirm_clear_selections", type="primary", width='stretch'):
                     try:
                         for student in info['students']:
                             student_name = student[1]
@@ -364,7 +364,7 @@ def add_subjects():
                             "Number of Subjects": st.column_config.NumberColumn("Number of Subjects", width="small")
                         },
                         hide_index=True,
-                        use_container_width=True
+                        width='stretch'
                     )
                 else:
                     st.info("No subject selections made yet.")

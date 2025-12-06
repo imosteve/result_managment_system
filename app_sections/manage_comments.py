@@ -141,7 +141,7 @@ def render_view_delete_tab(students, class_name, term, session, is_secondary_cla
                 "Has Psychomotor": st.column_config.TextColumn("Has Psychomotor", width=50)
             },
             hide_index=True,
-            use_container_width=True
+            width='stretch'
         )
     else:
         st.info("No comments or ratings found for this class.")
@@ -252,7 +252,7 @@ def render_psychomotor_comments_tab(role, students, class_name, term, session, i
     col_save1, col_space1, col_apply1 = st.columns(3)
     
     with col_save1:
-        if st.button("💾 Save Rating", key="save_psycho", use_container_width=True):
+        if st.button("💾 Save Rating", key="save_psycho", width='stretch'):
             if create_psychomotor_rating(selected_student, class_name, term, session, ratings):
                 st.success(f"✅ Psychomotor rating saved for {selected_student}")
                 st.rerun()
@@ -260,7 +260,7 @@ def render_psychomotor_comments_tab(role, students, class_name, term, session, i
                 st.error("❌ Failed to save psychomotor rating")
     
     with col_apply1:
-        if st.button("Apply to All Students", key="apply_psycho_all", use_container_width=True):
+        if st.button("Apply to All Students", key="apply_psycho_all", width='stretch'):
             success_count = 0
             for student in students:
                 if create_psychomotor_rating(student[1], class_name, term, session, ratings):
@@ -327,7 +327,7 @@ def render_psychomotor_comments_tab(role, students, class_name, term, session, i
         col_save_ct, col_space_ct, col_apply_ct = st.columns(3)
         
         with col_save_ct:
-            if st.button("💾 Save CT Comment", key="save_ct_comment", use_container_width=True):
+            if st.button("💾 Save CT Comment", key="save_ct_comment", width='stretch'):
                 if create_comment(selected_student, class_name, term, session, ct_comment, head_teacher_comment):
                     st.success(f"✅ Class Teacher comment saved")
                     st.rerun()
@@ -335,7 +335,7 @@ def render_psychomotor_comments_tab(role, students, class_name, term, session, i
                     st.error("❌ Failed to save comment")
         
         with col_apply_ct:
-            if st.button("Apply to All Students", key="apply_ct_all", use_container_width=True):
+            if st.button("Apply to All Students", key="apply_ct_all", width='stretch'):
                 success_count = 0
                 for student in students:
                     existing = get_comment(student[1], class_name, term, session)
@@ -392,7 +392,7 @@ def render_psychomotor_comments_tab(role, students, class_name, term, session, i
             col_save_ht, col_space_ht, col_apply_ht = st.columns(3)
             
             with col_save_ht:
-                if st.button(f"{"💾 Save Principal Comment" if is_secondary_class else "💾 Save HT Comment" if is_primary_class else ""}", key="save_ht_comment", use_container_width=True):
+                if st.button(f"{"💾 Save Principal Comment" if is_secondary_class else "💾 Save HT Comment" if is_primary_class else ""}", key="save_ht_comment", width='stretch'):
                     if create_comment(selected_student, class_name, term, session, ct_comment, ht_comment):
                         st.success(f"✅ Head Teacher comment saved")
                         st.rerun()
@@ -400,7 +400,7 @@ def render_psychomotor_comments_tab(role, students, class_name, term, session, i
                         st.error("❌ Failed to save comment")
             
             with col_apply_ht:
-                if st.button("Apply to All Students", key="apply_ht_all", use_container_width=True):
+                if st.button("Apply to All Students", key="apply_ht_all", width='stretch'):
                     success_count = 0
                     for student in students:
                         existing = get_comment(student[1], class_name, term, session)
@@ -660,7 +660,7 @@ def render_batch_add_ht_tab(students, class_name, term, session, is_secondary_cl
     
     st.markdown("---")
     
-    if st.button(f"💾 Save All {ht_label}", type="primary", use_container_width=True, key="save_all_batch_ht"):
+    if st.button(f"💾 Save All {ht_label}", type="primary", width='stretch', key="save_all_batch_ht"):
         success_count = 0
         for student_name, ht_comment in st.session_state.batch_ht_comments.items():
             if ht_comment and ht_comment.strip():
@@ -707,7 +707,7 @@ def render_batch_delete_tab(students, class_name, term, session, is_secondary_cl
                     disabled=not confirm_delete_comments,
                     key="delete_all_comments",
                     type="primary",
-                    use_container_width=True
+                    width='stretch'
                 ):
                     deleted_count = 0
                     for student in students:
@@ -738,7 +738,7 @@ def render_batch_delete_tab(students, class_name, term, session, is_secondary_cl
                     disabled=not confirm_delete_psycho,
                     key="delete_all_psycho",
                     type="primary",
-                    use_container_width=True
+                    width='stretch'
                 ):
                     deleted_count = 0
                     for student in students:

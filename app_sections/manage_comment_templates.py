@@ -30,7 +30,7 @@ def manage_comment_templates():
     st.set_page_config(page_title="Comment Templates", layout="wide")
     inject_login_css("templates/tabs_styles.css")
     
-    render_page_header("📝 Manage Comment Templates")
+    render_page_header("Manage Comment Templates")
 
     # Initialize session state
     if "show_delete_dialog" not in st.session_state:
@@ -138,7 +138,7 @@ def manage_comment_templates():
                             col_save, col_cancel = st.columns(2)
                             
                             with col_save:
-                                if st.button("💾 Save Changes", key=f"save_{template_id}", use_container_width=True):
+                                if st.button("💾 Save Changes", key=f"save_{template_id}", width='stretch'):
                                     if edited_text.strip():
                                         if update_comment_template(template_id, edited_text):
                                             st.success("✅ Template updated successfully!")
@@ -150,7 +150,7 @@ def manage_comment_templates():
                                         st.error("❌ Template text cannot be empty.")
                             
                             with col_cancel:
-                                if st.button("❌ Cancel", key=f"cancel_{template_id}", use_container_width=True):
+                                if st.button("❌ Cancel", key=f"cancel_{template_id}", width='stretch'):
                                     st.session_state.editing_template_id = None
                                     st.rerun()
                         else:
@@ -174,13 +174,13 @@ def manage_comment_templates():
             col1, col2 = st.columns(2)
             
             with col1:
-                if st.button("❌ Cancel", key="cancel_delete", use_container_width=True):
+                if st.button("❌ Cancel", key="cancel_delete", width='stretch'):
                     st.session_state.show_delete_dialog = False
                     st.session_state.template_to_delete = None
                     st.rerun()
             
             with col2:
-                if st.button("🗑️ Delete", key="confirm_delete", type="primary", use_container_width=True):
+                if st.button("🗑️ Delete", key="confirm_delete", type="primary", width='stretch'):
                     if delete_comment_template(data["id"]):
                         st.success("✅ Template deleted successfully!")
                         st.session_state.show_delete_dialog = False
@@ -215,7 +215,7 @@ def manage_comment_templates():
             )
             
             # Submit button
-            submitted = st.form_submit_button("➕ Add Template(s)", use_container_width=True, type="primary")
+            submitted = st.form_submit_button("➕ Add Template(s)", width='stretch', type="primary")
             
             if submitted:
                 if not new_comments.strip():
@@ -285,7 +285,7 @@ def manage_comment_templates():
                         f"🗑️ Delete All Class Teacher ({class_teacher_count})",
                         key="delete_ct_all",
                         type="secondary",
-                        use_container_width=True
+                        width='stretch'
                     ):
                         ct_ids = [t[0] for t in all_templates if t[2] == "class_teacher"]
                         st.session_state.templates_to_bulk_delete = ct_ids
@@ -301,7 +301,7 @@ def manage_comment_templates():
                         f"🗑️ Delete All Head Teacher ({head_teacher_count})",
                         key="delete_ht_all",
                         type="secondary",
-                        use_container_width=True
+                        width='stretch'
                     ):
                         ht_ids = [t[0] for t in all_templates if t[2] == "head_teacher"]
                         st.session_state.templates_to_bulk_delete = ht_ids
@@ -316,7 +316,7 @@ def manage_comment_templates():
                     f"Delete ALL Templates ({len(all_templates)})",
                     key="clear_all_templates",
                     type="primary",
-                    use_container_width=True
+                    width='stretch'
                 ):
                     st.session_state.templates_to_bulk_delete = [t[0] for t in all_templates]
                     st.session_state.bulk_delete_type = "ALL"
@@ -344,7 +344,7 @@ def manage_comment_templates():
             col1, col2 = st.columns(2)
             
             with col1:
-                if st.button("❌ Cancel", key="cancel_bulk_delete", use_container_width=True):
+                if st.button("❌ Cancel", key="cancel_bulk_delete", width='stretch'):
                     st.session_state.show_bulk_delete_dialog = False
                     st.session_state.templates_to_bulk_delete = []
                     st.session_state.bulk_delete_type = None
@@ -355,7 +355,7 @@ def manage_comment_templates():
                     f"🗑️ Delete {delete_count} Template(s)",
                     key="confirm_bulk_delete",
                     type="primary",
-                    use_container_width=True
+                    width='stretch'
                 ):
                     deleted = 0
                     failed = 0
@@ -408,7 +408,7 @@ def manage_comment_templates():
             col1, col2 = st.columns(2)
             
             with col1:
-                if st.button("❌ Cancel", key="cancel_clear_all", use_container_width=True):
+                if st.button("❌ Cancel", key="cancel_clear_all", width='stretch'):
                     st.session_state.show_clear_all_confirm = False
                     st.session_state.templates_to_bulk_delete = []
                     st.session_state.bulk_delete_type = None
@@ -421,7 +421,7 @@ def manage_comment_templates():
                     f"Delete ALL",
                     key="confirm_clear_all",
                     type="primary",
-                    use_container_width=True,
+                    width='stretch',
                     disabled=delete_button_disabled
                 ):
                     deleted = 0

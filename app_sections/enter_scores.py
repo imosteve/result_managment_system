@@ -5,7 +5,7 @@ import pandas as pd
 import logging
 from typing import Optional, List, Dict, Any
 from utils import (
-    assign_grade, inject_login_css, format_ordinal, render_page_header,
+    assign_grade, inject_login_css, format_ordinal, render_page_header
 )
 from database import (
     get_all_classes, get_students_by_class, get_subjects_by_class,

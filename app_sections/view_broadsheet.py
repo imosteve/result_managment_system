@@ -4,7 +4,11 @@ import streamlit as st
 import pandas as pd
 import re
 from database import get_all_classes, get_students_by_class, get_subjects_by_class, get_student_scores, get_student_grand_totals, get_grade_distribution
-from utils import assign_grade, create_metric_5col_broadsheet, format_ordinal, render_page_header, inject_login_css, render_persistent_class_selector
+from utils import (
+    assign_grade, create_metric_5col_broadsheet, 
+    format_ordinal, render_page_header, inject_login_css, 
+    render_persistent_class_selector
+)
 
 def generate_broadsheet():
     if not st.session_state.get("authenticated", False):
@@ -187,7 +191,7 @@ def generate_broadsheet():
         df,
         column_config=column_config,
         hide_index=True,
-        use_container_width=True,
+        width='stretch',
         height=35 * len(broadsheet_data) + 38
     )
     
@@ -202,5 +206,5 @@ def generate_broadsheet():
             data=csv_data,
             file_name=csv_filename,
             mime="text/csv",
-            use_container_width=True
+            width='stretch'
         )

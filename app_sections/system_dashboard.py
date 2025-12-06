@@ -109,7 +109,7 @@ def render_system_health_tab():
     col1, col2 = st.columns([3, 1])
     
     with col2:
-        if st.button("🔄 Run Health Check", type="primary", use_container_width=True):
+        if st.button("🔄 Run Health Check", type="primary", width='stretch'):
             with st.spinner("Running comprehensive health check..."):
                 time.sleep(1)  # Simulate check time
                 
@@ -212,7 +212,7 @@ def render_database_management_tab():
     
     with col2:
         st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("💾 Create Backup", type="primary", use_container_width=True):
+        if st.button("💾 Create Backup", type="primary", width='stretch'):
             create_database_backup(backup_name if backup_name else None)
     
     # List existing backups
@@ -290,13 +290,13 @@ def render_database_management_tab():
                 col1, col2 = st.columns(2)
                 
                 with col1:
-                    if st.button("🚫 Cancel", key="cancel_restore", type="secondary", use_container_width=True):
+                    if st.button("🚫 Cancel", key="cancel_restore", type="secondary", width='stretch'):
                         st.session_state.show_restore_confirm = False
                         st.session_state.selected_restore_backup = None
                         st.rerun()
                 
                 with col2:
-                    if st.button("🔄 RESTORE DATABASE", key="confirm_restore", type="primary", use_container_width=True):
+                    if st.button("🔄 RESTORE DATABASE", key="confirm_restore", type="primary", width='stretch'):
                         if confirm_text == "RESTORE DATABASE":
                             restore_database_from_backup(backup_name)
                             st.session_state.show_restore_confirm = False
@@ -334,13 +334,13 @@ def render_database_management_tab():
                 col1, col2 = st.columns(2)
                 
                 with col1:
-                    if st.button("🚫 Cancel", key="cancel_delete_backup", type="secondary", use_container_width=True):
+                    if st.button("🚫 Cancel", key="cancel_delete_backup", type="secondary", width='stretch'):
                         st.session_state.show_delete_backup_confirm = False
                         st.session_state.selected_delete_backup = None
                         st.rerun()
                 
                 with col2:
-                    if st.button("🗑️ Delete Backup", key="confirm_delete_backup", type="primary", use_container_width=True):
+                    if st.button("🗑️ Delete Backup", key="confirm_delete_backup", type="primary", width='stretch'):
                         delete_backup_file(backup_name)
                         st.session_state.show_delete_backup_confirm = False
                         st.session_state.selected_delete_backup = None
@@ -359,13 +359,13 @@ def render_database_management_tab():
         # Rebuild database file to reclaim unused space and improve performance.
         st.markdown("**Vacuum Database**")
         st.info("Rebuild database file to improve performance.")
-        if st.button("🧹 Vacuum Database", use_container_width=True):
+        if st.button("🧹 Vacuum Database", width='stretch'):
             vacuum_database()
     
     with col2:
         st.markdown("**Analyze Database**")
         st.info("Update database statistics for better query optimization.")
-        if st.button("📊 Analyze Database", use_container_width=True):
+        if st.button("📊 Analyze Database", width='stretch'):
             analyze_database()
     
     # Create indexes
@@ -488,6 +488,7 @@ def render_maintenance_tab():
         days_to_keep = st.number_input("Keep logs from last (days)", min_value=1, max_value=365, value=30)
         if st.button("🗑️ Clean Old Logs"):
             clean_old_logs(days_to_keep)
+
 
 def render_security_logs_tab():
     """Render security and logs tab"""

@@ -11,10 +11,10 @@ APP_CONFIG = {
     "app_name": "Result Management System".upper(),
     "version": "1.0.0",
     "page_title": "Student Result System",
-    "cookie_prefix": "student_results_app/",
-    "session_timeout": 3600,  # 1 hour in seconds
+    "cookie_prefix": "student_results_app",
+    "session_timeout": 10,  # 1 hour in seconds
     "max_login_attempts": 5,
-    "lockout_duration": 900,  # 15 minutes in seconds
+    "lockout_duration": 300,  # 5 minutes in seconds
 }
 
 # Environment Configuration

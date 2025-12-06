@@ -270,7 +270,7 @@ def next_term_info():
                 
                 col1, col2 = st.columns(2)
                 with col1:
-                    if st.button("✅ Yes, Delete Everything", type="primary", use_container_width=True):
+                    if st.button("✅ Yes, Delete Everything", type="primary", width='stretch'):
                         if delete_next_term_info(info['term'], info['session']):
                             st.success("✅ Configuration deleted successfully!")
                             st.session_state.show_delete_basic_dialog = False
@@ -280,7 +280,7 @@ def next_term_info():
                             st.error("❌ Failed to delete configuration")
                 
                 with col2:
-                    if st.button("❌ Cancel", use_container_width=True):
+                    if st.button("❌ Cancel", width='stretch'):
                         st.session_state.show_delete_basic_dialog = False
                         st.session_state.config_to_delete = None
                         st.rerun()
@@ -299,7 +299,7 @@ def next_term_info():
                 
                 col1, col2 = st.columns(2)
                 with col1:
-                    if st.button("✅ Yes, Delete Fees", type="primary", use_container_width=True):
+                    if st.button("✅ Yes, Delete Fees", type="primary", width='stretch'):
                         # Update with empty fees
                         if create_or_update_next_term_info(
                             info['term'], 
@@ -316,7 +316,7 @@ def next_term_info():
                             st.error("❌ Failed to delete fee structure")
                 
                 with col2:
-                    if st.button("❌ Cancel", use_container_width=True):
+                    if st.button("❌ Cancel", width='stretch'):
                         st.session_state.show_delete_fees_dialog = False
                         st.session_state.config_to_delete = None
                         st.rerun()

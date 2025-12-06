@@ -238,7 +238,7 @@ def register_students():
             },
             num_rows="dynamic",
             hide_index=True,
-            width="stretch",  # Updated from use_container_width=True
+            width="stretch",
             key=f"batch_student_editor_{st.session_state.batch_form_counter}"
         )
 

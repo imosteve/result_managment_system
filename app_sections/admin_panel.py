@@ -4,7 +4,6 @@ import streamlit as st
 import math
 import time
 import pandas as pd
-from st_aggrid import AgGrid, GridOptionsBuilder
 from database import (
     get_all_classes, get_subjects_by_class,
     create_user, get_all_users, delete_user, assign_teacher, get_user_assignments,
@@ -201,12 +200,12 @@ def admin_panel():
                         
                         col1, col2 = st.columns(2)
                         with col1:
-                            if st.button("🚫 Cancel", key="cancel_delete_user", type="secondary", use_container_width=True):
+                            if st.button("🚫 Cancel", key="cancel_delete_user", type="secondary", width='stretch'):
                                 st.session_state.show_delete_user_confirm = False
                                 st.session_state.user_to_delete_info = None
                                 st.rerun()
                         with col2:
-                            if st.button("❌ Delete User", key="confirm_delete_user", type="primary", use_container_width=True):
+                            if st.button("❌ Delete User", key="confirm_delete_user", type="primary", width='stretch'):
                                 delete_user(user_info['id'])
                                 st.session_state.show_delete_user_confirm = False
                                 st.session_state.user_to_delete_info = None
@@ -403,12 +402,12 @@ def admin_panel():
                         
                         col1, col2 = st.columns(2)
                         with col1:
-                            if st.button("🚫 Cancel", key="cancel_delete_assignment", type="secondary", use_container_width=True):
+                            if st.button("🚫 Cancel", key="cancel_delete_assignment", type="secondary", width='stretch'):
                                 st.session_state.show_delete_assignment_confirm = False
                                 st.session_state.assignment_to_delete_info = None
                                 st.rerun()
                         with col2:
-                            if st.button("❌ Delete Assignment", key="confirm_delete_assignment", type="primary", use_container_width=True):
+                            if st.button("❌ Delete Assignment", key="confirm_delete_assignment", type="primary", width='stretch'):
                                 delete_assignment(assignment_info["id"])
                                 st.session_state.show_delete_assignment_confirm = False
                                 st.session_state.assignment_to_delete_info = None
