@@ -12,6 +12,7 @@ from database import (
     get_scores_by_class_subject, save_scores, clear_all_scores,
     get_user_assignments, get_student_selected_subjects
 )
+from auth.activity_tracker import ActivityTracker
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -27,6 +28,9 @@ def enter_scores():
         # Role-based authorization check
         if not _check_authorization():
             return
+
+        # Initialize activity tracker
+        ActivityTracker.init()
 
         # Initialize session state variables
         _initialize_session_state()
@@ -150,10 +154,17 @@ def _render_class_selection(classes: List[Dict[str, Any]], role: str) -> Optiona
     from utils import render_persistent_class_selector
     # Get selected class details
     try:
-        return render_persistent_class_selector(
+        selected_class = render_persistent_class_selector(
             classes,
             widget_key="enter_scores_class"
         )
+        
+        # Track class selection
+        if selected_class:
+            class_identifier = f"{selected_class['class_name']}_{selected_class['term']}_{selected_class['session']}"
+            ActivityTracker.watch_value("enter_scores_class", class_identifier)
+        
+        return selected_class
     except (ValueError, IndexError) as e:
         logger.error(f"Error selecting class: {str(e)}")
         st.error("❌ Invalid class selection.")
@@ -206,7 +217,12 @@ def _render_subject_selection(subjects: List[tuple], role: str) -> Optional[str]
     """Render subject selection interface"""
     subject_names = [s[1] for s in subjects]
     
-    return st.selectbox("Select Subject", subject_names)
+    selected_subject = st.selectbox("Select Subject", subject_names)
+    
+    # Track subject selection
+    ActivityTracker.watch_value("enter_scores_subject", selected_subject)
+    
+    return selected_subject
 
 def _get_accessible_students(class_name: str, term: str, session: str, user_id: int, role: str, 
                            subject_name: str, is_senior_class: bool = False) -> List[tuple]:
@@ -267,14 +283,21 @@ def _render_score_tabs(students: List[tuple], score_map: Dict[str, tuple],
                       class_name: str, subject: str, term: str, session: str):
     """Render the tabs for score management operations"""
     tab1, tab2, tab3 = st.tabs(["Enter Scores", "Preview Scores", "Clear All Scores"])
+    
+    # Track active tab
+    active_tab = st.session_state.get("enter_scores_active_tab", 0)
+    ActivityTracker.watch_tab("enter_scores", active_tab)
 
     with tab1:
+        st.session_state.enter_scores_active_tab = 0
         _render_score_entry_tab(students, score_map, class_name, subject, term, session)
 
     with tab2:
+        st.session_state.enter_scores_active_tab = 1
         _render_score_preview_tab(students, score_map)
 
     with tab3:
+        st.session_state.enter_scores_active_tab = 2
         _render_clear_scores_tab(score_map, class_name, subject, term, session)
 
 def _render_score_entry_tab(students: List[tuple], score_map: Dict[str, tuple],
@@ -342,13 +365,16 @@ def _render_score_entry_tab(students: List[tuple], score_map: Dict[str, tuple],
             hide_index=True,
             width=500,
             key=f"score_editor_{class_name}_{subject}_{term}_{session}",
-            height=35 * len(editable_rows) + 38  # 35px per row + 38px header (approximate)
+            height=35 * len(editable_rows) + 38,  # 35px per row + 38px header (approximate)
+            on_change=ActivityTracker.update  # Track data editor interactions
         )
 
         # Validate scores before saving
         validation_result = _validate_scores(editable_df)
         if validation_result["valid"]:
             if st.button("💾 Save All Scores", key="save_scores", type="primary"):
+                # Track save button click
+                ActivityTracker.update()
                 _save_scores_to_database(editable_df, class_name, subject, term, session)
         else:
             # Display validation errors
@@ -365,22 +391,22 @@ def _validate_scores(df: pd.DataFrame) -> Dict[str, Any]:
     errors = []
     
     try:
-        for _, row in df.iterrows():
+        for idx, row in df.iterrows():
             student_name = row['Student']
             test_score = float(row.get("Test (30%)", 0))
             exam_score = float(row.get("Exam (70%)", 0))
             
             # Check test score range
             if test_score < 0:
-                errors.append(f"❌ {_+1} - {student_name}: Test score cannot be negative (got {test_score:.1f})")
+                errors.append(f"❌ {idx+1} - {student_name}: Test score cannot be negative (got {test_score:.1f})")
             elif test_score > 30:
-                errors.append(f"❌ {_+1} - {student_name}: Test score exceeds maximum of 30 (got {test_score:.1f})")
+                errors.append(f"❌ {idx+1} - {student_name}: Test score exceeds maximum of 30 (got {test_score:.1f})")
             
             # Check exam score range
             if exam_score < 0:
-                errors.append(f"❌ {_+1} - {student_name}: Exam score cannot be negative (got {exam_score:.1f})")
+                errors.append(f"❌ {idx+1} - {student_name}: Exam score cannot be negative (got {exam_score:.1f})")
             elif exam_score > 70:
-                errors.append(f"❌ {_+1} - {student_name}: Exam score exceeds maximum of 70 (got {exam_score:.1f})")
+                errors.append(f"❌ {idx+1} - {student_name}: Exam score exceeds maximum of 70 (got {exam_score:.1f})")
         
         return {
             "valid": len(errors) == 0,
@@ -504,10 +530,16 @@ def _render_clear_scores_tab(score_map: Dict[str, tuple], class_name: str,
         
         # Double confirmation for safety
         confirm_clear = st.checkbox("I understand this action cannot be undone")
+        # Track checkbox interaction
+        ActivityTracker.watch_value("confirm_clear_scores", confirm_clear)
+        
         confirm_text = st.text_input(
             "Type 'DELETE' to confirm:",
             placeholder="Type DELETE to confirm"
         )
+        # Track confirmation text (only when not empty)
+        if confirm_text:
+            ActivityTracker.watch_value("confirm_delete_text", confirm_text)
         
         is_confirmed = confirm_clear and confirm_text.strip().upper() == "DELETE"
         
@@ -517,6 +549,9 @@ def _render_clear_scores_tab(score_map: Dict[str, tuple], class_name: str,
             disabled=not is_confirmed,
             type="secondary"
         ):
+            # Track clear button click
+            ActivityTracker.update()
+            
             if _clear_all_scores_from_database(class_name, subject, term, session):
                 st.success(f"✅ All scores cleared successfully for {subject} in {class_name} - {term} - {session}!")
                 logger.info(f"Scores cleared for {subject} in {class_name} - {term} - {session} by user {st.session_state.user_id}")

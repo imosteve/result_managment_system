@@ -17,6 +17,7 @@ class ActivityTracker:
     def update():
         """Mark last_activity as user activity."""
         st.session_state.last_activity = datetime.now()
+        # st.rerun()
 
     @staticmethod
     def watch_value(key, value):
