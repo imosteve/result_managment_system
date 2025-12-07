@@ -1,8 +1,9 @@
-# app_sections/manage classes.py
+# app_sections/manage_classes.py
 
 import streamlit as st
 from database import get_all_classes, create_class, delete_class, update_class, clear_all_classes
 from utils import inject_login_css, render_page_header
+from auth.activity_tracker import ActivityTracker
 
 def create_class_section():
     if not st.session_state.get("authenticated", False):
@@ -13,6 +14,9 @@ def create_class_section():
     if st.session_state.role not in ["superadmin", "admin"]:
         st.error("⚠️ Access denied. Admins only.")
         return
+
+    # Initialize activity tracker
+    ActivityTracker.init()
 
     st.set_page_config(page_title="Manage Classes", layout="wide")
 
@@ -25,9 +29,15 @@ def create_class_section():
     # FIX: Pass user_id and role to get_all_classes
     classes = get_all_classes(user_id=st.session_state.user_id, role=st.session_state.role)
 
+    # Create tabs
     tab1, tab2, tab3 = st.tabs(["View/Edit Classes", "Add Class", "Clear All Classes"])
+    
+    # Track active tab
+    active_tab = st.session_state.get("manage_classes_active_tab", 0)
+    ActivityTracker.watch_tab("manage_classes", active_tab)
 
     with tab1:
+        st.session_state.manage_classes_active_tab = 0
         st.subheader("View/Edit Classes")
 
         
@@ -40,6 +50,8 @@ def create_class_section():
                     ["All", "Kindergarten", "Nursery", "Primary", "JSS", "SSS"],
                     key="filter_class_view"
                 )
+                # Track filter selection
+                ActivityTracker.watch_value("filter_class_view", filter_type)
             
             with col3:
                 search_query = st.text_input(
@@ -47,6 +59,9 @@ def create_class_section():
                     placeholder="Search class...",
                     key="search_class_view"
                 )
+                # Track search input (only when it changes significantly)
+                if search_query:
+                    ActivityTracker.watch_value("search_class_view", search_query)
         
         # Filter classes by type and search query
         filtered_classes = classes
@@ -87,6 +102,9 @@ def create_class_section():
                                               )
 
                 if col4.button("💾", key=f"update_{i}"):
+                    # Track update button click
+                    ActivityTracker.update()
+                    
                     new_class_upper = new_class.strip().upper()
                     if any(
                         cls_other["class_name"].strip().upper() == new_class_upper and
@@ -113,6 +131,9 @@ def create_class_section():
                         st.rerun()
 
                 if col5.button("❌", key=f"delete_{i}"):
+                    # Track delete button click
+                    ActivityTracker.update()
+                    
                     st.session_state["delete_pending"] = {
                         "class_name": cls["class_name"],
                         "term": cls["term"],
@@ -129,6 +150,9 @@ def create_class_section():
                             st.error(f"This will also delete all associated students, subjects, and scores.")
                             confirm_col1, confirm_col2 = st.columns(2)
                             if confirm_col1.button("✅ Delete", key=f"confirm_delete_{i}"):
+                                # Track confirmation
+                                ActivityTracker.update()
+                                
                                 delete_class(pending["class_name"], pending["term"], pending["session"])
                                 st.markdown(f'<div class="success-container">❌ Deleted {pending["class_name"]} - {pending["term"]} - {pending["session"]}</div>', unsafe_allow_html=True)
                                 del st.session_state["delete_pending"]
@@ -143,6 +167,7 @@ def create_class_section():
             st.info("No classes found matching your filters.")
 
     with tab2:
+        st.session_state.manage_classes_active_tab = 1
         st.subheader("Add Class")
 
         # Use a flag to reset fields AFTER rerun, not before widget instantiation
@@ -190,6 +215,9 @@ def create_class_section():
             )
 
             submitted = st.form_submit_button("➕ Add Class")
+            
+            # Track form submission
+            ActivityTracker.watch_form(submitted)
 
             if submitted:
                 if not class_name or not class_arm or not session or not term:
@@ -216,10 +244,14 @@ def create_class_section():
                             st.rerun()
 
     with tab3:
+        st.session_state.manage_classes_active_tab = 2
         st.subheader("Clear All Classes")
         st.warning("⚠️ This action will permanently delete all classes and their associated students, subjects, and scores. This cannot be undone.")
         if classes:
             confirm_clear = st.checkbox("I confirm I want to clear all classes")
+            # Track checkbox interaction
+            ActivityTracker.watch_value("confirm_clear_all_classes", confirm_clear)
+            
             clear_all_button = st.button("🗑️ Clear All Classes", key="clear_all_classes", disabled=not confirm_clear)
             
             if 'clear_all_class' not in st.session_state:
@@ -227,12 +259,18 @@ def create_class_section():
             
             # Confirmation dialog
             if clear_all_button and confirm_clear:
+                # Track clear all button click
+                ActivityTracker.update()
+                
                 @st.dialog("Confirm All Classes Deletion", width="small")
                 def confirm_delete_all_classes():
                     st.warning(f"⚠️ Are you sure you want to delete all classes and their associated students, subjects, and scores?")
                     
                     confirm_col1, confirm_col2 = st.columns(2)
                     if confirm_col1.button("✅ Delete", key="confirm_clear_all"):
+                        # Track final confirmation
+                        ActivityTracker.update()
+                        
                         st.session_state.clear_all_class = clear_all_classes()
                         if st.session_state.clear_all_class:
                             st.markdown('<div class="success-container">✅ All classes cleared successfully!</div>', unsafe_allow_html=True)
@@ -253,4 +291,3 @@ def create_class_section():
 def reset_add_class_fields():
     # Use st.experimental_rerun to reset fields after rerun, not before widgets are created
     st.session_state["reset_add_class"] = True
-
