@@ -12,7 +12,7 @@ APP_CONFIG = {
     "version": "1.0.0",
     "page_title": "Student Result System",
     "cookie_prefix": "student_results_app",
-    "session_timeout": 30,  # 1 hour in seconds
+    "session_timeout": 3600,  # 1 hour in seconds
     "max_login_attempts": 5,
     "lockout_duration": 300,  # 5 minutes in seconds
 }

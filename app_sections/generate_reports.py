@@ -12,7 +12,7 @@ from email.mime.base import MIMEBase
 from email import encoders
 from jinja2 import Environment, FileSystemLoader
 from weasyprint import HTML, CSS
-from PyPDF2 import PdfMerger  # Add this import
+from PyPDF2 import PdfMerger
 from utils import (
     assign_grade, create_metric_5col_report, format_ordinal, 
     render_page_header, inject_login_css, render_persistent_class_selector
@@ -22,6 +22,7 @@ from database import (
     get_class_average, get_student_grand_totals, get_comment, get_subjects_by_class,
     get_psychomotor_rating, get_grade_distribution, get_next_term_begin_date, get_next_term_info
 )
+from auth.activity_tracker import ActivityTracker
 
 # Email Configuration
 SMTP_SERVER = os.getenv('SMTP_SERVER', "smtp.gmail.com")
@@ -58,8 +59,8 @@ def generate_report_card(student_name, class_name, term, session, is_secondary_c
     student_data = next((s for s in students if s[1] == student_name), None)
     if not student_data:
         return None
-    gender = student_data[2]  # Gender from students table
-    class_size = len(students)  # Number of students in class
+    gender = student_data[2]
+    class_size = len(students)
 
     # Fetch student scores with role-based restrictions
     student_scores = get_student_scores(student_name, class_name, term, session, user_id, role)
@@ -406,6 +407,10 @@ def generate_tab():
     if not selected_class_data:
         st.warning("⚠️ No class selected.")
         return
+    
+    # Track class selection
+    class_identifier = f"{selected_class_data['class_name']}_{selected_class_data['term']}_{selected_class_data['session']}"
+    ActivityTracker.watch_value("generate_reports_class", class_identifier)
 
     class_name = selected_class_data['class_name']
     term = selected_class_data['term']
@@ -439,6 +444,9 @@ def generate_tab():
 
     student_names = [s[1] for s in students]
     selected_student = st.selectbox("Select Student", student_names)
+    
+    # Track student selection
+    ActivityTracker.watch_value("generate_reports_student", selected_student)
 
     # Calculate summary metrics for selected student
     student_data = next((s for s in students if s[1] == selected_student), None)
@@ -478,6 +486,9 @@ def generate_tab():
 
     # Individual Report Card
     if st.button("Generate Report Card"):
+        # Track generate button
+        ActivityTracker.update()
+        
         pdf_path = generate_report_card(selected_student, class_name, term, session, is_secondary_class, is_primary_class)
         with st.spinner(f"Generating and sending report for {selected_student}..."):
             if pdf_path and os.path.exists(pdf_path):
@@ -486,7 +497,8 @@ def generate_tab():
                         label=f"📥 Download {selected_student}'s Report Card",
                         data=f,
                         file_name=os.path.basename(pdf_path),
-                        mime="application/pdf"
+                        mime="application/pdf",
+                        on_click=ActivityTracker.update  # Track download
                     )
                 st.success(f"✅ Report card generated for {selected_student}")
             else:
@@ -494,8 +506,11 @@ def generate_tab():
 
     st.markdown("---")
 
-    # Batch Report Cards - MODIFIED TO CREATE SINGLE PDF
+    # Batch Report Cards
     if st.button("Generate All Report Cards"):
+        # Track batch generate button
+        ActivityTracker.update()
+        
         st.info(f"Generating report cards for {class_name} - {term} - {session}...")
         
         success_count = 0
@@ -531,7 +546,8 @@ def generate_tab():
                         label=f"📥 Download All Report Cards (Single PDF)",
                         data=f,
                         file_name=os.path.basename(merged_pdf_path),
-                        mime="application/pdf"
+                        mime="application/pdf",
+                        on_click=ActivityTracker.update  # Track download
                     )
             else:
                 status_text.text("Complete!")
@@ -561,6 +577,10 @@ def email_tab():
     if not selected_class_data:
         st.warning("⚠️ No class selected.")
         return
+    
+    # Track class selection
+    class_identifier = f"{selected_class_data['class_name']}_{selected_class_data['term']}_{selected_class_data['session']}"
+    ActivityTracker.watch_value("email_reports_class", class_identifier)
 
     class_name = selected_class_data['class_name']
     term = selected_class_data['term']
@@ -592,8 +612,7 @@ def email_tab():
         unsafe_allow_html=True
     )
 
-    # Filter students with email addresses AND who have paid fees (s[4] is school_fees_paid)
-    students_eligible = [s for s in students if s[3] and s[4] == 'YES']  # s[3] is email, s[4] is school_fees_paid
+    students_eligible = [s for s in students if s[3] and s[4] == 'YES']
     students_without_email = [s for s in students if not s[3]]
     students_unpaid_fees = [s for s in students if s[3] and s[4] != 'YES']
 
@@ -614,12 +633,17 @@ def email_tab():
     student_names_eligible = [s[1] for s in students_eligible]
     selected_student = st.selectbox("Select Student", student_names_eligible, key="email_student")
     
+    # Track student selection
+    ActivityTracker.watch_value("email_reports_student", selected_student)
+    
     student_data = next((s for s in students_eligible if s[1] == selected_student), None)
     if student_data:
         st.write(f"📧 Email: {student_data[3]}")
 
-
     if st.button("Send"):
+        # Track send button
+        ActivityTracker.update()
+        
         if not student_data or not student_data[3]:
             st.error("❌ Student email not found.")
             return
@@ -643,6 +667,9 @@ def email_tab():
     st.warning("⚠️ This will generate and send report cards to all students with email addresses. This may take some time.")
     
     if st.button("Send All"):
+        # Track send all button
+        ActivityTracker.update()
+        
         st.info(f"Generating and sending report cards for {len(students_eligible)} students...")
         
         success_count = 0
@@ -687,6 +714,9 @@ def report_card_section():
         st.error("⚠️ Access denied. Admins and Class Teachers only.")
         return
 
+    # Initialize activity tracker
+    ActivityTracker.init()
+
     st.set_page_config(page_title="Generate Report Card")
     
     # Page header
@@ -694,10 +724,16 @@ def report_card_section():
 
     inject_login_css("templates/tabs_styles.css")
     # Create tabs
-    tab1, tab2 = st.tabs(["📄 Generate Reports", "📧 Email Reports"])
+    tab1, tab2 = st.tabs(["Generate Reports", "Email Reports"])
+    
+    # Track active tab
+    active_tab = st.session_state.get("generate_reports_active_tab", 0)
+    ActivityTracker.watch_tab("generate_reports", active_tab)
     
     with tab1:
+        st.session_state.generate_reports_active_tab = 0
         generate_tab()
     
     with tab2:
+        st.session_state.generate_reports_active_tab = 1
         email_tab()
