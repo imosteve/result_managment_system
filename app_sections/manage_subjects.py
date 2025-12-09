@@ -9,8 +9,12 @@ from database import (
     get_all_student_subject_selections
 )
 from utils import clean_input, create_metric_4col, inject_login_css, render_page_header, render_persistent_class_selector
+from auth.activity_tracker import ActivityTracker
 
 def add_subjects():
+    # Initialize activity tracker
+    ActivityTracker.init()
+    
     if not st.session_state.get("authenticated", False):
         st.error("⚠️ Please log in first.")
         st.switch_page("main.py")
@@ -52,11 +56,18 @@ def add_subjects():
             st.info("You may need to select a class assignment in the 'Change Assignment' section.")
         return
 
-    # Select class
+    # Select class - track selection changes
     selected_class_data = render_persistent_class_selector(
         classes, 
-        widget_key="manage_subjects_class"  # Use unique key for each section
+        widget_key="manage_subjects_class"
     )
+    
+    # Track class selector interaction
+    if selected_class_data:
+        ActivityTracker.watch_value(
+            "manage_subjects_class_selector",
+            f"{selected_class_data['class_name']}_{selected_class_data['term']}_{selected_class_data['session']}"
+        )
 
     if not selected_class_data:
         st.warning("⚠️ No class selected.")
@@ -66,17 +77,12 @@ def add_subjects():
     term = selected_class_data['term']
     session = selected_class_data['session']
     
-
     # Get existing subjects
     subjects = get_subjects_by_class(class_name, term, session, user_id, role)
 
     # Check if this is SSS2 or SSS3 to show subject selection tab
-    # is_senior_class = class_name in ["SSS 2", "SSS 3"]
-    # is_senior_class = class_name.startswith("SSS")
-
     import re
     is_senior_class = bool(re.match(r"SSS [23].*$", class_name))
-
 
     # Confirmation dialog for deleting individual subject
     if st.session_state.show_delete_subject_confirm and st.session_state.subject_to_delete_info:
@@ -93,12 +99,14 @@ def add_subjects():
             
             col1, col2 = st.columns(2)
             with col1:
-                if st.button("🚫 Cancel", key="cancel_delete_subject", type="secondary", width='stretch'):
+                if st.button("🚫 Cancel", key="cancel_delete_subject", type="secondary", use_container_width=True):
+                    ActivityTracker.update()  # Track cancel action
                     st.session_state.show_delete_subject_confirm = False
                     st.session_state.subject_to_delete_info = None
                     st.rerun()
             with col2:
-                if st.button("❌ Delete Subject", key="confirm_delete_subject", type="primary", width='stretch'):
+                if st.button("❌ Delete Subject", key="confirm_delete_subject", type="primary", use_container_width=True):
+                    ActivityTracker.update()  # Track delete confirmation
                     delete_subject(subject_info['subject_id'])
                     st.session_state.show_delete_subject_confirm = False
                     st.session_state.subject_to_delete_info = None
@@ -125,12 +133,14 @@ def add_subjects():
             
             col1, col2 = st.columns(2)
             with col1:
-                if st.button("🚫 Cancel", key="cancel_clear_subjects", type="secondary", width='stretch'):
+                if st.button("🚫 Cancel", key="cancel_clear_subjects", type="secondary", use_container_width=True):
+                    ActivityTracker.update()  # Track cancel action
                     st.session_state.show_clear_subjects_confirm = False
                     st.session_state.clear_subjects_info = None
                     st.rerun()
             with col2:
-                if st.button("🗑️ Clear All Subjects", key="confirm_clear_subjects", type="primary", width='stretch'):
+                if st.button("🗑️ Clear All Subjects", key="confirm_clear_subjects", type="primary", use_container_width=True):
+                    ActivityTracker.update()  # Track clear confirmation
                     success = clear_all_subjects(info['class_name'], info['term'], info['session'])
                     st.session_state.show_clear_subjects_confirm = False
                     st.session_state.clear_subjects_info = None
@@ -159,12 +169,14 @@ def add_subjects():
             
             col1, col2 = st.columns(2)
             with col1:
-                if st.button("🚫 Cancel", key="cancel_clear_selections", type="secondary", width='stretch'):
+                if st.button("🚫 Cancel", key="cancel_clear_selections", type="secondary", use_container_width=True):
+                    ActivityTracker.update()  # Track cancel action
                     st.session_state.show_clear_selections_confirm = False
                     st.session_state.clear_selections_info = None
                     st.rerun()
             with col2:
-                if st.button("🗑️ Clear All Selections", key="confirm_clear_selections", type="primary", width='stretch'):
+                if st.button("🗑️ Clear All Selections", key="confirm_clear_selections", type="primary", use_container_width=True):
+                    ActivityTracker.update()  # Track clear confirmation
                     try:
                         for student in info['students']:
                             student_name = student[1]
@@ -185,13 +197,28 @@ def add_subjects():
         
         confirm_clear_selections()
 
-    # Tabs for different operations - add subject selection for senior classes
+    # Tabs for different operations
     if is_senior_class:
-        tab1, tab2, tab3, tab4 = st.tabs(["View/Edit Subjects", "Add Subjects", "Clear All Subjects", "Student Subject Selection"])
+        tabs = st.tabs(["View/Edit Subjects", "Add Subjects", "Clear All Subjects", "Student Subject Selection"])
+        current_tab = st.session_state.get("manage_subjects_current_tab", 0)
+        
+        # Detect tab changes by checking which tab content is being rendered
+        if "manage_subjects_tab_tracker" not in st.session_state:
+            st.session_state.manage_subjects_tab_tracker = 0
     else:
-        tab1, tab2, tab3 = st.tabs(["View/Edit Subjects", "Add Subjects", "Clear All Subjects"])
+        tabs = st.tabs(["View/Edit Subjects", "Add Subjects", "Clear All Subjects"])
+        current_tab = st.session_state.get("manage_subjects_current_tab", 0)
+        
+        if "manage_subjects_tab_tracker" not in st.session_state:
+            st.session_state.manage_subjects_tab_tracker = 0
 
-    with tab1:
+    # Tab 1: View/Edit Subjects
+    with tabs[0]:
+        # Track tab switch
+        if st.session_state.manage_subjects_tab_tracker != 0:
+            ActivityTracker.watch_tab("manage_subjects_tabs", 0)
+            st.session_state.manage_subjects_tab_tracker = 0
+            
         st.subheader("View/Edit Subjects")
         if subjects:
             # Display class metrics
@@ -221,6 +248,7 @@ def add_subjects():
                 # Update button (disabled for subject_teacher)
                 update_disabled = role == "subject_teacher"
                 if col3.button("💾", key=f"update_{i}", disabled=update_disabled):
+                    ActivityTracker.update()  # Track update action
                     new_subject_name_upper = clean_input(new_subject_name, "subject").strip().upper()
                     # Check for duplicates (excluding the current subject)
                     if any(
@@ -246,6 +274,7 @@ def add_subjects():
                 # Delete button (disabled for subject_teacher)
                 delete_disabled = role == "subject_teacher"
                 if col4.button("❌", key=f"delete_{i}", disabled=delete_disabled):
+                    ActivityTracker.update()  # Track delete initiation
                     st.session_state.show_delete_subject_confirm = True
                     st.session_state.subject_to_delete_info = {
                         "subject_id": subject[0],
@@ -258,7 +287,13 @@ def add_subjects():
         else:
             st.info("No subjects found for this class. Add subjects in the 'Add Subjects' tab.")
 
-    with tab2:
+    # Tab 2: Add Subjects
+    with tabs[1]:
+        # Track tab switch
+        if st.session_state.manage_subjects_tab_tracker != 1:
+            ActivityTracker.watch_tab("manage_subjects_tabs", 1)
+            st.session_state.manage_subjects_tab_tracker = 1
+            
         st.subheader("Add Subjects")
         if role == "subject_teacher":
             st.info("Subject Teachers cannot add new subjects.")
@@ -274,6 +309,10 @@ def add_subjects():
                     placeholder="Mathematics\nEnglish Language\nPhysics"
                 )
                 submitted = st.form_submit_button("➕ Add Subjects")
+                
+                # Track form submission
+                ActivityTracker.watch_form(submitted)
+                
                 if submitted:
                     new_subjects_raw = [clean_input(s, "subject").strip().upper() for s in new_subjects_input.split("\n") if s.strip()]
                     unique_new_subjects = list(set(new_subjects_raw))
@@ -299,7 +338,13 @@ def add_subjects():
                         if skipped:
                             st.markdown(f'<div class="error-container">⚠️ Skipped (duplicates or failed to add): {", ".join(skipped)}</div>', unsafe_allow_html=True)
     
-    with tab3:
+    # Tab 3: Clear All Subjects
+    with tabs[2]:
+        # Track tab switch
+        if st.session_state.manage_subjects_tab_tracker != 2:
+            ActivityTracker.watch_tab("manage_subjects_tabs", 2)
+            st.session_state.manage_subjects_tab_tracker = 2
+            
         st.subheader("Clear All Subjects")
         if role == "subject_teacher":
             st.info("Subject Teachers cannot clear subjects.")
@@ -307,6 +352,7 @@ def add_subjects():
             st.warning("⚠️ This action will permanently delete all subjects and their associated scores for the selected class. This cannot be undone.")
             if subjects:
                 if st.button("🗑️ Clear All Subjects", key="clear_all_subjects_btn"):
+                    ActivityTracker.update()  # Track clear initiation
                     st.session_state.show_clear_subjects_confirm = True
                     st.session_state.clear_subjects_info = {
                         "class_name": class_name,
@@ -318,9 +364,14 @@ def add_subjects():
             else:
                 st.info("No subjects available to clear.")
 
-    # Student Subject Selection Tab (only for SSS2 and SSS3)
+    # Tab 4: Student Subject Selection (only for senior classes)
     if is_senior_class:
-        with tab4:
+        with tabs[3]:
+            # Track tab switch
+            if st.session_state.manage_subjects_tab_tracker != 3:
+                ActivityTracker.watch_tab("manage_subjects_tabs", 3)
+                st.session_state.manage_subjects_tab_tracker = 3
+                
             st.subheader("Student Subject Selection")
             if role == "subject_teacher":
                 st.info("Subject Teachers cannot manage student subject selections.")
@@ -364,7 +415,7 @@ def add_subjects():
                             "Number of Subjects": st.column_config.NumberColumn("Number of Subjects", width="small")
                         },
                         hide_index=True,
-                        width='stretch'
+                        use_container_width=True
                     )
                 else:
                     st.info("No subject selections made yet.")
@@ -376,6 +427,9 @@ def add_subjects():
                 
                 student_names = [s[1] for s in students]
                 selected_student = st.selectbox("Select Student", [""] + student_names, key="student_select")
+                
+                # Track student selection
+                ActivityTracker.watch_value("student_select_dropdown", selected_student)
 
                 if selected_student:
                     st.markdown(f"#### Subject Selection for **{selected_student}**")
@@ -392,15 +446,22 @@ def add_subjects():
                         is_selected = subject_name in current_selections
                         col = col1 if i % 2 == 0 else col2
                         
-                        if col.checkbox(
+                        checkbox_key = f"subject_{selected_student}_{subject_name}"
+                        checkbox_value = col.checkbox(
                             subject_name, 
                             value=is_selected,
-                            key=f"subject_{selected_student}_{subject_name}"
-                        ):
+                            key=checkbox_key
+                        )
+                        
+                        # Track checkbox changes
+                        ActivityTracker.watch_value(checkbox_key, checkbox_value)
+                        
+                        if checkbox_value:
                             selected_subjects.append(subject_name)
 
                     # Save button
                     if st.button("💾 Save Subject Selections", key="save_selections"):
+                        ActivityTracker.update()  # Track save action
                         try:
                             save_student_subject_selections(
                                 selected_student, 
@@ -427,6 +488,7 @@ def add_subjects():
                 with col1:
                     st.markdown("#### Assign All Subjects to All Students")
                     if st.button("📚 Assign All Subjects", key="assign_all"):
+                        ActivityTracker.update()  # Track batch assign action
                         try:
                             subject_names = [s[1] for s in subjects]
                             for student in students:
@@ -446,6 +508,7 @@ def add_subjects():
                 with col2:
                     st.markdown("#### Clear All Selections")
                     if st.button("🗑️ Clear All Selections", key="clear_all_selections_btn"):
+                        ActivityTracker.update()  # Track clear selections initiation
                         st.session_state.show_clear_selections_confirm = True
                         st.session_state.clear_selections_info = {
                             "class_name": class_name,
