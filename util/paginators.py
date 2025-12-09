@@ -154,3 +154,94 @@ def streamlit_paginator(data, table_name):
         st.caption(f"Showing {start_idx + 1} – {min(end_idx, total_items)} of {total_items} entries")
     else:
         st.warning("No results found matching your search criteria.")
+
+
+def streamlit_filter(data, table_name):
+    """
+    Filter functionality for streamlit dataframes - returns filtered DataFrame
+    """
+    # Convert to DataFrame if not already
+    df = pd.DataFrame(data) if not isinstance(data, pd.DataFrame) else data.copy()
+    
+    # Initialize session state for search and filter
+    if f"search_{table_name}" not in st.session_state:
+        st.session_state[f"search_{table_name}"] = ""
+    if f"filter_col_{table_name}" not in st.session_state:
+        st.session_state[f"filter_col_{table_name}"] = "All Columns"
+    if f"filter_value_{table_name}" not in st.session_state:
+        st.session_state[f"filter_value_{table_name}"] = ""
+    
+    with st.container(border=True):
+        # Search bar
+        col1, col2, col3 = st.columns([5, 3, 1], vertical_alignment="bottom")
+        
+        with col2:
+            search_term = st.text_input(
+                "Search across all columns",
+                key=f"search_input_{table_name}",
+                placeholder="Type to search...",
+                value=st.session_state[f"search_{table_name}"]
+            )
+            st.session_state[f"search_{table_name}"] = search_term
+        
+        with col3:
+            if st.button("Clear", key=f"clear_{table_name}"):
+                st.session_state[f"search_{table_name}"] = ""
+                st.session_state[f"filter_col_{table_name}"] = "All Columns"
+                st.session_state[f"filter_value_{table_name}"] = ""
+                st.rerun()
+        
+        # Column-specific filter
+        with col1:
+            col_fil_col, col_fil_val = st.columns(2)
+            if len(df.columns) > 0:
+                with col_fil_col:
+                    # Determine the correct index for the selectbox
+                    all_options = ["All Columns"] + list(df.columns)
+                    current_filter = st.session_state[f"filter_col_{table_name}"]
+                    default_index = all_options.index(current_filter) if current_filter in all_options else 0
+                    
+                    filter_col = st.selectbox(
+                        "Filter by column",
+                        options=all_options,
+                        key=f"filter_col_input_{table_name}",
+                        index=default_index
+                    )
+                    st.session_state[f"filter_col_{table_name}"] = filter_col
+                    
+                with col_fil_val:
+                    filter_value = st.text_input(
+                        "Filter value",
+                        key=f"filter_value_input_{table_name}",
+                        placeholder="Enter value to filter...",
+                        value=st.session_state[f"filter_value_{table_name}"]
+                    )
+                    st.session_state[f"filter_value_{table_name}"] = filter_value
+        
+        # Apply search filter
+        filtered_df = df.copy()
+        
+        if search_term:
+            # Search across all columns
+            mask = filtered_df.astype(str).apply(
+                lambda row: row.str.contains(search_term, case=False, na=False).any(),
+                axis=1
+            )
+            filtered_df = filtered_df[mask]
+        
+        # Apply column-specific filter
+        if filter_value and filter_col != "All Columns":
+            mask = filtered_df[filter_col].astype(str).str.contains(
+                filter_value, case=False, na=False
+            )
+            filtered_df = filtered_df[mask]
+        
+        # Display filter results
+        if len(filtered_df) < len(df):
+            st.info(f"Found {len(filtered_df)} matching results out of {len(df)} total entries")
+
+    # Return the filtered DataFrame
+    if len(filtered_df) > 0:
+        return filtered_df
+    else:
+        return pd.DataFrame()  # Return empty DataFrame if no results

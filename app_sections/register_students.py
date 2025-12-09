@@ -4,8 +4,16 @@ import streamlit as st
 import pandas as pd
 from database import get_all_classes, get_students_by_class, create_student, update_student, delete_student, delete_all_students
 from utils import clean_input, create_metric_4col, inject_login_css, render_page_header, render_persistent_class_selector
+from auth.activity_tracker import ActivityTracker
+from util.paginators import streamlit_filter
+
+import logging
+logger = logging.getLogger(__name__)
 
 def register_students():
+    # Initialize activity tracker
+    ActivityTracker.init()
+    
     if not st.session_state.get("authenticated", False):
         st.error("⚠️ Please log in first.")
         st.switch_page("main.py")
@@ -33,11 +41,18 @@ def register_students():
         st.warning("⚠️ No classes found.")
         return
 
-    # ===== UPDATED: Use persistent class selector =====
+    # Use persistent class selector
     selected_class_data = render_persistent_class_selector(
         classes, 
         widget_key="register_students_class"
     )
+    
+    # Track class selector interaction
+    if selected_class_data:
+        ActivityTracker.watch_value(
+            "register_students_class_selector",
+            f"{selected_class_data['class_name']}_{selected_class_data['term']}_{selected_class_data['session']}"
+        )
     
     if not selected_class_data:
         st.warning("⚠️ No class selected.")
@@ -46,7 +61,6 @@ def register_students():
     class_name = selected_class_data['class_name']
     term = selected_class_data['term']
     session = selected_class_data['session']
-    # ===== END UPDATE =====
 
     # Load students with proper parameters
     students = get_students_by_class(class_name, term, session, user_id, role)
@@ -71,17 +85,28 @@ def register_students():
     df = pd.DataFrame(df_data) if df_data else pd.DataFrame(columns=["ID", "S/N", "Name", "Gender", "Email", "Paid Fees"])
     
     # Tabs for different operations
-    tab1, tab2, tab3, tab4 = st.tabs(["View/Edit Students", "Add New Student", "Batch Add Students", "Delete Student(s)"])
+    tabs = st.tabs(["View/Edit Students", "Add New Student", "Batch Add Students", "Delete Student(s)"])
+    
+    # Initialize tab tracker
+    if "register_students_tab_tracker" not in st.session_state:
+        st.session_state.register_students_tab_tracker = 0
 
-    with tab1:
+    # Tab 1: View/Edit Students
+    with tabs[0]:
+        # Track tab switch
+        if st.session_state.register_students_tab_tracker != 0:
+            ActivityTracker.watch_tab("register_students_tabs", 0)
+            st.session_state.register_students_tab_tracker = 0
+            
         st.subheader("Student List")
         # Display Name, Gender, Email but keep ID hidden from users by not including it in the editor.
         # Preserve a stable id list to map edited rows back to the correct student records.
         display_df = df[["Name", "Gender", "Email", "Paid Fees"]] if not df.empty else pd.DataFrame(columns=["Name", "Gender", "Email", "Paid Fees"])
         original_ids = df["ID"].tolist() if not df.empty else []
 
+        filtered_display_df = streamlit_filter(display_df, table_name="students_table")
         edited_df = st.data_editor(
-            display_df,
+            filtered_display_df,
             column_config={
                 "Name": st.column_config.TextColumn("Name", required=True, width="medium"),
                 "Gender": st.column_config.SelectboxColumn(
@@ -104,10 +129,11 @@ def register_students():
             hide_index=True,
             width="stretch",
             key="student_editor",
-            height=35 * len(display_df) + 38
+            height=35 * len(filtered_display_df) + 38
         )
 
         if st.button("💾 Save Changes", key="save_changes"):
+            ActivityTracker.update()  # Track save action
             errors = []
             success_count = 0
 
@@ -148,7 +174,7 @@ def register_students():
                     update_student(student_id, name, gender, email, school_fees_paid)
                     success_count += 1
                 except Exception as e:
-                    # logger.error(f"Failed to update student id={student_id}: {e}")
+                    logger.error(f"Failed to update student id={student_id}: {e}")
                     errors.append(f"❌ Row {idx + 1}: Failed to update student (ID: {student_id})")
 
             if errors:
@@ -161,7 +187,13 @@ def register_students():
                 st.markdown(f'<div class="success-container">✅ Successfully updated {success_count} student(s)!</div>', unsafe_allow_html=True)
                 st.rerun()
 
-    with tab2:
+    # Tab 2: Add New Student
+    with tabs[1]:
+        # Track tab switch
+        if st.session_state.register_students_tab_tracker != 1:
+            ActivityTracker.watch_tab("register_students_tabs", 1)
+            st.session_state.register_students_tab_tracker = 1
+            
         st.subheader("Add New Student")
         
         # Initialize form counter for clearing input
@@ -174,6 +206,9 @@ def register_students():
             new_email = st.text_input("Email", placeholder="Enter student email")
             school_fees_paid = st.selectbox("Paid Fees", ["NO", "YES"])
             submit_button = st.form_submit_button("➕ Add Student")
+
+            # Track form submission
+            ActivityTracker.watch_form(submit_button)
 
             if submit_button:
                 errors = []
@@ -203,7 +238,13 @@ def register_students():
                         st.error(err)
                     st.markdown('</div>', unsafe_allow_html=True)
 
-    with tab3:
+    # Tab 3: Batch Add Students
+    with tabs[2]:
+        # Track tab switch
+        if st.session_state.register_students_tab_tracker != 2:
+            ActivityTracker.watch_tab("register_students_tabs", 2)
+            st.session_state.register_students_tab_tracker = 2
+            
         st.subheader("Batch Add Students")
         st.markdown("Enter multiple students below. Each row represents one student.")
 
@@ -243,6 +284,7 @@ def register_students():
         )
 
         if st.button("➕ Add Students in Batch", key=f"batch_add_{st.session_state.batch_form_counter}"):
+            ActivityTracker.update()  # Track batch add action
             errors = []
             success_count = 0
             existing_names = {s[1].lower() for s in students}
@@ -303,7 +345,13 @@ def register_students():
                 st.session_state.batch_form_counter += 1
                 st.rerun()
 
-    with tab4:
+    # Tab 4: Delete Student(s)
+    with tabs[3]:
+        # Track tab switch
+        if st.session_state.register_students_tab_tracker != 3:
+            ActivityTracker.watch_tab("register_students_tabs", 3)
+            st.session_state.register_students_tab_tracker = 3
+            
         st.subheader("Delete Student")
         # Delete single student with expander
         with st.expander("**Delete Single Student**", expanded=True):
@@ -314,12 +362,17 @@ def register_students():
                     student_options,
                     key="delete_student_select"
                 )
+                
+                # Track student selection
+                ActivityTracker.watch_value("delete_student_select_dropdown", student_to_delete)
 
                 if 'delete_single_student' not in st.session_state:
                     st.session_state.delete_single_student = None
 
                 # Confirmation dialog
                 if st.button("❌ Delete Student", key="delete_student"):
+                    ActivityTracker.update()  # Track delete initiation
+                    
                     @st.dialog("Confirm Student Deletion", width="small")
                     def confirm_delete_single_student():
                         st.warning(f"⚠️ Are you sure you want to delete **{student_to_delete}** from this class?")
@@ -334,6 +387,7 @@ def register_students():
 
                         confirm_col1, confirm_col2 = st.columns(2)
                         if confirm_col1.button("✅ Delete", key=f"confirm_delete_student"):
+                            ActivityTracker.update()  # Track delete confirmation
                             if student_id:
                                 delete_student(student_id)
                                 st.markdown('<div class="success-container">✅ Student deleted successfully!</div>', unsafe_allow_html=True)
@@ -342,6 +396,7 @@ def register_students():
                             else:
                                 st.markdown('<div class="error-container">❌ Failed to delete student. Please try again.</div>', unsafe_allow_html=True)
                         elif confirm_col2.button("❌ Cancel", key=f"cancel_delete_student"):
+                            ActivityTracker.update()  # Track cancel action
                             st.session_state.delete_single_student = None
                             st.info("Deletion cancelled.")
                             st.rerun()
@@ -361,20 +416,28 @@ def register_students():
             
             if students:
                 confirm_delete = st.checkbox("I confirm I want to delete all students in this class")
+                
+                # Track checkbox interaction
+                ActivityTracker.watch_value("confirm_delete_all_checkbox", confirm_delete)
+                
                 delete_all_button = st.button("🗑️ Delete All Students", key="delete_all_students", disabled=not confirm_delete)
                 
                 if delete_all_button and confirm_delete:
+                    ActivityTracker.update()  # Track delete all initiation
+                    
                     @st.dialog("Confirm All Students Deletion", width="small")
                     def confirm_delete_all_student():
                         st.warning("⚠️ This action will permanently delete all students in this class. Do you want to proceed?")
 
                         confirm_col1, confirm_col2 = st.columns(2)
                         if confirm_col1.button("✅ Delete", key=f"confirm_delete_all_students"):
+                            ActivityTracker.update()  # Track delete all confirmation
                             delete_all_students(class_name, term, session)
                             st.markdown('<div class="success-container">✅ All students deleted successfully!</div>', unsafe_allow_html=True)
                             st.session_state.delete_all_students_in_class = None
                             st.rerun()
                         elif confirm_col2.button("❌ Cancel", key=f"cancel_delete_all_students"):
+                            ActivityTracker.update()  # Track cancel action
                             st.session_state.delete_all_students_in_class = None
                             st.info("Deletion cancelled.")
                             st.rerun()
