@@ -156,7 +156,7 @@ def handle_navigation(app: ApplicationManager, options: dict, role: str):
 def render_logout_button():
     """Render logout button"""
     with st.sidebar:
-        if st.button("Logout", type="primary", use_container_width=True):
+        if st.button("Logout", type="primary", width="stretch"):
             # Clear query parameters
             st.query_params.clear()
             logout()

@@ -9,6 +9,7 @@ from database import (
     delete_psychomotor_rating, get_all_comment_templates
 )
 from utils import render_page_header, inject_login_css, render_persistent_class_selector
+from auth.activity_tracker import ActivityTracker
 
 # Psychomotor categories with their display names
 PSYCHOMOTOR_CATEGORIES = [
@@ -19,6 +20,9 @@ PSYCHOMOTOR_CATEGORIES = [
 
 def manage_comments():
     """Manage report card comments and psychomotor ratings for students"""
+    # Initialize activity tracker
+    ActivityTracker.init()
+    
     if not st.session_state.get("authenticated", False):
         st.error("⚠️ Please log in first.")
         st.switch_page("main.py")
@@ -51,6 +55,13 @@ def manage_comments():
         classes, 
         widget_key="manage_comments_class"
     )
+    
+    # Track class selector interaction
+    if selected_class_data:
+        ActivityTracker.watch_value(
+            "manage_comments_class_selector",
+            f"{selected_class_data['class_name']}_{selected_class_data['term']}_{selected_class_data['session']}"
+        )
 
     if not selected_class_data:
         st.warning("⚠️ No class selected.")
@@ -79,7 +90,7 @@ def manage_comments():
 
     # Create tabs
     if role in ["admin", "superadmin"]:
-        tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        tabs = st.tabs([
             "View/Delete Comments", 
             "Psychomotor & Comments", 
             "Batch CT Comments", 
@@ -87,27 +98,56 @@ def manage_comments():
             "Batch Delete"
         ])
     else:
-        tab1, tab2, tab3, tab5 = st.tabs([
+        tabs = st.tabs([
             "View/Delete Comments", 
             "Psychomotor & Comments", 
             "Batch CT Comments",
             "Batch Delete"
         ])
+    
+    # Initialize tab tracker
+    if "manage_comments_tab_tracker" not in st.session_state:
+        st.session_state.manage_comments_tab_tracker = 0
 
-    with tab1:
+    # Tab 1: View/Delete Comments
+    with tabs[0]:
+        if st.session_state.manage_comments_tab_tracker != 0:
+            ActivityTracker.watch_tab("manage_comments_tabs", 0)
+            st.session_state.manage_comments_tab_tracker = 0
         render_view_delete_tab(students, class_name, term, session, is_secondary_class, is_primary_class)
 
-    with tab2:
+    # Tab 2: Psychomotor & Comments
+    with tabs[1]:
+        if st.session_state.manage_comments_tab_tracker != 1:
+            ActivityTracker.watch_tab("manage_comments_tabs", 1)
+            st.session_state.manage_comments_tab_tracker = 1
         render_psychomotor_comments_tab(role, students, class_name, term, session, is_secondary_class, is_primary_class)
 
-    with tab3:
+    # Tab 3: Batch CT Comments
+    with tabs[2]:
+        if st.session_state.manage_comments_tab_tracker != 2:
+            ActivityTracker.watch_tab("manage_comments_tabs", 2)
+            st.session_state.manage_comments_tab_tracker = 2
         render_batch_add_ct_tab(students, class_name, term, session)
 
+    # Tab 4: Batch HT Comments (admin/superadmin only)
     if role in ["admin", "superadmin"]:
-        with tab4:
+        with tabs[3]:
+            if st.session_state.manage_comments_tab_tracker != 3:
+                ActivityTracker.watch_tab("manage_comments_tabs", 3)
+                st.session_state.manage_comments_tab_tracker = 3
             render_batch_add_ht_tab(students, class_name, term, session, is_secondary_class, is_primary_class)
 
-    with tab5:
+    # Tab 5: Batch Delete (last tab - index depends on role)
+    with tabs[4 if role in ["admin", "superadmin"] else 3]:
+        if role in ["admin", "superadmin"]:
+            if st.session_state.manage_comments_tab_tracker != 4:
+                ActivityTracker.watch_tab("manage_comments_tabs", 4)
+                st.session_state.manage_comments_tab_tracker = 4
+        else:
+            if st.session_state.manage_comments_tab_tracker != 3:
+                ActivityTracker.watch_tab("manage_comments_tabs", 3)
+                st.session_state.manage_comments_tab_tracker = 3
         render_batch_delete_tab(students, class_name, term, session, is_secondary_class, is_primary_class)
 
 
@@ -141,7 +181,7 @@ def render_view_delete_tab(students, class_name, term, session, is_secondary_cla
                 "Has Psychomotor": st.column_config.TextColumn("Has Psychomotor", width=50)
             },
             hide_index=True,
-            width='stretch'
+            width="stretch"
         )
     else:
         st.info("No comments or ratings found for this class.")
@@ -167,11 +207,15 @@ def render_view_delete_tab(students, class_name, term, session, is_secondary_cla
                 key="delete_student_select"
             )
             
+            # Track student selection
+            ActivityTracker.watch_value("delete_student_select_dropdown", student_to_delete)
+            
             if student_to_delete:
                 col1, col2 = st.columns(2)
                 
                 with col1:
                     if st.button("🗑️ Delete Comment", key="delete_comment_btn"):
+                        ActivityTracker.update()  # Track delete comment action
                         if delete_comment(student_to_delete, class_name, term, session):
                             st.success(f"✅ Comment deleted for {student_to_delete}")
                             st.rerun()
@@ -180,6 +224,7 @@ def render_view_delete_tab(students, class_name, term, session, is_secondary_cla
                 
                 with col2:
                     if st.button("🗑️ Delete Psychomotor", key="delete_psycho_btn"):
+                        ActivityTracker.update()  # Track delete psychomotor action
                         if delete_psychomotor_rating(student_to_delete, class_name, term, session):
                             st.success(f"✅ Psychomotor rating deleted for {student_to_delete}")
                             st.rerun()
@@ -195,6 +240,9 @@ def render_psychomotor_comments_tab(role, students, class_name, term, session, i
     # Student selection
     student_names = [s[1] for s in students]
     selected_student = st.selectbox("Select Student", student_names, key="psycho_comment_student")
+    
+    # Track student selection
+    ActivityTracker.watch_value("psycho_comment_student_dropdown", selected_student)
     
     if not selected_student:
         return
@@ -217,42 +265,54 @@ def render_psychomotor_comments_tab(role, students, class_name, term, session, i
             if existing_psychomotor and category.lower().replace(' ', '_') in existing_psychomotor:
                 default_value = existing_psychomotor[category.lower().replace(' ', '_')]
             
+            slider_key = f"psycho_{selected_student}_{category}_{i}"
             ratings[category] = st.slider(
                 category, 
                 1, 5, 
                 default_value, 
-                key=f"psycho_{selected_student}_{category}_{i}"
+                key=slider_key
             )
+            # Track slider changes
+            ActivityTracker.watch_value(slider_key, ratings[category])
+            
     with col3:
         for i, category in enumerate(PSYCHOMOTOR_CATEGORIES[4:7]):
             default_value = 3
             if existing_psychomotor and category.lower().replace(' ', '_') in existing_psychomotor:
                 default_value = existing_psychomotor[category.lower().replace(' ', '_')]
             
+            slider_key = f"psycho_{selected_student}_{category}_{i}"
             ratings[category] = st.slider(
                 category, 
                 1, 5, 
                 default_value, 
-                key=f"psycho_{selected_student}_{category}_{i}"
+                key=slider_key
             )
+            # Track slider changes
+            ActivityTracker.watch_value(slider_key, ratings[category])
+            
     with col5:
         for i, category in enumerate(PSYCHOMOTOR_CATEGORIES[7:]):
             default_value = 3
             if existing_psychomotor and category.lower().replace(' ', '_') in existing_psychomotor:
                 default_value = existing_psychomotor[category.lower().replace(' ', '_')]
             
+            slider_key = f"psycho_{selected_student}_{category}_{i}"
             ratings[category] = st.slider(
                 category, 
                 1, 5, 
                 default_value, 
-                key=f"psycho_{selected_student}_{category}_{i}"
+                key=slider_key
             )
+            # Track slider changes
+            ActivityTracker.watch_value(slider_key, ratings[category])
     
     # Save button for psychomotor
     col_save1, col_space1, col_apply1 = st.columns(3)
     
     with col_save1:
-        if st.button("💾 Save Rating", key="save_psycho", width='stretch'):
+        if st.button("💾 Save Rating", key="save_psycho", width="stretch"):
+            ActivityTracker.update()  # Track save rating action
             if create_psychomotor_rating(selected_student, class_name, term, session, ratings):
                 st.success(f"✅ Psychomotor rating saved for {selected_student}")
                 st.rerun()
@@ -260,7 +320,8 @@ def render_psychomotor_comments_tab(role, students, class_name, term, session, i
                 st.error("❌ Failed to save psychomotor rating")
     
     with col_apply1:
-        if st.button("Apply to All Students", key="apply_psycho_all", width='stretch'):
+        if st.button("Apply to All Students", key="apply_psycho_all", width="stretch"):
+            ActivityTracker.update()  # Track apply to all action
             success_count = 0
             for student in students:
                 if create_psychomotor_rating(student[1], class_name, term, session, ratings):
@@ -300,6 +361,8 @@ def render_psychomotor_comments_tab(role, students, class_name, term, session, i
                 label_visibility="collapsed",
                 horizontal=True
             )
+            # Track mode selection
+            ActivityTracker.watch_value(f"ct_mode_{selected_student}", ct_mode)
         
         with col_template:
             if ct_mode == "Template" and ct_templates:
@@ -310,6 +373,8 @@ def render_psychomotor_comments_tab(role, students, class_name, term, session, i
                     key=f"ct_template_{selected_student}",
                     label_visibility="collapsed"
                 )
+                # Track template selection
+                ActivityTracker.watch_value(f"ct_template_{selected_student}", selected_ct_template)
                 
                 if selected_ct_template != "-- Select a template --":
                     class_teacher_comment = selected_ct_template
@@ -327,7 +392,8 @@ def render_psychomotor_comments_tab(role, students, class_name, term, session, i
         col_save_ct, col_space_ct, col_apply_ct = st.columns(3)
         
         with col_save_ct:
-            if st.button("💾 Save CT Comment", key="save_ct_comment", width='stretch'):
+            if st.button("💾 Save CT Comment", key="save_ct_comment", width="stretch"):
+                ActivityTracker.update()  # Track save CT comment
                 if create_comment(selected_student, class_name, term, session, ct_comment, head_teacher_comment):
                     st.success(f"✅ Class Teacher comment saved")
                     st.rerun()
@@ -335,7 +401,8 @@ def render_psychomotor_comments_tab(role, students, class_name, term, session, i
                     st.error("❌ Failed to save comment")
         
         with col_apply_ct:
-            if st.button("Apply to All Students", key="apply_ct_all", width='stretch'):
+            if st.button("Apply to All Students", key="apply_ct_all", width="stretch"):
+                ActivityTracker.update()  # Track apply CT to all
                 success_count = 0
                 for student in students:
                     existing = get_comment(student[1], class_name, term, session)
@@ -365,6 +432,8 @@ def render_psychomotor_comments_tab(role, students, class_name, term, session, i
                     label_visibility="collapsed",
                     horizontal=True
                 )
+                # Track mode selection
+                ActivityTracker.watch_value(f"ht_mode_{selected_student}", ht_mode)
             
             with col_template_ht:
                 if ht_mode == "Template" and ht_templates:
@@ -375,6 +444,8 @@ def render_psychomotor_comments_tab(role, students, class_name, term, session, i
                         key=f"ht_template_{selected_student}",
                         label_visibility="collapsed"
                     )
+                    # Track template selection
+                    ActivityTracker.watch_value(f"ht_template_{selected_student}", selected_ht_template)
                     
                     if selected_ht_template != "-- Select a template --":
                         head_teacher_comment = selected_ht_template
@@ -392,7 +463,8 @@ def render_psychomotor_comments_tab(role, students, class_name, term, session, i
             col_save_ht, col_space_ht, col_apply_ht = st.columns(3)
             
             with col_save_ht:
-                if st.button(f"{"💾 Save Principal Comment" if is_secondary_class else "💾 Save HT Comment" if is_primary_class else ""}", key="save_ht_comment", width='stretch'):
+                if st.button(f"{"💾 Save Principal Comment" if is_secondary_class else "💾 Save HT Comment" if is_primary_class else ""}", key="save_ht_comment", width="stretch"):
+                    ActivityTracker.update()  # Track save HT comment
                     if create_comment(selected_student, class_name, term, session, ct_comment, ht_comment):
                         st.success(f"✅ Head Teacher comment saved")
                         st.rerun()
@@ -400,7 +472,8 @@ def render_psychomotor_comments_tab(role, students, class_name, term, session, i
                         st.error("❌ Failed to save comment")
             
             with col_apply_ht:
-                if st.button("Apply to All Students", key="apply_ht_all", width='stretch'):
+                if st.button("Apply to All Students", key="apply_ht_all", width="stretch"):
+                    ActivityTracker.update()  # Track apply HT to all
                     success_count = 0
                     for student in students:
                         existing = get_comment(student[1], class_name, term, session)
@@ -441,23 +514,29 @@ def render_batch_add_ct_tab(students, class_name, term, session):
                 st.markdown(f"#### {student_name}")
                 
                 # Mode selection
+                ct_mode_key = f"batch_ct_mode_{i}_{student_name}"
                 ct_mode = st.radio(
                     "Mode",
                     ["Custom", "Template"],
-                    key=f"batch_ct_mode_{i}_{student_name}",
+                    key=ct_mode_key,
                     horizontal=True,
                     label_visibility="collapsed"
                 )
+                # Track mode selection
+                ActivityTracker.watch_value(ct_mode_key, ct_mode)
                 
                 # Template selection
                 if ct_mode == "Template" and ct_templates:
                     template_options = ["-- Select a template --"] + [t[1] for t in ct_templates]
+                    template_key = f"batch_ct_template_{i}_{student_name}"
                     selected_template = st.selectbox(
                         "Choose template",
                         template_options,
-                        key=f"batch_ct_template_{i}_{student_name}",
+                        key=template_key,
                         label_visibility="collapsed"
                     )
+                    # Track template selection
+                    ActivityTracker.watch_value(template_key, selected_template)
                     
                     if selected_template != "-- Select a template --":
                         st.session_state.batch_ct_comments[student_name] = selected_template
@@ -492,23 +571,29 @@ def render_batch_add_ct_tab(students, class_name, term, session):
                     st.markdown(f"#### {student_name}")
                     
                     # Mode selection
+                    ct_mode_key = f"batch_ct_mode_{i+1}_{student_name}"
                     ct_mode = st.radio(
                         "Mode",
                         ["Custom", "Template"],
-                        key=f"batch_ct_mode_{i+1}_{student_name}",
+                        key=ct_mode_key,
                         horizontal=True,
                         label_visibility="collapsed"
                     )
+                    # Track mode selection
+                    ActivityTracker.watch_value(ct_mode_key, ct_mode)
                     
                     # Template selection
                     if ct_mode == "Template" and ct_templates:
                         template_options = ["-- Select a template --"] + [t[1] for t in ct_templates]
+                        template_key = f"batch_ct_template_{i+1}_{student_name}"
                         selected_template = st.selectbox(
                             "Choose template",
                             template_options,
-                            key=f"batch_ct_template_{i+1}_{student_name}",
+                            key=template_key,
                             label_visibility="collapsed"
                         )
+                        # Track template selection
+                        ActivityTracker.watch_value(template_key, selected_template)
                         
                         if selected_template != "-- Select a template --":
                             st.session_state.batch_ct_comments[student_name] = selected_template
@@ -530,6 +615,7 @@ def render_batch_add_ct_tab(students, class_name, term, session):
     st.markdown("---")
     
     if st.button("💾 Save All CT Comments", type="primary", key="save_all_batch_ct"):
+        ActivityTracker.update()  # Track batch save
         success_count = 0
         for student_name, ct_comment in st.session_state.batch_ct_comments.items():
             if ct_comment and ct_comment.strip():
@@ -578,21 +664,27 @@ def render_batch_add_ht_tab(students, class_name, term, session, is_secondary_cl
                 st.markdown(f"#### {student_name}")
                 
                 # Mode selection
+                ht_mode_key = f"batch_ht_mode_{i}_{student_name}"
                 ht_mode = st.radio(
                     "Mode",
                     ["Custom", "Template"],
-                    key=f"batch_ht_mode_{i}_{student_name}",
+                    key=ht_mode_key,
                     horizontal=True
                 )
-                
+                # Track mode selection
+                ActivityTracker.watch_value(ht_mode_key, ht_mode)
+
                 # Template selection
                 if ht_mode == "Template" and ht_templates:
                     template_options = ["-- Select a template --"] + [t[1] for t in ht_templates]
+                    template_key = f"batch_ht_template_{i}_{student_name}"
                     selected_template = st.selectbox(
                         "Choose template",
                         template_options,
-                        key=f"batch_ht_template_{i}_{student_name}"
+                        key=template_key
                     )
+                    # Track template selection
+                    ActivityTracker.watch_value(template_key, selected_template)
                     
                     if selected_template != "-- Select a template --":
                         st.session_state.batch_ht_comments[student_name] = selected_template
@@ -626,21 +718,27 @@ def render_batch_add_ht_tab(students, class_name, term, session, is_secondary_cl
                     st.markdown(f"#### {student_name}")
                     
                     # Mode selection
+                    ht_mode_key = f"batch_ht_mode_{i+1}_{student_name}"
                     ht_mode = st.radio(
                         "Mode",
                         ["Custom", "Template"],
-                        key=f"batch_ht_mode_{i+1}_{student_name}",
+                        key=ht_mode_key,
                         horizontal=True
                     )
+                    # Track mode selection
+                    ActivityTracker.watch_value(ht_mode_key, ht_mode)
                     
                     # Template selection
                     if ht_mode == "Template" and ht_templates:
                         template_options = ["-- Select a template --"] + [t[1] for t in ht_templates]
+                        template_key = f"batch_ht_template_{i+1}_{student_name}"
                         selected_template = st.selectbox(
                             "Choose template",
                             template_options,
-                            key=f"batch_ht_template_{i+1}_{student_name}"
+                            key=template_key
                         )
+                        # Track template selection
+                        ActivityTracker.watch_value(template_key, selected_template)
                         
                         if selected_template != "-- Select a template --":
                             st.session_state.batch_ht_comments[student_name] = selected_template
@@ -657,10 +755,11 @@ def render_batch_add_ht_tab(students, class_name, term, session, is_secondary_cl
                         on_change=lambda sn=student_name, key=f"batch_ht_comment_{i+1}_{student_name}": 
                             st.session_state.batch_ht_comments.update({sn: st.session_state[key]})
                     )
-    
+
     st.markdown("---")
-    
-    if st.button(f"💾 Save All {ht_label}", type="primary", width='stretch', key="save_all_batch_ht"):
+
+    if st.button(f"💾 Save All {ht_label}", type="primary", width="stretch", key="save_all_batch_ht"):
+        ActivityTracker.update()  # Track batch save
         success_count = 0
         for student_name, ht_comment in st.session_state.batch_ht_comments.items():
             if ht_comment and ht_comment.strip():
@@ -686,7 +785,7 @@ def render_batch_delete_tab(students, class_name, term, session, is_secondary_cl
     st.markdown(" ")
 
     col1, col2 = st.columns(2, gap="large")
-    
+
     # Delete all comments
     with col1:
         with st.container(border=True):
@@ -701,14 +800,17 @@ def render_batch_delete_tab(students, class_name, term, session, is_secondary_cl
                     "I understand this action cannot be undone",
                     key="confirm_delete_comments"
                 )
+                # Track checkbox
+                ActivityTracker.watch_value("confirm_delete_comments_checkbox", confirm_delete_comments)
                 
                 if st.button(
                     "🗑️ Delete All Comments",
                     disabled=not confirm_delete_comments,
                     key="delete_all_comments",
                     type="primary",
-                    width='stretch'
+                    width="stretch"
                 ):
+                    ActivityTracker.update()  # Track delete all comments
                     deleted_count = 0
                     for student in students:
                         if delete_comment(student[1], class_name, term, session):
@@ -717,7 +819,7 @@ def render_batch_delete_tab(students, class_name, term, session, is_secondary_cl
                     st.rerun()
             else:
                 st.info("✓ No comments to delete for this class.")
-    
+
     # Delete all psychomotor ratings
     with col2:
         with st.container(border=True):
@@ -732,14 +834,17 @@ def render_batch_delete_tab(students, class_name, term, session, is_secondary_cl
                     "I understand this action cannot be undone",
                     key="confirm_delete_psycho"
                 )
+                # Track checkbox
+                ActivityTracker.watch_value("confirm_delete_psycho_checkbox", confirm_delete_psycho)
                 
                 if st.button(
                     "🗑️ Delete All Psychomotor",
                     disabled=not confirm_delete_psycho,
                     key="delete_all_psycho",
                     type="primary",
-                    width='stretch'
+                    width="stretch"
                 ):
+                    ActivityTracker.update()  # Track delete all psychomotor
                     deleted_count = 0
                     for student in students:
                         if delete_psychomotor_rating(student[1], class_name, term, session):

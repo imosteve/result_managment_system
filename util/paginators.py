@@ -147,7 +147,7 @@ def streamlit_paginator(data, table_name):
     if len(page_data) > 0:
         st.dataframe(
             page_data, 
-            use_container_width=True, 
+            width="stretch", 
             hide_index=True,
             height=40*table_height
             )
