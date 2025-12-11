@@ -39,6 +39,7 @@ class SessionManager:
             cookies["role"] = str(user["role"]) if user["role"] else ""  # Handle None role
             cookies["username"] = user["username"]
             cookies["login_time"] = st.session_state.login_time
+            cookies["last_activity"] = st.session_state.last_activity.isoformat()
             cookies.save()
             
             logger.info(f"Session created for user: {user['username']} (ID: {user['id']}, Role: {user['role'] or 'Teacher'})")
@@ -83,7 +84,7 @@ class SessionManager:
             cookies["assignment_subject"] = subject_name
             cookies["assignment_type"] = assignment_type
             cookies["role"] = assignment_type  # Update role in cookies
-            # cookies.save()  # REMOVED - causes duplicate key error
+            cookies["last_activity"] = st.session_state.last_activity.isoformat()
             
             logger.info(f"Assignment saved for user {st.session_state.get('username')}: {assignment_data['class_name']} ({assignment_type})")
             return True
@@ -109,7 +110,7 @@ class SessionManager:
                 cookie_keys = [
                     "authenticated", "user_id", "role", "username", "login_time",
                     "assignment_class", "assignment_term", "assignment_session", 
-                    "assignment_subject", "assignment_type"
+                    "assignment_subject", "assignment_type", "last_activity"
                 ]
                 
                 for key in cookie_keys:
@@ -146,7 +147,7 @@ class SessionManager:
         cookie_names = [
             "authenticated", "user_id", "role", "username", "login_time",
             "assignment_class", "assignment_term", "assignment_session", 
-            "assignment_subject", "assignment_type"
+            "assignment_subject", "assignment_type", "last_activity"
         ]
         
         # Set cookies to expire immediately
@@ -212,6 +213,10 @@ class SessionManager:
                 st.session_state.username = cookies.get("username", "")
                 st.session_state.login_time = cookies.get("login_time", "")
                 # st.session_state.last_activity = datetime.now()
+
+                # Restore last_activity from cookies
+                last_activity_str = cookies.get("last_activity")
+                st.session_state.last_activity = datetime.fromisoformat(last_activity_str)
 
                 # Restore assignment if exists
                 if (cookies.get("assignment_class") and 

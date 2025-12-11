@@ -6,7 +6,8 @@ from database import (
     add_comment_template,
     get_all_comment_templates,
     delete_comment_template,
-    update_comment_template
+    update_comment_template,
+    check_range_overlap
 )
 from utils import render_page_header, inject_login_css, inject_metric_css
 
@@ -60,7 +61,7 @@ def manage_comment_templates():
         with col1:
             filter_type = st.selectbox(
                 "Filter by Type",
-                ["All", "Class Teacher", "Head Teacher"],
+                ["All", "Class Teacher", "Head Teacher / Principal"],
                 key="filter_type_view"
             )
         
@@ -75,7 +76,7 @@ def manage_comment_templates():
         db_type = None
         if filter_type == "Class Teacher":
             db_type = "class_teacher"
-        elif filter_type == "Head Teacher":
+        elif filter_type == "Head Teacher / Principal":
             db_type = "head_teacher"
         
         all_templates = get_all_comment_templates(db_type)
@@ -93,7 +94,14 @@ def manage_comment_templates():
             st.markdown(f"🔵 **Class Teacher** &nbsp;&nbsp;&nbsp; 🟢 **Head Teacher / Principal**")
 
             # Display templates in cards
-            for idx, (template_id, text, t_type, created_at) in enumerate(templates):
+            for ix, template in enumerate(templates):
+                template_id = template[0]
+                text = template[1]
+                t_type = template[2]
+                avg_lower = template[3]
+                avg_upper = template[4]
+                created_at = template[5]
+                
                 with st.container(border=True):
                     # Check if this template is being edited
                     is_editing = st.session_state.editing_template_id == template_id
@@ -103,7 +111,6 @@ def manage_comment_templates():
                     with col_badge:
                         # Type badge
                         badge_color = "🔵" if t_type == "class_teacher" else "🟢"
-                        badge_text = "Class Teacher" if t_type == "class_teacher" else "Head Teacher"
                         st.markdown(f"{badge_color}")
                     
                     with col_actions:
@@ -117,10 +124,12 @@ def manage_comment_templates():
                         
                         with col_del:
                             if st.button("🗑️", key=f"delete_btn_{template_id}", help="Delete template", type="primary"):
+                                badge_text = "Class Teacher" if t_type == "class_teacher" else "Head Teacher / Principal"
                                 st.session_state.template_to_delete = {
                                     "id": template_id,
                                     "text": text,
-                                    "type": badge_text
+                                    "type": badge_text,
+                                    "range": f"{avg_lower}-{avg_upper}" if avg_lower is not None else None
                                 }
                                 st.session_state.show_delete_dialog = True
                                 st.rerun()
@@ -128,6 +137,31 @@ def manage_comment_templates():
                     with col_comment:
                         # Show edit mode or display mode
                         if is_editing:
+                            # Range inputs for head teacher templates
+                            if t_type == "head_teacher":
+                                col_lower, col_upper = st.columns(2)
+                                with col_lower:
+                                    edited_lower = st.number_input(
+                                        "Lower Bound",
+                                        min_value=0.0,
+                                        max_value=100.0,
+                                        value=float(avg_lower) if avg_lower is not None else 0.0,
+                                        step=0.1,
+                                        key=f"edit_lower_{template_id}"
+                                    )
+                                with col_upper:
+                                    edited_upper = st.number_input(
+                                        "Upper Bound",
+                                        min_value=0.0,
+                                        max_value=100.0,
+                                        value=float(avg_upper) if avg_upper is not None else 100.0,
+                                        step=0.1,
+                                        key=f"edit_upper_{template_id}"
+                                    )
+                            else:
+                                edited_lower = None
+                                edited_upper = None
+                            
                             edited_text = st.text_area(
                                 "Edit comment text",
                                 value=text,
@@ -139,15 +173,31 @@ def manage_comment_templates():
                             
                             with col_save:
                                 if st.button("💾 Save Changes", key=f"save_{template_id}", width='stretch'):
-                                    if edited_text.strip():
-                                        if update_comment_template(template_id, edited_text):
-                                            st.success("✅ Template updated successfully!")
-                                            st.session_state.editing_template_id = None
-                                            st.rerun()
+                                    # Validate for head teacher templates
+                                    if t_type == "head_teacher":
+                                        if edited_lower >= edited_upper:
+                                            st.error("❌ Lower bound must be less than upper bound.")
+                                        elif check_range_overlap(edited_lower, edited_upper, template_id):
+                                            st.error("❌ This range overlaps with an existing template.")
+                                        elif edited_text.strip():
+                                            if update_comment_template(template_id, edited_text, edited_lower, edited_upper):
+                                                st.success("✅ Template updated successfully!")
+                                                st.session_state.editing_template_id = None
+                                                st.rerun()
+                                            else:
+                                                st.error("❌ Failed to update template.")
                                         else:
-                                            st.error("❌ Failed to update - this text already exists.")
+                                            st.error("❌ Template text cannot be empty.")
                                     else:
-                                        st.error("❌ Template text cannot be empty.")
+                                        if edited_text.strip():
+                                            if update_comment_template(template_id, edited_text):
+                                                st.success("✅ Template updated successfully!")
+                                                st.session_state.editing_template_id = None
+                                                st.rerun()
+                                            else:
+                                                st.error("❌ Failed to update template.")
+                                        else:
+                                            st.error("❌ Template text cannot be empty.")
                             
                             with col_cancel:
                                 if st.button("❌ Cancel", key=f"cancel_{template_id}", width='stretch'):
@@ -155,6 +205,8 @@ def manage_comment_templates():
                                     st.rerun()
                         else:
                             # Display mode
+                            if t_type == "head_teacher" and avg_lower is not None and avg_upper is not None:
+                                st.markdown(f"**Range:** {avg_lower} - {avg_upper}")
                             st.markdown(f"**{text}**")
                             st.caption(f"Created: {created_at}")
     
@@ -167,6 +219,8 @@ def manage_comment_templates():
             
             st.error("### This action cannot be undone!")
             st.warning(f"**Type:** {data['type']}")
+            if data.get('range'):
+                st.info(f"**Range:** {data['range']}")
             st.info(f"**Text:** {data['text']}")
             
             st.markdown("---")
@@ -195,56 +249,101 @@ def manage_comment_templates():
     with tab2:
         st.subheader("Add New Comment Templates")
         
-        st.info("💡 **Tip:** You can add multiple comments at once by entering each on a new line.")
+        # Comment type selection
+        comment_type = st.selectbox(
+            "Comment Type",
+            ["class_teacher", "head_teacher"],
+            format_func=lambda x: "Class Teacher" if x == "class_teacher" else "Head Teacher / Principal",
+            key="add_comment_type"
+        )
         
-        with st.form("add_template_form", clear_on_submit=True):
-            # Comment type selection
-            comment_type = st.selectbox(
-                "Comment Type",
-                ["class_teacher", "head_teacher"],
-                format_func=lambda x: "Class Teacher" if x == "class_teacher" else "Head Teacher/Principal",
-                key="add_comment_type"
-            )
+        if comment_type == "head_teacher":
+            st.info("💡 **Head Teacher / Principal comments are range-based.** Define an average range and the comment for students within that range.")
             
-            # Multi-line comment input
-            new_comments = st.text_area(
-                "Comment Text",
-                placeholder="Enter one or multiple comments.\nEach line will be added as a separate template.\n\nExample:\nExcellent performance this term.\nShows great improvement in all subjects.\nNeeds to work on punctuality.",
-                height=200,
-                key="new_comment_text"
-            )
-            
-            # Submit button
-            submitted = st.form_submit_button("➕ Add Template(s)", width='stretch', type="primary")
-            
-            if submitted:
-                if not new_comments.strip():
-                    st.error("❌ Please enter at least one comment.")
-                else:
-                    # Split by lines and filter empty lines
-                    comment_lines = [line.strip() for line in new_comments.split("\n") if line.strip()]
-                    
-                    added_count = 0
-                    skipped_count = 0
-                    
-                    # Add each comment
-                    for comment_text in comment_lines:
-                        if add_comment_template(comment_text, comment_type, user_id):
-                            added_count += 1
+            with st.form("add_ht_template_form", clear_on_submit=True):
+                col_lower, col_upper = st.columns(2)
+                
+                with col_lower:
+                    avg_lower = st.number_input(
+                        "Lower Bound",
+                        min_value=0.0,
+                        max_value=100.0,
+                        value=0.0,
+                        step=0.1,
+                        key="ht_lower"
+                    )
+                
+                with col_upper:
+                    avg_upper = st.number_input(
+                        "Upper Bound",
+                        min_value=0.0,
+                        max_value=100.0,
+                        value=100.0,
+                        step=0.1,
+                        key="ht_upper"
+                    )
+                
+                new_comment = st.text_area(
+                    "Comment Text",
+                    placeholder="Enter comment for this average range...",
+                    height=100,
+                    key="ht_comment_text"
+                )
+                
+                submitted = st.form_submit_button("➕ Add Template", width='stretch', type="primary")
+                
+                if submitted:
+                    if not new_comment.strip():
+                        st.error("❌ Please enter a comment.")
+                    elif avg_lower >= avg_upper:
+                        st.error("❌ Lower bound must be less than upper bound.")
+                    elif check_range_overlap(avg_lower, avg_upper):
+                        st.error("❌ This range overlaps with an existing template. Please choose a different range.")
+                    else:
+                        if add_comment_template(new_comment, comment_type, user_id, avg_lower, avg_upper):
+                            st.success("✅ Head Teacher / Principal template added successfully!")
+                            st.rerun()
                         else:
-                            skipped_count += 1
-                    
-                    # Show results
-                    if added_count > 0:
-                        st.success(f"✅ Successfully added **{added_count}** template(s)!")
-                    
-                    if skipped_count > 0:
-                        st.warning(f"⚠️ Skipped **{skipped_count}** duplicate(s).")
-                    
-                    if added_count > 0:
-                        st.rerun()
+                            st.error("❌ Failed to add template (duplicate text).")
+        
+        else:  # class_teacher
+            st.info("💡 **Tip:** You can add multiple comments at once by entering each on a new line.")
+            
+            with st.form("add_ct_template_form", clear_on_submit=True):
+                new_comments = st.text_area(
+                    "Comment Text",
+                    placeholder="Enter one or multiple comments.\nEach line will be added as a separate template.\n\nExample:\nExcellent performance this term.\nShows great improvement in all subjects.\nNeeds to work on punctuality.",
+                    height=200,
+                    key="ct_comment_text"
+                )
+                
+                submitted = st.form_submit_button("➕ Add Template(s)", width='stretch', type="primary")
+                
+                if submitted:
+                    if not new_comments.strip():
+                        st.error("❌ Please enter at least one comment.")
+                    else:
+                        comment_lines = [line.strip() for line in new_comments.split("\n") if line.strip()]
+                        
+                        added_count = 0
+                        skipped_count = 0
+                        
+                        for comment_text in comment_lines:
+                            if add_comment_template(comment_text, comment_type, user_id):
+                                added_count += 1
+                            else:
+                                skipped_count += 1
+                        
+                        if added_count > 0:
+                            st.success(f"✅ Successfully added **{added_count}** template(s)!")
+                        
+                        if skipped_count > 0:
+                            st.warning(f"⚠️ Skipped **{skipped_count}** duplicate(s).")
+                        
+                        if added_count > 0:
+                            st.rerun()
     
-    # TAB 3 — BULK OPERATIONS (COMPLETELY REWRITTEN)
+    # TAB 3 — BULK OPERATIONS
     with tab3:
         st.subheader("Bulk Operations")
         
@@ -267,13 +366,10 @@ def manage_comment_templates():
             with col2:
                 st.metric("🔵 Class Teacher", class_teacher_count)
             with col3:
-                st.metric("🟢 Head Teacher", head_teacher_count)
+                st.metric("🟢 Head Teacher / Principal", head_teacher_count)
             
             st.markdown("---")
             
-            # ============================================================
-            # SECTION 2: DELETE BY TYPE
-            # ============================================================
             st.markdown("### 🎯 Delete by Type")
             st.error("⚠️ **DANGER ZONE** - This will delete ALL templates permanently!")
             
@@ -305,7 +401,7 @@ def manage_comment_templates():
                     ):
                         ht_ids = [t[0] for t in all_templates if t[2] == "head_teacher"]
                         st.session_state.templates_to_bulk_delete = ht_ids
-                        st.session_state.bulk_delete_type = "Head Teacher"
+                        st.session_state.bulk_delete_type = "Head Teacher / Principal"
                         st.session_state.show_bulk_delete_dialog = True
                         st.rerun()
                 else:
@@ -334,8 +430,8 @@ def manage_comment_templates():
             
             if delete_type == "Class Teacher":
                 st.warning("⚠️ This will delete ALL Class Teacher templates.")
-            elif delete_type == "Head Teacher":
-                st.warning("⚠️ This will delete ALL Head Teacher templates.")
+            elif delete_type == "Head Teacher / Principal":
+                st.warning("⚠️ This will delete ALL Head Teacher / Principal templates.")
             else:
                 st.warning("⚠️ This action cannot be undone.")
             
@@ -373,8 +469,6 @@ def manage_comment_templates():
                     if failed > 0:
                         st.error(f"❌ Failed to delete {failed} template(s).")
                     
-                    # Clear selection
-                    st.session_state.selected_template_ids = set()
                     st.session_state.show_bulk_delete_dialog = False
                     st.session_state.templates_to_bulk_delete = []
                     st.session_state.bulk_delete_type = None
@@ -382,7 +476,7 @@ def manage_comment_templates():
         
         show_bulk_delete_confirmation()
     
-    # CLEAR ALL CONFIRMATION DIALOG (EXTRA STRICT)
+    # CLEAR ALL CONFIRMATION DIALOG
     if st.session_state.show_clear_all_confirm and st.session_state.templates_to_bulk_delete:
         @st.dialog("💥 DANGER: Clear All Templates")
         def show_clear_all_confirmation():
@@ -394,7 +488,6 @@ def manage_comment_templates():
             
             st.markdown("---")
             
-            # Extra confirmation - type to confirm
             st.markdown("### Type `DELETE ALL` to confirm:")
             confirmation_text = st.text_input(
                 "Confirmation",
@@ -440,11 +533,9 @@ def manage_comment_templates():
                     if failed > 0:
                         st.error(f"❌ Failed to delete {failed} template(s).")
                     
-                    # Clear everything
-                    st.session_state.selected_template_ids = set()
                     st.session_state.show_clear_all_confirm = False
                     st.session_state.templates_to_bulk_delete = []
                     st.session_state.bulk_delete_type = None
                     st.rerun()
-        show_clear_all_confirmation()
         
+        show_clear_all_confirmation()

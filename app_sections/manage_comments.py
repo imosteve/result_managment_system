@@ -6,7 +6,8 @@ import re
 from database import (
     get_all_classes, get_students_by_class, create_comment, get_comment, 
     delete_comment, create_psychomotor_rating, get_psychomotor_rating,
-    delete_psychomotor_rating, get_all_comment_templates
+    delete_psychomotor_rating, get_all_comment_templates, get_student_average,
+    get_head_teacher_comment_by_average
 )
 from utils import render_page_header, inject_login_css, render_persistent_class_selector
 from auth.activity_tracker import ActivityTracker
@@ -114,14 +115,14 @@ def manage_comments():
         if st.session_state.manage_comments_tab_tracker != 0:
             ActivityTracker.watch_tab("manage_comments_tabs", 0)
             st.session_state.manage_comments_tab_tracker = 0
-        render_view_delete_tab(students, class_name, term, session, is_secondary_class, is_primary_class)
+        render_view_delete_tab(students, class_name, term, session, is_secondary_class, is_primary_class, user_id, role)
 
     # Tab 2: Psychomotor & Comments
     with tabs[1]:
         if st.session_state.manage_comments_tab_tracker != 1:
             ActivityTracker.watch_tab("manage_comments_tabs", 1)
             st.session_state.manage_comments_tab_tracker = 1
-        render_psychomotor_comments_tab(role, students, class_name, term, session, is_secondary_class, is_primary_class)
+        render_psychomotor_comments_tab(role, students, class_name, term, session, is_secondary_class, is_primary_class, user_id)
 
     # Tab 3: Batch CT Comments
     with tabs[2]:
@@ -136,7 +137,7 @@ def manage_comments():
             if st.session_state.manage_comments_tab_tracker != 3:
                 ActivityTracker.watch_tab("manage_comments_tabs", 3)
                 st.session_state.manage_comments_tab_tracker = 3
-            render_batch_add_ht_tab(students, class_name, term, session, is_secondary_class, is_primary_class)
+            render_batch_add_ht_tab(students, class_name, term, session, is_secondary_class, is_primary_class, user_id, role)
 
     # Tab 5: Batch Delete (last tab - index depends on role)
     with tabs[4 if role in ["admin", "superadmin"] else 3]:
@@ -151,7 +152,7 @@ def manage_comments():
         render_batch_delete_tab(students, class_name, term, session, is_secondary_class, is_primary_class)
 
 
-def render_view_delete_tab(students, class_name, term, session, is_secondary_class, is_primary_class):
+def render_view_delete_tab(students, class_name, term, session, is_secondary_class, is_primary_class, user_id, role):
     """Render the View/Delete Comments tab"""
     st.subheader("View Comments and Psychomotor Ratings")
     
@@ -161,12 +162,19 @@ def render_view_delete_tab(students, class_name, term, session, is_secondary_cla
         comment = get_comment(s[1], class_name, term, session)
         psychomotor = get_psychomotor_rating(s[1], class_name, term, session)
         
+        # Get student average for display
+        avg = get_student_average(s[1], class_name, term, session, user_id, role)
+        
         if comment or psychomotor:
+            ht_comment_display = comment['head_teacher_comment'] if comment and comment['head_teacher_comment'] else "-"
+            is_custom = comment.get('head_teacher_comment_custom', 0) == 1 if comment else False
+            
             comments_data.append({
                 "S/N": str(idx),
                 "Student": s[1],
+                "Average": f"{avg:.2f}" if avg > 0 else "-",
                 "Class Teacher Comment": comment['class_teacher_comment'] if comment and comment['class_teacher_comment'] else "-",
-                "Head Teacher Comment": comment['head_teacher_comment'] if comment and comment['head_teacher_comment'] else "-",
+                "Head Teacher Comment": ht_comment_display + (" (Custom)" if is_custom else " (Auto)") if ht_comment_display != "-" else "-",
                 "Has Psychomotor": "✓" if psychomotor else "✗"
             })
     
@@ -176,6 +184,7 @@ def render_view_delete_tab(students, class_name, term, session, is_secondary_cla
             column_config={
                 "S/N": st.column_config.TextColumn("S/N", width=10),
                 "Student": st.column_config.TextColumn("Student", width=100),
+                "Average": st.column_config.TextColumn("Average", width=50),
                 "Class Teacher Comment": st.column_config.TextColumn("Class Teacher Comment", width=200),
                 "Head Teacher Comment": st.column_config.TextColumn("Head Teacher Comment", width=200),
                 "Has Psychomotor": st.column_config.TextColumn("Has Psychomotor", width=50)
@@ -215,7 +224,7 @@ def render_view_delete_tab(students, class_name, term, session, is_secondary_cla
                 
                 with col1:
                     if st.button("🗑️ Delete Comment", key="delete_comment_btn"):
-                        ActivityTracker.update()  # Track delete comment action
+                        ActivityTracker.update()
                         if delete_comment(student_to_delete, class_name, term, session):
                             st.success(f"✅ Comment deleted for {student_to_delete}")
                             st.rerun()
@@ -224,7 +233,7 @@ def render_view_delete_tab(students, class_name, term, session, is_secondary_cla
                 
                 with col2:
                     if st.button("🗑️ Delete Psychomotor", key="delete_psycho_btn"):
-                        ActivityTracker.update()  # Track delete psychomotor action
+                        ActivityTracker.update()
                         if delete_psychomotor_rating(student_to_delete, class_name, term, session):
                             st.success(f"✅ Psychomotor rating deleted for {student_to_delete}")
                             st.rerun()
@@ -234,7 +243,7 @@ def render_view_delete_tab(students, class_name, term, session, is_secondary_cla
             st.info("No data available to delete.")
 
 
-def render_psychomotor_comments_tab(role, students, class_name, term, session, is_secondary_class, is_primary_class):
+def render_psychomotor_comments_tab(role, students, class_name, term, session, is_secondary_class, is_primary_class, user_id):
     """Render the Psychomotor Rating & Add Single Comment tab"""
     
     # Student selection
@@ -272,7 +281,6 @@ def render_psychomotor_comments_tab(role, students, class_name, term, session, i
                 default_value, 
                 key=slider_key
             )
-            # Track slider changes
             ActivityTracker.watch_value(slider_key, ratings[category])
             
     with col3:
@@ -288,7 +296,6 @@ def render_psychomotor_comments_tab(role, students, class_name, term, session, i
                 default_value, 
                 key=slider_key
             )
-            # Track slider changes
             ActivityTracker.watch_value(slider_key, ratings[category])
             
     with col5:
@@ -304,7 +311,6 @@ def render_psychomotor_comments_tab(role, students, class_name, term, session, i
                 default_value, 
                 key=slider_key
             )
-            # Track slider changes
             ActivityTracker.watch_value(slider_key, ratings[category])
     
     # Save button for psychomotor
@@ -312,7 +318,7 @@ def render_psychomotor_comments_tab(role, students, class_name, term, session, i
     
     with col_save1:
         if st.button("💾 Save Rating", key="save_psycho", width="stretch"):
-            ActivityTracker.update()  # Track save rating action
+            ActivityTracker.update()
             if create_psychomotor_rating(selected_student, class_name, term, session, ratings):
                 st.success(f"✅ Psychomotor rating saved for {selected_student}")
                 st.rerun()
@@ -321,7 +327,7 @@ def render_psychomotor_comments_tab(role, students, class_name, term, session, i
     
     with col_apply1:
         if st.button("Apply to All Students", key="apply_psycho_all", width="stretch"):
-            ActivityTracker.update()  # Track apply to all action
+            ActivityTracker.update()
             success_count = 0
             for student in students:
                 if create_psychomotor_rating(student[1], class_name, term, session, ratings):
@@ -331,7 +337,7 @@ def render_psychomotor_comments_tab(role, students, class_name, term, session, i
 
     st.markdown("---")
     
-    # COMMENTS SECTION WITH TEMPLATE SUPPORT
+    # COMMENTS SECTION
     with st.expander("Add/Edit Comments", expanded=True):
         st.markdown("### Student Comments")
         
@@ -339,10 +345,12 @@ def render_psychomotor_comments_tab(role, students, class_name, term, session, i
         existing_comment = get_comment(selected_student, class_name, term, session)
         class_teacher_comment = ""
         head_teacher_comment = ""
+        is_ht_custom = False
         
         if existing_comment:
             class_teacher_comment = existing_comment['class_teacher_comment'] or ""
             head_teacher_comment = existing_comment['head_teacher_comment'] or ""
+            is_ht_custom = existing_comment.get('head_teacher_comment_custom', 0) == 1
         
         # ============ CLASS TEACHER COMMENT ============
         st.markdown("##### Class Teacher Comment")
@@ -361,7 +369,6 @@ def render_psychomotor_comments_tab(role, students, class_name, term, session, i
                 label_visibility="collapsed",
                 horizontal=True
             )
-            # Track mode selection
             ActivityTracker.watch_value(f"ct_mode_{selected_student}", ct_mode)
         
         with col_template:
@@ -373,7 +380,6 @@ def render_psychomotor_comments_tab(role, students, class_name, term, session, i
                     key=f"ct_template_{selected_student}",
                     label_visibility="collapsed"
                 )
-                # Track template selection
                 ActivityTracker.watch_value(f"ct_template_{selected_student}", selected_ct_template)
                 
                 if selected_ct_template != "-- Select a template --":
@@ -393,8 +399,8 @@ def render_psychomotor_comments_tab(role, students, class_name, term, session, i
         
         with col_save_ct:
             if st.button("💾 Save CT Comment", key="save_ct_comment", width="stretch"):
-                ActivityTracker.update()  # Track save CT comment
-                if create_comment(selected_student, class_name, term, session, ct_comment, head_teacher_comment):
+                ActivityTracker.update()
+                if create_comment(selected_student, class_name, term, session, ct_comment, head_teacher_comment, 1 if is_ht_custom else 0):
                     st.success(f"✅ Class Teacher comment saved")
                     st.rerun()
                 else:
@@ -402,12 +408,13 @@ def render_psychomotor_comments_tab(role, students, class_name, term, session, i
         
         with col_apply_ct:
             if st.button("Apply to All Students", key="apply_ct_all", width="stretch"):
-                ActivityTracker.update()  # Track apply CT to all
+                ActivityTracker.update()
                 success_count = 0
                 for student in students:
                     existing = get_comment(student[1], class_name, term, session)
                     ht_existing = existing['head_teacher_comment'] if existing else ""
-                    if create_comment(student[1], class_name, term, session, ct_comment, ht_existing):
+                    ht_custom_existing = existing.get('head_teacher_comment_custom', 0) if existing else 0
+                    if create_comment(student[1], class_name, term, session, ct_comment, ht_existing, ht_custom_existing):
                         success_count += 1
                 st.success(f"✅ Applied to {success_count}/{len(students)} students")
                 st.rerun()
@@ -415,73 +422,103 @@ def render_psychomotor_comments_tab(role, students, class_name, term, session, i
         if role in ["admin", "superadmin"]:
             st.markdown("---")
             
-            # ============ HEAD TEACHER COMMENT ============
+            # ============ HEAD TEACHER COMMENT - AUTO AND CUSTOM ============
             st.markdown(f"##### {"Principal Comment" if is_secondary_class else "Head Teacher Comment" if is_primary_class else ""}")
             
-            # Get templates
-            ht_templates = get_all_comment_templates('head_teacher')
+            # Get student average for auto-comment
+            student_avg = get_student_average(selected_student, class_name, term, session, user_id, role)
+            auto_comment = get_head_teacher_comment_by_average(student_avg) if student_avg > 0 else None
             
-            # Template selection or custom
-            col_mode_ht, col_template_ht = st.columns([1, 3])
+            # Show student average and auto comment
+            if student_avg > 0:
+                st.info(f"📊 **Student Average:** {student_avg:.2f}")
+                if auto_comment:
+                    st.success(f"🤖 **Auto Comment:** {auto_comment}")
+                else:
+                    st.warning("⚠️ No template found for this average range. Please add a template or use custom comment.")
+            else:
+                st.warning("⚠️ Student has no scores yet. Cannot auto-generate comment.")
             
-            with col_mode_ht:
-                ht_mode = st.radio(
-                    "Modes",
-                    ["Custom", "Template"],
-                    key=f"ht_mode_{selected_student}",
-                    label_visibility="collapsed",
-                    horizontal=True
-                )
-                # Track mode selection
-                ActivityTracker.watch_value(f"ht_mode_{selected_student}", ht_mode)
-            
-            with col_template_ht:
-                if ht_mode == "Template" and ht_templates:
-                    ht_template_options = ["-- Select a template --"] + [t[1] for t in ht_templates]
-                    selected_ht_template = st.selectbox(
-                        "Choose template",
-                        ht_template_options,
-                        key=f"ht_template_{selected_student}",
-                        label_visibility="collapsed"
-                    )
-                    # Track template selection
-                    ActivityTracker.watch_value(f"ht_template_{selected_student}", selected_ht_template)
-                    
-                    if selected_ht_template != "-- Select a template --":
-                        head_teacher_comment = selected_ht_template
-            
-            # Comment text area
-            ht_comment = st.text_area(
-                f"{"Principal Comment" if is_secondary_class else "Head Teacher Comment" if is_primary_class else ""}",
-                value=head_teacher_comment,
-                height=80,
-                key=f"ht_comment_{selected_student}",
-                placeholder="Type your comment here or select from template above..."
+            # Mode selection - Auto or Custom
+            col_ht_mode = st.columns(1)[0]
+            ht_comment_mode = st.radio(
+                "Comment Mode",
+                ["Auto (Range-based)", "Custom"],
+                key=f"ht_comment_mode_{selected_student}",
+                horizontal=True
             )
+            ActivityTracker.watch_value(f"ht_comment_mode_{selected_student}", ht_comment_mode)
             
-            # Action buttons
-            col_save_ht, col_space_ht, col_apply_ht = st.columns(3)
+            if ht_comment_mode == "Auto (Range-based)":
+                # Auto mode - use template based on average
+                if auto_comment:
+                    st.text_area(
+                        "Auto-Generated Comment (Read-only)",
+                        value=auto_comment,
+                        height=80,
+                        disabled=True,
+                        key=f"ht_comment_auto_{selected_student}"
+                    )
+                    
+                    if st.button("💾 Save Auto Comment", key="save_ht_auto", width="stretch"):
+                        ActivityTracker.update()
+                        if create_comment(selected_student, class_name, term, session, ct_comment, auto_comment, 0):
+                            st.success("✅ Auto comment saved")
+                            st.rerun()
+                        else:
+                            st.error("❌ Failed to save comment")
+                else:
+                    st.info("No auto comment available. Switch to Custom mode to enter manually.")
             
-            with col_save_ht:
-                if st.button(f"{"💾 Save Principal Comment" if is_secondary_class else "💾 Save HT Comment" if is_primary_class else ""}", key="save_ht_comment", width="stretch"):
-                    ActivityTracker.update()  # Track save HT comment
-                    if create_comment(selected_student, class_name, term, session, ct_comment, ht_comment):
-                        st.success(f"✅ Head Teacher comment saved")
+            else:  # Custom mode
+                # Get templates for selection
+                ht_templates = get_all_comment_templates('head_teacher')
+                
+                col_template_select = st.columns(1)[0]
+                if ht_templates:
+                    template_options = ["-- Type custom comment --"] + [f"{t[1]} ({t[3]}-{t[4]})" for t in ht_templates]
+                    selected_ht_template = st.selectbox(
+                        "Choose from templates or type custom",
+                        template_options,
+                        key=f"ht_template_custom_{selected_student}"
+                    )
+                    ActivityTracker.watch_value(f"ht_template_custom_{selected_student}", selected_ht_template)
+                    
+                    if selected_ht_template != "-- Type custom comment --":
+                        # Extract comment text (everything before the range part)
+                        head_teacher_comment = selected_ht_template.rsplit(" (", 1)[0]
+                
+                # Custom text area
+                ht_comment_custom = st.text_area(
+                    "Custom Comment",
+                    value=head_teacher_comment,
+                    height=80,
+                    key=f"ht_comment_custom_{selected_student}",
+                    placeholder="Type your custom comment here or select from templates above..."
+                )
+                
+                col_save_ht, col_apply_ht = st.columns(2)
+                
+                with col_save_ht:
+                    if st.button("💾 Save Custom Comment", key="save_ht_custom", width="stretch"):
+                        ActivityTracker.update()
+                        if create_comment(selected_student, class_name, term, session, ct_comment, ht_comment_custom, 1):
+                            st.success("✅ Custom comment saved")
+                            st.rerun()
+                        else:
+                            st.error("❌ Failed to save comment")
+                
+                with col_apply_ht:
+                    if st.button("Apply to All Students", key="apply_ht_custom_all", width="stretch"):
+                        ActivityTracker.update()
+                        success_count = 0
+                        for student in students:
+                            existing = get_comment(student[1], class_name, term, session)
+                            ct_existing = existing['class_teacher_comment'] if existing else ""
+                            if create_comment(student[1], class_name, term, session, ct_existing, ht_comment_custom, 1):
+                                success_count += 1
+                        st.success(f"✅ Applied custom comment to {success_count}/{len(students)} students")
                         st.rerun()
-                    else:
-                        st.error("❌ Failed to save comment")
-            
-            with col_apply_ht:
-                if st.button("Apply to All Students", key="apply_ht_all", width="stretch"):
-                    ActivityTracker.update()  # Track apply HT to all
-                    success_count = 0
-                    for student in students:
-                        existing = get_comment(student[1], class_name, term, session)
-                        ct_existing = existing['class_teacher_comment'] if existing else ""
-                        if create_comment(student[1], class_name, term, session, ct_existing, ht_comment):
-                            success_count += 1
-                    st.success(f"✅ Applied to {success_count}/{len(students)} students")
-                    st.rerun()
 
 
 def render_batch_add_ct_tab(students, class_name, term, session):
@@ -522,7 +559,6 @@ def render_batch_add_ct_tab(students, class_name, term, session):
                     horizontal=True,
                     label_visibility="collapsed"
                 )
-                # Track mode selection
                 ActivityTracker.watch_value(ct_mode_key, ct_mode)
                 
                 # Template selection
@@ -535,7 +571,6 @@ def render_batch_add_ct_tab(students, class_name, term, session):
                         key=template_key,
                         label_visibility="collapsed"
                     )
-                    # Track template selection
                     ActivityTracker.watch_value(template_key, selected_template)
                     
                     if selected_template != "-- Select a template --":
@@ -579,7 +614,6 @@ def render_batch_add_ct_tab(students, class_name, term, session):
                         horizontal=True,
                         label_visibility="collapsed"
                     )
-                    # Track mode selection
                     ActivityTracker.watch_value(ct_mode_key, ct_mode)
                     
                     # Template selection
@@ -592,7 +626,6 @@ def render_batch_add_ct_tab(students, class_name, term, session):
                             key=template_key,
                             label_visibility="collapsed"
                         )
-                        # Track template selection
                         ActivityTracker.watch_value(template_key, selected_template)
                         
                         if selected_template != "-- Select a template --":
@@ -615,13 +648,14 @@ def render_batch_add_ct_tab(students, class_name, term, session):
     st.markdown("---")
     
     if st.button("💾 Save All CT Comments", type="primary", key="save_all_batch_ct"):
-        ActivityTracker.update()  # Track batch save
+        ActivityTracker.update()
         success_count = 0
         for student_name, ct_comment in st.session_state.batch_ct_comments.items():
             if ct_comment and ct_comment.strip():
                 existing = get_comment(student_name, class_name, term, session)
                 existing_ht = existing['head_teacher_comment'] if existing else ""
-                if create_comment(student_name, class_name, term, session, ct_comment, existing_ht):
+                ht_custom = existing.get('head_teacher_comment_custom', 0) if existing else 0
+                if create_comment(student_name, class_name, term, session, ct_comment, existing_ht, ht_custom):
                     success_count += 1
         
         if success_count > 0:
@@ -633,79 +667,122 @@ def render_batch_add_ct_tab(students, class_name, term, session):
             st.warning("⚠️ No CT comments to save.")
 
 
-def render_batch_add_ht_tab(students, class_name, term, session, is_secondary_class, is_primary_class):
+def render_batch_add_ht_tab(students, class_name, term, session, is_secondary_class, is_primary_class, user_id, role):
     """Render the Batch Add Head Teacher/Principal Comments tab"""
     ht_label = "Principal Comments" if is_secondary_class else "Head Teacher Comments"
     st.subheader(f"Batch Add {ht_label}")
-    st.info(f"💡 Add or update {ht_label} for multiple students at once.")
     
-    ht_templates = get_all_comment_templates('head_teacher')
+    # Mode selection for batch operation
+    batch_mode = st.radio(
+        "Batch Mode",
+        ["Auto (Apply range-based comments to all)", "Custom (Individual comments)"],
+        key="batch_ht_mode",
+        horizontal=True
+    )
     
-    # Initialize session state for batch HT comments
-    if 'batch_ht_comments' not in st.session_state:
-        st.session_state.batch_ht_comments = {}
-    
-    # Process students in pairs for 2-column layout
-    for i in range(0, len(students), 2):
-        col1, col2 = st.columns(2)
+    if batch_mode == "Auto (Apply range-based comments to all)":
+        st.info("💡 This will automatically apply range-based comments to all students based on their averages.")
         
-        # First student in the pair
-        with col1:
-            student = students[i]
+        # Show preview of what will be applied
+        st.markdown("### Preview Auto Comments")
+        
+        preview_data = []
+        students_without_template = []
+        students_without_scores = []
+        
+        for student in students:
             student_name = student[1]
-            existing_comment = get_comment(student_name, class_name, term, session)
-            existing_ht = existing_comment['head_teacher_comment'] or "" if existing_comment else ""
+            avg = get_student_average(student_name, class_name, term, session, user_id, role)
             
-            # Initialize in session state if not exists
-            if student_name not in st.session_state.batch_ht_comments:
-                st.session_state.batch_ht_comments[student_name] = existing_ht
-            
-            with st.container(border=True):
-                st.markdown(f"#### {student_name}")
-                
-                # Mode selection
-                ht_mode_key = f"batch_ht_mode_{i}_{student_name}"
-                ht_mode = st.radio(
-                    "Mode",
-                    ["Custom", "Template"],
-                    key=ht_mode_key,
-                    horizontal=True
-                )
-                # Track mode selection
-                ActivityTracker.watch_value(ht_mode_key, ht_mode)
-
-                # Template selection
-                if ht_mode == "Template" and ht_templates:
-                    template_options = ["-- Select a template --"] + [t[1] for t in ht_templates]
-                    template_key = f"batch_ht_template_{i}_{student_name}"
-                    selected_template = st.selectbox(
-                        "Choose template",
-                        template_options,
-                        key=template_key
-                    )
-                    # Track template selection
-                    ActivityTracker.watch_value(template_key, selected_template)
-                    
-                    if selected_template != "-- Select a template --":
-                        st.session_state.batch_ht_comments[student_name] = selected_template
-                elif ht_mode == "Template" and not ht_templates:
-                    st.info("No templates available")
-                
-                # Text area with session state value
-                comment = st.text_area(
-                    "Comment",
-                    value=st.session_state.batch_ht_comments[student_name],
-                    height=100,
-                    key=f"batch_ht_comment_{i}_{student_name}",
-                    placeholder="Type your comment here...",
-                    on_change=lambda sn=student_name, key=f"batch_ht_comment_{i}_{student_name}": 
-                        st.session_state.batch_ht_comments.update({sn: st.session_state[key]})
-                )
+            if avg > 0:
+                auto_comment = get_head_teacher_comment_by_average(avg)
+                if auto_comment:
+                    preview_data.append({
+                        "Student": student_name,
+                        "Average": f"{avg:.2f}",
+                        "Comment": auto_comment
+                    })
+                else:
+                    students_without_template.append((student_name, avg))
+            else:
+                students_without_scores.append(student_name)
         
-        # Second student in the pair (if exists)
-        with col2:
-            if i + 1 < len(students):
-                student = students[i + 1]
+        if preview_data:
+            st.dataframe(
+                pd.DataFrame(preview_data),
+                column_config={
+                    "Student": st.column_config.TextColumn("Student", width=150),
+                    "Average": st.column_config.TextColumn("Average", width=80),
+                    "Comment": st.column_config.TextColumn("Comment", width=400)
+                },
+                hide_index=True,
+                width="stretch"
+            )
+        
+        if students_without_template:
+            st.warning(f"⚠️ **{len(students_without_template)} student(s)** have scores but no matching template:")
+            for sname, savg in students_without_template:
+                st.write(f"- {sname} (Average: {savg:.2f})")
+            st.info("These students will be skipped. Add templates for their average ranges or use Custom mode.")
+        
+        if students_without_scores:
+            st.warning(f"⚠️ **{len(students_without_scores)} student(s)** have no scores yet:")
+            st.write(", ".join(students_without_scores))
+            st.info("These students will be skipped.")
+        
+        st.markdown("---")
+        
+        if st.button("🤖 Apply Auto Comments to All Eligible Students", type="primary", width="stretch", key="apply_auto_ht_all"):
+            ActivityTracker.update()
+            success_count = 0
+            skipped_count = 0
+            
+            with st.spinner("Applying auto comments..."):
+                for student in students:
+                    student_name = student[1]
+                    avg = get_student_average(student_name, class_name, term, session, user_id, role)
+                    
+                    if avg > 0:
+                        auto_comment = get_head_teacher_comment_by_average(avg)
+                        if auto_comment:
+                            existing = get_comment(student_name, class_name, term, session)
+                            ct_existing = existing['class_teacher_comment'] if existing else ""
+                            if create_comment(student_name, class_name, term, session, ct_existing, auto_comment, 0):
+                                success_count += 1
+                            else:
+                                skipped_count += 1
+                        else:
+                            skipped_count += 1
+                    else:
+                        skipped_count += 1
+            
+            if success_count > 0:
+                st.success(f"✅ Successfully applied auto comments to {success_count} student(s).")
+            
+            if skipped_count > 0:
+                st.warning(f"⚠️ Skipped {skipped_count} student(s) (no scores or no matching template).")
+            
+            if success_count > 0:
+                st.rerun()
+    
+    else:  # Custom mode
+        st.info(f"💡 Add or update {ht_label} for multiple students individually.")
+        
+        ht_templates = get_all_comment_templates('head_teacher')
+        
+        # Initialize session state for batch HT comments
+        if 'batch_ht_comments' not in st.session_state:
+            st.session_state.batch_ht_comments = {}
+        if 'batch_ht_custom_flags' not in st.session_state:
+            st.session_state.batch_ht_custom_flags = {}
+        
+        # Process students in pairs for 2-column layout
+        for i in range(0, len(students), 2):
+            col1, col2 = st.columns(2)
+            
+            # First student in the pair
+            with col1:
+                student = students[i]
                 student_name = student[1]
                 existing_comment = get_comment(student_name, class_name, term, session)
                 existing_ht = existing_comment['head_teacher_comment'] or "" if existing_comment else ""
@@ -713,68 +790,120 @@ def render_batch_add_ht_tab(students, class_name, term, session, is_secondary_cl
                 # Initialize in session state if not exists
                 if student_name not in st.session_state.batch_ht_comments:
                     st.session_state.batch_ht_comments[student_name] = existing_ht
+                if student_name not in st.session_state.batch_ht_custom_flags:
+                    st.session_state.batch_ht_custom_flags[student_name] = 1  # Default to custom
                 
                 with st.container(border=True):
                     st.markdown(f"#### {student_name}")
                     
-                    # Mode selection
-                    ht_mode_key = f"batch_ht_mode_{i+1}_{student_name}"
-                    ht_mode = st.radio(
-                        "Mode",
-                        ["Custom", "Template"],
-                        key=ht_mode_key,
-                        horizontal=True
-                    )
-                    # Track mode selection
-                    ActivityTracker.watch_value(ht_mode_key, ht_mode)
+                    # Show student average
+                    avg = get_student_average(student_name, class_name, term, session, user_id, role)
+                    if avg > 0:
+                        st.caption(f"Average: {avg:.2f}")
                     
                     # Template selection
-                    if ht_mode == "Template" and ht_templates:
-                        template_options = ["-- Select a template --"] + [t[1] for t in ht_templates]
-                        template_key = f"batch_ht_template_{i+1}_{student_name}"
+                    if ht_templates:
+                        template_options = ["-- Type custom comment --"] + [f"{t[1]} ({t[3]}-{t[4]})" for t in ht_templates]
+                        template_key = f"batch_ht_template_{i}_{student_name}"
                         selected_template = st.selectbox(
                             "Choose template",
                             template_options,
-                            key=template_key
+                            key=template_key,
+                            label_visibility="collapsed"
                         )
-                        # Track template selection
                         ActivityTracker.watch_value(template_key, selected_template)
                         
-                        if selected_template != "-- Select a template --":
-                            st.session_state.batch_ht_comments[student_name] = selected_template
-                    elif ht_mode == "Template" and not ht_templates:
+                        if selected_template != "-- Type custom comment --":
+                            # Extract comment text (everything before the range part)
+                            st.session_state.batch_ht_comments[student_name] = selected_template.rsplit(" (", 1)[0]
+                    else:
                         st.info("No templates available")
                     
                     # Text area with session state value
                     comment = st.text_area(
                         "Comment",
                         value=st.session_state.batch_ht_comments[student_name],
-                        height=100,
-                        key=f"batch_ht_comment_{i+1}_{student_name}",
+                        height=80,
+                        key=f"batch_ht_comment_{i}_{student_name}",
+                        label_visibility="collapsed",
                         placeholder="Type your comment here...",
-                        on_change=lambda sn=student_name, key=f"batch_ht_comment_{i+1}_{student_name}": 
+                        on_change=lambda sn=student_name, key=f"batch_ht_comment_{i}_{student_name}": 
                             st.session_state.batch_ht_comments.update({sn: st.session_state[key]})
                     )
+            
+            # Second student in the pair (if exists)
+            with col2:
+                if i + 1 < len(students):
+                    student = students[i + 1]
+                    student_name = student[1]
+                    existing_comment = get_comment(student_name, class_name, term, session)
+                    existing_ht = existing_comment['head_teacher_comment'] or "" if existing_comment else ""
+                    
+                    # Initialize in session state if not exists
+                    if student_name not in st.session_state.batch_ht_comments:
+                        st.session_state.batch_ht_comments[student_name] = existing_ht
+                    if student_name not in st.session_state.batch_ht_custom_flags:
+                        st.session_state.batch_ht_custom_flags[student_name] = 1  # Default to custom
+                    
+                    with st.container(border=True):
+                        st.markdown(f"#### {student_name}")
+                        
+                        # Show student average
+                        avg = get_student_average(student_name, class_name, term, session, user_id, role)
+                        if avg > 0:
+                            st.caption(f"Average: {avg:.2f}")
+                        
+                        # Template selection
+                        if ht_templates:
+                            template_options = ["-- Type custom comment --"] + [f"{t[1]} ({t[3]}-{t[4]})" for t in ht_templates]
+                            template_key = f"batch_ht_template_{i+1}_{student_name}"
+                            selected_template = st.selectbox(
+                                "Choose template",
+                                template_options,
+                                key=template_key,
+                                label_visibility="collapsed"
+                            )
+                            ActivityTracker.watch_value(template_key, selected_template)
+                            
+                            if selected_template != "-- Type custom comment --":
+                                # Extract comment text (everything before the range part)
+                                st.session_state.batch_ht_comments[student_name] = selected_template.rsplit(" (", 1)[0]
+                        else:
+                            st.info("No templates available")
+                        
+                        # Text area with session state value
+                        comment = st.text_area(
+                            "Comment",
+                            value=st.session_state.batch_ht_comments[student_name],
+                            height=80,
+                            key=f"batch_ht_comment_{i+1}_{student_name}",
+                            label_visibility="collapsed",
+                            placeholder="Type your comment here...",
+                            on_change=lambda sn=student_name, key=f"batch_ht_comment_{i+1}_{student_name}": 
+                                st.session_state.batch_ht_comments.update({sn: st.session_state[key]})
+                        )
 
-    st.markdown("---")
+        st.markdown("---")
 
-    if st.button(f"💾 Save All {ht_label}", type="primary", width="stretch", key="save_all_batch_ht"):
-        ActivityTracker.update()  # Track batch save
-        success_count = 0
-        for student_name, ht_comment in st.session_state.batch_ht_comments.items():
-            if ht_comment and ht_comment.strip():
-                existing = get_comment(student_name, class_name, term, session)
-                existing_ct = existing['class_teacher_comment'] if existing else ""
-                if create_comment(student_name, class_name, term, session, existing_ct, ht_comment):
-                    success_count += 1
-        
-        if success_count > 0:
-            st.success(f"✅ Successfully saved {ht_label} for {success_count} student(s).")
-            # Clear session state after successful save
-            st.session_state.batch_ht_comments = {}
-            st.rerun()
-        else:
-            st.warning(f"⚠️ No {ht_label} to save.")
+        if st.button(f"💾 Save All {ht_label}", type="primary", width="stretch", key="save_all_batch_ht"):
+            ActivityTracker.update()
+            success_count = 0
+            for student_name, ht_comment in st.session_state.batch_ht_comments.items():
+                if ht_comment and ht_comment.strip():
+                    existing = get_comment(student_name, class_name, term, session)
+                    existing_ct = existing['class_teacher_comment'] if existing else ""
+                    # All custom batch comments are marked as custom (1)
+                    if create_comment(student_name, class_name, term, session, existing_ct, ht_comment, 1):
+                        success_count += 1
+            
+            if success_count > 0:
+                st.success(f"✅ Successfully saved {ht_label} for {success_count} student(s).")
+                # Clear session state after successful save
+                st.session_state.batch_ht_comments = {}
+                st.session_state.batch_ht_custom_flags = {}
+                st.rerun()
+            else:
+                st.warning(f"⚠️ No {ht_label} to save.")
 
 
 def render_batch_delete_tab(students, class_name, term, session, is_secondary_class, is_primary_class):
@@ -800,7 +929,6 @@ def render_batch_delete_tab(students, class_name, term, session, is_secondary_cl
                     "I understand this action cannot be undone",
                     key="confirm_delete_comments"
                 )
-                # Track checkbox
                 ActivityTracker.watch_value("confirm_delete_comments_checkbox", confirm_delete_comments)
                 
                 if st.button(
@@ -810,7 +938,7 @@ def render_batch_delete_tab(students, class_name, term, session, is_secondary_cl
                     type="primary",
                     width="stretch"
                 ):
-                    ActivityTracker.update()  # Track delete all comments
+                    ActivityTracker.update()
                     deleted_count = 0
                     for student in students:
                         if delete_comment(student[1], class_name, term, session):
@@ -834,7 +962,6 @@ def render_batch_delete_tab(students, class_name, term, session, is_secondary_cl
                     "I understand this action cannot be undone",
                     key="confirm_delete_psycho"
                 )
-                # Track checkbox
                 ActivityTracker.watch_value("confirm_delete_psycho_checkbox", confirm_delete_psycho)
                 
                 if st.button(
@@ -844,7 +971,7 @@ def render_batch_delete_tab(students, class_name, term, session, is_secondary_cl
                     type="primary",
                     width="stretch"
                 ):
-                    ActivityTracker.update()  # Track delete all psychomotor
+                    ActivityTracker.update()
                     deleted_count = 0
                     for student in students:
                         if delete_psychomotor_rating(student[1], class_name, term, session):

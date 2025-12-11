@@ -98,7 +98,8 @@ def create_tables():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT NOT NULL UNIQUE,
             password TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            role TEXT DEFAULT 'class_teacher' CHECK(role IN ('superadmin', 'admin', 'class_teacher'))
         )
     """)
     
@@ -132,7 +133,7 @@ def create_tables():
         )
     """)
     
-    # Comments table
+    # Comments table - UPDATED to support custom override
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS comments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -142,6 +143,7 @@ def create_tables():
             session TEXT NOT NULL,
             class_teacher_comment TEXT,
             head_teacher_comment TEXT,
+            head_teacher_comment_custom INTEGER DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (class_name, term, session) 
@@ -200,16 +202,23 @@ def create_tables():
         )
     """)
     
-    # Comment templates table
+    # Comment templates table - UPDATED structure
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS comment_templates (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             comment_text TEXT NOT NULL,
             comment_type TEXT NOT NULL CHECK(comment_type IN ('class_teacher', 'head_teacher')),
+            average_lower REAL,
+            average_upper REAL,
             created_by INTEGER NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE,
-            UNIQUE(comment_text, comment_type)
+            UNIQUE(comment_text, comment_type),
+            CHECK (
+                (comment_type = 'class_teacher' AND average_lower IS NULL AND average_upper IS NULL) OR
+                (comment_type = 'head_teacher' AND average_lower IS NOT NULL AND average_upper IS NOT NULL)
+            )
         )
     """)
     
@@ -248,7 +257,8 @@ def create_performance_indexes():
             "CREATE INDEX IF NOT EXISTS idx_scores_class_subject_term_session ON scores(class_name, subject_name, term, session)",
             "CREATE INDEX IF NOT EXISTS idx_scores_student_class_term_session ON scores(student_name, class_name, term, session)",
             "CREATE INDEX IF NOT EXISTS idx_teacher_assignments_user ON teacher_assignments(user_id)",
-            "CREATE INDEX IF NOT EXISTS idx_scores_total_score ON scores(total_score DESC)"
+            "CREATE INDEX IF NOT EXISTS idx_scores_total_score ON scores(total_score DESC)",
+            "CREATE INDEX IF NOT EXISTS idx_comment_templates_type_range ON comment_templates(comment_type, average_lower, average_upper)"
         ]
         
         for index_sql in indexes:

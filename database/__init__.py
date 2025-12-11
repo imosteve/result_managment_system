@@ -59,6 +59,7 @@ from .scores import (
     get_student_grand_totals,
     clear_all_scores,
     get_grade_distribution,
+    get_student_average,
 )
 
 from .comments import (
@@ -85,6 +86,8 @@ from .comment_templates import (
     get_all_comment_templates,
     delete_comment_template,
     update_comment_template,
+    get_head_teacher_comment_by_average, 
+    check_range_overlap,
 )
 
 from .next_term_data import (
@@ -164,6 +167,7 @@ __all__ = [
     'get_student_grand_totals',
     'clear_all_scores',
     'get_grade_distribution',
+    'get_student_average',
     
     # Comments
     'create_comment',
@@ -186,6 +190,8 @@ __all__ = [
     'get_all_comment_templates',
     'delete_comment_template',
     'update_comment_template',
+    'get_head_teacher_comment_by_average',
+    'check_range_overlap',
     
     # Next Term Info
     'create_or_update_next_term_info',

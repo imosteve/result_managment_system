@@ -51,6 +51,8 @@ def calculate_next_term(current_term, current_session):
 
 def generate_report_card(student_name, class_name, term, session, is_secondary_class, is_primary_class):
     """Generate PDF report card for a student"""
+    from database import get_head_teacher_comment_by_average, get_student_average
+    
     user_id = st.session_state.user_id
     role = st.session_state.role
 
@@ -106,10 +108,27 @@ def generate_report_card(student_name, class_name, term, session, is_secondary_c
 
     current_date = datetime.now().strftime("%d %b %Y")
     
-    # Fetch dynamic comments
+    # Fetch dynamic comments - UPDATED TO HANDLE AUTO COMMENTS
     comment = get_comment(student_name, class_name, term, session)
-    class_teacher_comment = comment['class_teacher_comment'] if comment and comment['class_teacher_comment'] else ""
-    head_teacher_comment = comment['head_teacher_comment'] if comment and comment['head_teacher_comment'] else ""
+    class_teacher_comment = ""
+    head_teacher_comment = ""
+    
+    if comment:
+        class_teacher_comment = comment['class_teacher_comment'] if comment['class_teacher_comment'] else ""
+        
+        # Check if head teacher comment is custom or should be auto-generated
+        is_ht_custom = comment.get('head_teacher_comment_custom', 0) == 1
+        
+        if is_ht_custom:
+            # Use the stored custom comment
+            head_teacher_comment = comment['head_teacher_comment'] if comment['head_teacher_comment'] else ""
+        else:
+            # Auto-generate based on student average
+            if avg > 0:
+                auto_comment = get_head_teacher_comment_by_average(avg)
+                head_teacher_comment = auto_comment if auto_comment else ""
+            else:
+                head_teacher_comment = ""
 
     # Fetch psychomotor ratings
     psychomotor = get_psychomotor_rating(student_name, class_name, term, session)
@@ -207,7 +226,7 @@ def generate_report_card(student_name, class_name, term, session, is_secondary_c
             @page {
                 size: A4;
                 margin-top: 10mm;
-                margin-bottom: 10mm;
+                margin-bottom: -8mm;
                 margin-left: 15mm;
                 margin-right: 15mm;
             }

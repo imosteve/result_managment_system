@@ -448,3 +448,32 @@ def get_grade_distribution(student_name, class_name, term, session, user_id=None
             parts.append(f"{count}{grade}")
     
     return ", ".join(parts) if parts else ""
+
+
+def get_student_average(student_name, class_name, term, session, user_id=None, role=None):
+    """
+    Get the average score for a specific student
+    
+    Args:
+        student_name: Student name
+        class_name: Class name
+        term: Term
+        session: Session
+        user_id: User ID (optional, for filtering)
+        role: User role (optional, for filtering)
+    
+    Returns:
+        float: Student's average score, 0 if no scores found
+    """
+    scores = get_student_scores(student_name, class_name, term, session, user_id, role)
+    
+    if not scores:
+        return 0
+    
+    # Filter out None values
+    valid_totals = [score[5] for score in scores if score[5] is not None]
+    
+    if not valid_totals:
+        return 0
+    
+    return sum(valid_totals) / len(valid_totals)

@@ -39,7 +39,7 @@ body {
 .signature_ht,
 .stamp-date {
     position: fixed;
-    top: 90%;
+    top: 88%;
     left: 80%;
     z-index: 90;
     opacity: 0.8; /* Adjust transparency */
@@ -48,12 +48,12 @@ body {
 }
 
 .stamp-sss {
-    top: 90.5%;
+    top: 88.5%;
     left: 79%;
 }
 
 .stamp-date {
-    top: 90.9%;
+    top: 88.9%;
     left: 82%;
     font-size: 32px;
     font-weight: bold;
@@ -66,7 +66,7 @@ body {
 }
 
 .signature_ht {
-    top: 88%;
+    top: 86%;
     opacity: 1.5; 
     transform: translate(-50%, -50%) rotate(345deg) scale(0.2);
 }
@@ -214,7 +214,7 @@ body {
 
 .subject-column {
     text-align: left !important;
-    width: 35%;
+    width: 40%;
 }
 
 .total-row {
@@ -365,7 +365,7 @@ body {
     width: 100%;
     text-align: left;
     padding: 5px 5px;
-    font-size: 14px;
+    font-size: 12px;
 }
 
 
@@ -409,4 +409,63 @@ body {
         border: none;
         max-width: none;
     }
+}
+
+/* Christmas Stamp - Positioned like Principal's stamp */
+.christmas-stamp {
+    position: fixed;
+    top: 90%;
+    left: 50%;
+    z-index: 90;
+    opacity: 0.80;
+    pointer-events: none;
+    transform: translate(-50%, -50%) rotate(0deg) scale(0.4);
+}
+
+.christmas-stamp-border {
+    background: linear-gradient(135deg, #c41e3a 0%, #165b33 100%);
+    border: 4px double #FFD700;
+    border-radius: 15px;
+    padding: 15px 20px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    text-align: center;
+    color: white;
+    font-family: 'Arial', sans-serif;
+    min-width: 180px;
+}
+
+.christmas-stars {
+    font-size: 20px;
+    margin-bottom: 5px;
+    letter-spacing: 8px;
+}
+
+.christmas-main-text {
+    font-size: 20px;
+    font-weight: 900;
+    letter-spacing: 2px;
+    margin-bottom: 3px;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.christmas-sub-text {
+    font-size: 14px;
+    font-weight: bold;
+    margin-bottom: 5px;
+    letter-spacing: 1px;
+}
+
+.christmas-icons {
+    font-size: 18px;
+    margin: 5px 0;
+    letter-spacing: 10px;
+}
+
+.christmas-year {
+    font-size: 12px;
+    font-weight: bold;
+    margin-top: 5px;
+    letter-spacing: 2px;
+    border-top: 2px solid rgba(255, 255, 255, 0.5);
+    padding-top: 5px;
 }

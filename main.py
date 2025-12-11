@@ -198,7 +198,7 @@ def check_teacher_assignment(role: str) -> bool:
     
     return True
 
-def render_authenticated_app(app: ApplicationManager):
+def render_authenticated_app(app: ApplicationManager, cookies):
     """Render the main authenticated application"""
     try:
         # Security checks
@@ -240,6 +240,7 @@ def render_authenticated_app(app: ApplicationManager):
         
         # Update user activity timestamp
         st.session_state.last_activity = datetime.now()
+        # cookies["last_activity"] = st.session_state.last_activity.isoformat()
         
     except Exception as e:
         logger.error(f"Error in authenticated app: {str(e)}\n{traceback.format_exc()}")
@@ -280,7 +281,7 @@ def main():
         # If we reach this point, user is authenticated
         # Check if user is actually authenticated (login function should handle this)
         if st.session_state.get("authenticated"):
-            render_authenticated_app(app)
+            render_authenticated_app(app, cookies)
         else:
             # This should not happen if login function works correctly
             logger.warning("User reached main app without authentication")

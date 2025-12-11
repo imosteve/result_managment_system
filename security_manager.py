@@ -54,11 +54,13 @@ class SecurityManager:
             time_diff = datetime.now() - st.session_state.last_activity
             # Longer timeout for mobile (2 hours vs 1 hour)
             timeout_seconds = 7200 if is_mobile_device() else SESSION_TIMEOUT
-            print(f"time_diff = {time_diff}")
-            print(f"Last activity time: {st.session_state.last_activity}")
-            print(f"Date time now: {datetime.now()}")
-            print(f"SESSION_TIMEOUT: {SESSION_TIMEOUT}")
-            print("Expired:", time_diff.total_seconds() > timeout_seconds)
+            # print("="*20)
+            # print(f"time_diff = {time_diff}")
+            # print(f"Last activity time: {st.session_state.last_activity}")
+            # print(f"Date time now: {datetime.now()}")
+            # print(f"SESSION_TIMEOUT: {SESSION_TIMEOUT}")
+            # print("Expired:", time_diff.total_seconds() > timeout_seconds)
+            # print("="*20)
 
             if time_diff.total_seconds() > timeout_seconds:
                 logger.warning(f"Session timeout for user {st.session_state.get('username')}")
