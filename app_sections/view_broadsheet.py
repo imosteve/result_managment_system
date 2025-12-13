@@ -274,7 +274,7 @@ def generate_broadsheet():
             if st.button("Export All Classes", use_container_width=True):
                 try:
                     pdf_buffer = generate_all_classes_broadsheet_pdf(
-                        classes, user_id, role
+                        classes, user_id, role, sort_by
                     )
 
                     os.makedirs("data/broadsheet", exist_ok=True)

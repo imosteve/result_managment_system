@@ -298,7 +298,7 @@ def generate_broadsheet_with_scores_pdf(class_name, term, session, broadsheet_da
     return pdf_buffer, file_path
 
 
-def build_class_broadsheet_data(class_name, term, session, user_id, role):
+def build_class_broadsheet_data(class_name, term, session, user_id, role, sort_by="Position"):
     """
     Build broadsheet data for a single class
     
@@ -308,6 +308,7 @@ def build_class_broadsheet_data(class_name, term, session, user_id, role):
         session: Session
         user_id: User ID
         role: User role
+        sort_by: Sorting option ("Position", "Position/Grade", "Name (A-Z)", "Name (Z-A)")
     
     Returns:
         tuple: (broadsheet_data, subjects, class_average, is_sss2_or_sss3) or None if no data
@@ -366,10 +367,24 @@ def build_class_broadsheet_data(class_name, term, session, user_id, role):
         if is_sss2_or_sss3:
             grade_distribution = get_grade_distribution(student_name, class_name, term, session, user_id, role)
             row["Grade"] = grade_distribution if grade_distribution else "-"
+            row["_position"] = position_data['position'] if position_data else 999
         else:
             row["Position"] = format_ordinal(position_data['position']) if position_data else "-"
+            row["_position"] = position_data['position'] if position_data else 999
         
         broadsheet_data.append(row)
+    
+    # Apply sorting based on sort_by parameter
+    if sort_by == "Name (A-Z)":
+        broadsheet_data.sort(key=lambda x: x["Student"].lower())
+    elif sort_by == "Name (Z-A)":
+        broadsheet_data.sort(key=lambda x: x["Student"].lower(), reverse=True)
+    else:  # Position or Position/Grade (default)
+        broadsheet_data.sort(key=lambda x: x.get("_position", 999))
+    
+    # Remove hidden _position field after sorting
+    for row in broadsheet_data:
+        row.pop("_position", None)
     
     # Calculate class average
     numeric_averages = [float(row["Average"]) for row in broadsheet_data if row["Average"] != "-"]
@@ -378,7 +393,7 @@ def build_class_broadsheet_data(class_name, term, session, user_id, role):
     return broadsheet_data, subjects, class_average, is_sss2_or_sss3
 
 
-def generate_all_classes_broadsheet_pdf(classes, user_id, role):
+def generate_all_classes_broadsheet_pdf(classes, user_id, role, sort_by="Position"):
     """
     Generate broadsheet PDF for all classes in a single document
     
@@ -386,6 +401,7 @@ def generate_all_classes_broadsheet_pdf(classes, user_id, role):
         classes: List of class dictionaries
         user_id: User ID
         role: User role
+        sort_by: Sorting option to apply to each class
     
     Returns:
         BytesIO: PDF buffer with all broadsheets
@@ -397,8 +413,8 @@ def generate_all_classes_broadsheet_pdf(classes, user_id, role):
         term = class_data['term']
         session = class_data['session']
         
-        # Build data for this class
-        result = build_class_broadsheet_data(class_name, term, session, user_id, role)
+        # Build data for this class with sorting
+        result = build_class_broadsheet_data(class_name, term, session, user_id, role, sort_by)
         
         if result is None:
             continue
