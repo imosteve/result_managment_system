@@ -11,8 +11,8 @@ from database import (
     batch_assign_subject_teacher, get_classes_summary
 )
 from .system_dashboard import get_activity_statistics
-from utils import inject_login_css, render_page_header, inject_metric_css
-from util.paginators import streamlit_paginator
+from main_utils import inject_login_css, render_page_header, inject_metric_css
+from utils.paginators import streamlit_paginator
 from auth.activity_tracker import ActivityTracker
 from security_manager import SecurityManager
 

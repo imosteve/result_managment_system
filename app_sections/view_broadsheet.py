@@ -4,11 +4,18 @@ import streamlit as st
 import pandas as pd
 import re
 from database import get_all_classes, get_students_by_class, get_subjects_by_class, get_student_scores, get_student_grand_totals, get_grade_distribution
-from utils import (
+from main_utils import (
     assign_grade, create_metric_5col_broadsheet, 
     format_ordinal, render_page_header, inject_login_css, 
     render_persistent_class_selector
 )
+from pdf_generators.broadsheet_pdf import (
+    generate_blank_broadsheet_pdf,
+    generate_broadsheet_with_scores_pdf,
+    generate_all_classes_broadsheet_pdf
+)
+from utils.broadsheet_import import show_import_interface
+import io
 
 def generate_broadsheet():
     if not st.session_state.get("authenticated", False):
@@ -195,7 +202,82 @@ def generate_broadsheet():
         height=35 * len(broadsheet_data) + 38
     )
     
-    # Download button for CSV
+    # Export buttons section
+    st.markdown("---")
+    st.markdown("### 📥 Export Options")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    # col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        # Export blank broadsheet template
+        if st.button("Export Blank Template", use_container_width=True):
+            try:
+                pdf_buffer = generate_blank_broadsheet_pdf(
+                    class_name, term, session, students, subjects, is_sss2_or_sss3
+                )
+                st.download_button(
+                    label="⬇️ Download Blank Template",
+                    data=pdf_buffer,
+                    file_name=f"{class_name}_{term}_{session}_Blank_Broadsheet.pdf",
+                    mime="application/pdf",
+                    use_container_width=True
+                )
+            except Exception as e:
+                st.error(f"Error generating blank template: {str(e)}")
+    
+    with col2:
+        # Export broadsheet with scores (single class)
+        if st.button("Export with Scores", use_container_width=True):
+            try:
+                pdf_buffer = generate_broadsheet_with_scores_pdf(
+                    class_name, term, session, broadsheet_data, subjects, 
+                    class_average, is_sss2_or_sss3
+                )
+                st.download_button(
+                    label="⬇️ Download Broadsheet PDF",
+                    data=pdf_buffer,
+                    file_name=f"{class_name}_{term}_{session}_Broadsheet.pdf",
+                    mime="application/pdf",
+                    use_container_width=True
+                )
+            except Exception as e:
+                st.error(f"Error generating broadsheet PDF: {str(e)}")
+    
+    with col3:
+        # Export all classes broadsheet
+        if role in ["superadmin", "admin"]:
+            if st.button("Export All Classes", use_container_width=True):
+                try:
+                    pdf_buffer = generate_all_classes_broadsheet_pdf(
+                        classes, user_id, role
+                    )
+                    st.download_button(
+                        label="⬇️ Download All Classes PDF",
+                        data=pdf_buffer,
+                        file_name=f"All_Classes_{term}_{session}_Broadsheet.pdf",
+                        mime="application/pdf",
+                        use_container_width=True
+                    )
+                except Exception as e:
+                    st.error(f"Error generating all classes PDF: {str(e)}")
+    
+    with col4:
+        # Import broadsheet
+        if role in ["superadmin"]:
+            if st.button("📤 Import Broadsheet", use_container_width=True):
+                st.session_state.show_import_dialog = True
+    
+    # Show import interface if button clicked
+    if st.session_state.get('show_import_dialog', False):
+        st.markdown("---")
+        show_import_interface(class_name, term, session, user_id, role)
+        
+        if st.button("← Back to Broadsheet", use_container_width=False):
+            st.session_state.show_import_dialog = False
+            st.rerun()
+    
+    # Download CSV button
     st.markdown("---")
     col1, col2, col3 = st.columns([1, 1, 1])
     with col2:
@@ -206,5 +288,5 @@ def generate_broadsheet():
             data=csv_data,
             file_name=csv_filename,
             mime="text/csv",
-            width='stretch'
+            use_container_width=True
         )

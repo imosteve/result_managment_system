@@ -9,7 +9,7 @@ from database import (
     update_comment_template,
     check_range_overlap
 )
-from utils import render_page_header, inject_login_css, inject_metric_css
+from main_utils import render_page_header, inject_login_css, inject_metric_css
 
 
 def manage_comment_templates():

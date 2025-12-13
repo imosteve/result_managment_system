@@ -2,7 +2,7 @@
 
 import streamlit as st
 from database import get_all_classes, create_class, delete_class, update_class, clear_all_classes
-from utils import inject_login_css, render_page_header
+from main_utils import inject_login_css, render_page_header
 from auth.activity_tracker import ActivityTracker
 
 def create_class_section():

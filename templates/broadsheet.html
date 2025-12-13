@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Broadsheet - {{ class_name }}</title>
+    <link rel="stylesheet" href="broadsheet_styles.css">
+</head>
+<body>
+    <div class="broadsheet-container">
+        <!-- Watermark -->
+        <div class="watermark"></div>
+        
+        <!-- Header Section -->
+        <div class="header">
+            <div class="logo-container">
+                <img src="static/logos/SU_logo.png" class="logo" alt="School Logo">
+            </div>
+            <div class="header-text">
+                <div class="school-name">{{ school_name }}</div>
+                <div class="school-address">{{ school_address }}</div>
+                <div class="broadsheet-title">BROADSHEET FOR {{ class_name }} - {{ term }}, {{ session }} SESSION</div>
+            </div>
+        </div>
+        
+        <!-- Summary Information -->
+        <div class="summary-section">
+            <div class="summary-item">
+                <span class="summary-label">Class:</span>
+                <span class="summary-value">{{ class_name }}</span>
+            </div>
+            <div class="summary-item">
+                <span class="summary-label">Term:</span>
+                <span class="summary-value">{{ term }}</span>
+            </div>
+            <div class="summary-item">
+                <span class="summary-label">Session:</span>
+                <span class="summary-value">{{ session }}</span>
+            </div>
+            <div class="summary-item">
+                <span class="summary-label">Number of Students:</span>
+                <span class="summary-value">{{ num_students }}</span>
+            </div>
+            <div class="summary-item">
+                <span class="summary-label">Number of Subjects:</span>
+                <span class="summary-value">{{ num_subjects }}</span>
+            </div>
+            {% if class_average %}
+            <div class="summary-item">
+                <span class="summary-label">Class Average:</span>
+                <span class="summary-value">{{ class_average }}</span>
+            </div>
+            {% endif %}
+        </div>
+        
+        <!-- Broadsheet Table -->
+        <div class="table-container">
+            <table class="broadsheet-table">
+                <thead>
+                    <tr>
+                        <th rowspan="2" class="sn-col">S/N</th>
+                        <th rowspan="2" class="student-col">STUDENT NAME</th>
+                        {% for subject in subjects %}
+                        <th colspan="3" class="subject-header">{{ subject }}</th>
+                        {% endfor %}
+                        <th rowspan="2" class="total-col">GRAND<br>TOTAL</th>
+                        <th rowspan="2" class="avg-col">AVERAGE</th>
+                        {% if is_sss2_or_sss3 %}
+                        <th rowspan="2" class="grade-col">GRADES</th>
+                        {% else %}
+                        <th rowspan="2" class="pos-col">POSITION</th>
+                        {% endif %}
+                    </tr>
+                    <tr>
+                        {% for subject in subjects %}
+                        <th class="score-header">Test<br>(30%)</th>
+                        <th class="score-header">Exam<br>(70%)</th>
+                        <th class="score-header">Total<br>(100%)</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for student in students_data %}
+                    <tr class="{{ 'odd-row' if loop.index % 2 == 1 else 'even-row' }}">
+                        <td class="sn-cell">{{ loop.index }}</td>
+                        <td class="student-cell">{{ student.name }}</td>
+                        {% for subject in subjects %}
+                        <td class="score-cell">{{ student.scores.get(subject, {}).get('test', '') }}</td>
+                        <td class="score-cell">{{ student.scores.get(subject, {}).get('exam', '') }}</td>
+                        <td class="score-cell total">{{ student.scores.get(subject, {}).get('total', '') }}</td>
+                        {% endfor %}
+                        <td class="total-cell">{{ student.grand_total }}</td>
+                        <td class="avg-cell">{{ student.average }}</td>
+                        {% if is_sss2_or_sss3 %}
+                        <td class="grade-cell">{{ student.grade }}</td>
+                        {% else %}
+                        <td class="pos-cell">{{ student.position }}</td>
+                        {% endif %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Footer -->
+        <div class="footer">
+            <div class="footer-left">
+                <strong>Prepared by:</strong> ___________________________
+            </div>
+            <div class="footer-center">
+                <strong>Date:</strong> ___________________________
+            </div>
+            <div class="footer-right">
+                <strong>Signature:</strong> ___________________________
+            </div>
+        </div>
+    </div>
+</body>
+</html>

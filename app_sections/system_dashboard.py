@@ -14,9 +14,9 @@ from database import (
     get_classes_summary, database_health_check, backup_database,
     get_connection, create_performance_indexes, get_user_role
 )
-from utils import inject_login_css, render_page_header, format_ordinal, inject_metric_css
+from main_utils import inject_login_css, render_page_header, format_ordinal, inject_metric_css
 from config import DB_CONFIG, APP_CONFIG
-from util.paginators import streamlit_paginator
+from utils.paginators import streamlit_paginator
 
 logger = logging.getLogger(__name__)
 

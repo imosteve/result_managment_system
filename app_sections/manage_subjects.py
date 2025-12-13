@@ -8,7 +8,7 @@ from database import (
     get_students_by_class, get_student_selected_subjects, save_student_subject_selections, 
     get_all_student_subject_selections
 )
-from utils import clean_input, create_metric_4col, inject_login_css, render_page_header, render_persistent_class_selector
+from main_utils import clean_input, create_metric_4col, inject_login_css, render_page_header, render_persistent_class_selector
 from auth.activity_tracker import ActivityTracker
 
 def add_subjects():

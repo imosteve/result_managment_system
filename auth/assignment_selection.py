@@ -9,7 +9,7 @@ from database import get_user_assignments
 from .config import MESSAGES, CSS_CLASSES
 from .session_manager import SessionManager
 from .logout import logout
-from utils import inject_login_css
+from main_utils import inject_login_css
 
 logger = logging.getLogger(__name__)
 

@@ -13,7 +13,7 @@ from email import encoders
 from jinja2 import Environment, FileSystemLoader
 from weasyprint import HTML, CSS
 from PyPDF2 import PdfMerger
-from utils import (
+from main_utils import (
     assign_grade, create_metric_5col_report, format_ordinal, 
     render_page_header, inject_login_css, render_persistent_class_selector
 )

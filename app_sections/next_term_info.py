@@ -11,7 +11,7 @@ from database import (
     delete_next_term_info,
     get_all_next_term_info
 )
-from utils import render_page_header, inject_login_css, render_persistent_next_term_selector
+from main_utils import render_page_header, inject_login_css, render_persistent_next_term_selector
 
 
 def calculate_next_term(current_term, current_session):

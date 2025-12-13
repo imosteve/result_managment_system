@@ -5,7 +5,7 @@
 import sqlite3
 import logging
 from .connection import get_connection
-from utils import assign_grade
+from main_utils import assign_grade
 
 logger = logging.getLogger(__name__)
 

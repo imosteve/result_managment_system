@@ -9,7 +9,7 @@ from database import (
     delete_psychomotor_rating, get_all_comment_templates, get_student_average,
     get_head_teacher_comment_by_average
 )
-from utils import render_page_header, inject_login_css, render_persistent_class_selector
+from main_utils import render_page_header, inject_login_css, render_persistent_class_selector
 from auth.activity_tracker import ActivityTracker
 
 # Psychomotor categories with their display names

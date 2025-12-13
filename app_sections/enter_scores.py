@@ -4,7 +4,7 @@ import streamlit as st
 import pandas as pd
 import logging
 from typing import Optional, List, Dict, Any
-from utils import (
+from main_utils import (
     assign_grade, inject_login_css, format_ordinal, render_page_header
 )
 from database import (
@@ -151,7 +151,7 @@ def _get_accessible_classes(user_id: int, role: str) -> List[Dict[str, Any]]:
 
 def _render_class_selection(classes: List[Dict[str, Any]], role: str) -> Optional[Dict[str, Any]]:
     """Render class selection interface with persistence"""
-    from utils import render_persistent_class_selector
+    from main_utils import render_persistent_class_selector
     # Get selected class details
     try:
         selected_class = render_persistent_class_selector(

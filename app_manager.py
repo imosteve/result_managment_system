@@ -7,7 +7,7 @@ from streamlit_cookies_manager import EncryptedCookieManager
 
 from config import APP_CONFIG, COOKIE_PASSWORD
 from database import create_tables, get_all_classes
-from utils import inject_login_css, render_page_header
+from main_utils import inject_login_css, render_page_header
 
 logger = logging.getLogger(__name__)
 

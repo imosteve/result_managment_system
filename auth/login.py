@@ -4,7 +4,7 @@
 import streamlit as st
 import time
 import logging
-from utils import inject_login_css
+from main_utils import inject_login_css
 from .config import MESSAGES, CSS_CLASSES
 from .validators import validate_credentials, validate_session_cookies, validate_user_input
 from .session_manager import SessionManager
