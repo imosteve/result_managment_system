@@ -131,10 +131,9 @@ def create_metric_5col_broadsheet(subjects, students, class_average, broadsheet_
     
     # Display subjects without scores if any
     if subjects_without_scores:
-        st.markdown("**📋 Subjects Without Scores:**")
+        st.markdown("**Subjects Without Scores:**")
         subjects_text = ", ".join(subjects_without_scores)
         st.markdown(f"<div style='background-color: #fff3cd; padding: 10px; border-radius: 5px; border-left: 4px solid #ffc107;'>{subjects_text}</div>", unsafe_allow_html=True)
-        st.markdown("---")
 
 
 def create_metric_5col_report(gender, no_in_class, class_average, student_average, position, grade_distribution, is_secondary_class, is_primary_class, is_sss2_or_sss3):

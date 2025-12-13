@@ -3,6 +3,7 @@
 import streamlit as st
 import pandas as pd
 import re
+import os
 from database import get_all_classes, get_students_by_class, get_subjects_by_class, get_student_scores, get_student_grand_totals, get_grade_distribution
 from main_utils import (
     assign_grade, create_metric_5col_broadsheet, 
@@ -138,14 +139,9 @@ def generate_broadsheet():
         
         broadsheet_data.append(row)
 
-    # Sort by position
+    # Default sort by position
     broadsheet_data.sort(key=lambda x: x.get("_position", 999))
     
-    # Add S/N after sorting and remove hidden _position field
-    for idx, row in enumerate(broadsheet_data, 1):
-        row["S/N"] = str(idx)
-        row.pop("_position", None)
-
     # Calculate class average
     numeric_averages = []
     for row in broadsheet_data:
@@ -170,15 +166,44 @@ def generate_broadsheet():
     # Create columns with expanded metrics
     create_metric_5col_broadsheet(subjects, students, class_average, broadsheet_data, class_name, term, session, user_id, "admin")
 
+    # Add sorting filter
+    st.markdown("---")
+    col_space, col_filter_label, col_filter = st.columns([4, 0.5, 1], vertical_alignment="center")
+    
+    with col_filter_label:
+        st.markdown("**Sort by:**")
+    with col_filter:
+        if is_sss2_or_sss3:
+            sort_options = ["Position/Grade", "Name (A-Z)", "Name (Z-A)"]
+        else:
+            sort_options = ["Position", "Name (A-Z)", "Name (Z-A)"]
+        
+        sort_by = st.selectbox("Sort by:", sort_options, key="sort_broadsheet", label_visibility="collapsed")
+    
+    # Apply sorting based on selection
+    sorted_data = broadsheet_data.copy()
+    
+    if sort_by == "Name (A-Z)":
+        sorted_data.sort(key=lambda x: x["Student"].lower())
+    elif sort_by == "Name (Z-A)":
+        sorted_data.sort(key=lambda x: x["Student"].lower(), reverse=True)
+    else:  # Position or Position/Grade
+        sorted_data.sort(key=lambda x: x.get("_position", 999))
+    
+    # Add S/N after sorting and remove hidden _position field
+    for idx, row in enumerate(sorted_data, 1):
+        row["S/N"] = str(idx)
+        row.pop("_position", None)
+
     # Create DataFrame with proper column order
     if is_sss2_or_sss3:
         # For SSS2/SSS3: S/N, Student, subjects..., Grand Total, Average, Grade
-        column_order = ["S/N", "Student"] + [col for col in broadsheet_data[0].keys() if col not in ["S/N", "Student", "Grand Total", "Average", "Grade"]] + ["Grand Total", "Average", "Grade"]
+        column_order = ["S/N", "Student"] + [col for col in sorted_data[0].keys() if col not in ["S/N", "Student", "Grand Total", "Average", "Grade"]] + ["Grand Total", "Average", "Grade"]
     else:
         # For other classes: S/N, Student, subjects..., Grand Total, Average, Position
-        column_order = ["S/N", "Student"] + [col for col in broadsheet_data[0].keys() if col not in ["S/N", "Student", "Grand Total", "Average", "Position"]] + ["Grand Total", "Average", "Position"]
+        column_order = ["S/N", "Student"] + [col for col in sorted_data[0].keys() if col not in ["S/N", "Student", "Grand Total", "Average", "Position"]] + ["Grand Total", "Average", "Position"]
     
-    df = pd.DataFrame(broadsheet_data)
+    df = pd.DataFrame(sorted_data)
     df = df[column_order]
     
     # Display DataFrame
@@ -199,7 +224,7 @@ def generate_broadsheet():
         column_config=column_config,
         hide_index=True,
         width='stretch',
-        height=35 * len(broadsheet_data) + 38
+        height=35 * len(sorted_data) + 38
     )
     
     # Export buttons section
@@ -207,7 +232,6 @@ def generate_broadsheet():
     st.markdown("### 📥 Export Options")
     
     col1, col2, col3, col4 = st.columns(4)
-    # col1, col2, col3 = st.columns(3)
     
     with col1:
         # Export blank broadsheet template
@@ -227,11 +251,11 @@ def generate_broadsheet():
                 st.error(f"Error generating blank template: {str(e)}")
     
     with col2:
-        # Export broadsheet with scores (single class)
+        # Export broadsheet with scores (automatically saves to folder)
         if st.button("Export with Scores", use_container_width=True):
             try:
-                pdf_buffer = generate_broadsheet_with_scores_pdf(
-                    class_name, term, session, broadsheet_data, subjects, 
+                pdf_buffer, file_path = generate_broadsheet_with_scores_pdf(
+                    class_name, term, session, sorted_data, subjects, 
                     class_average, is_sss2_or_sss3
                 )
                 st.download_button(
@@ -252,10 +276,20 @@ def generate_broadsheet():
                     pdf_buffer = generate_all_classes_broadsheet_pdf(
                         classes, user_id, role
                     )
+
+                    os.makedirs("data/broadsheet", exist_ok=True)
+                    safe_term = term.replace(' ', '_')
+                    safe_session = session.replace('/', '_')
+                    file_name=f"All_Classes_{safe_term}_{safe_session}_Broadsheet.pdf"
+                    file_path = os.path.join("data/broadsheet", file_name)
+                    
+                    with open(file_path, 'wb') as f:
+                        f.write(pdf_buffer.getvalue())
+                        
                     st.download_button(
                         label="⬇️ Download All Classes PDF",
                         data=pdf_buffer,
-                        file_name=f"All_Classes_{term}_{session}_Broadsheet.pdf",
+                        file_name=file_name,
                         mime="application/pdf",
                         use_container_width=True
                     )

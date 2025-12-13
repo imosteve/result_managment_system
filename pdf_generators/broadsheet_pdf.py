@@ -1,6 +1,8 @@
+# pdf_generators/broadsheet_pdf.py
 """Broadsheet PDF generation module - Clean and modular"""
 
 import io
+import os
 import re
 from pathlib import Path
 from weasyprint import HTML, CSS
@@ -220,7 +222,7 @@ def generate_blank_broadsheet_pdf(class_name, term, session, students, subjects,
 def generate_broadsheet_with_scores_pdf(class_name, term, session, broadsheet_data, 
                                         subjects, class_average, is_sss2_or_sss3):
     """
-    Generate broadsheet with scores PDF for a single class
+    Generate broadsheet with scores PDF for a single class and save to folder
     
     Args:
         class_name: Class name
@@ -232,7 +234,7 @@ def generate_broadsheet_with_scores_pdf(class_name, term, session, broadsheet_da
         is_sss2_or_sss3: Boolean indicating if class is SSS2 or SSS3
     
     Returns:
-        BytesIO: PDF buffer
+        tuple: (BytesIO PDF buffer, str file_path) - file_path is None if save failed
     """
     # Prepare data
     subject_names = [subject[1] for subject in subjects]
@@ -275,7 +277,25 @@ def generate_broadsheet_with_scores_pdf(class_name, term, session, broadsheet_da
     )
     pdf_buffer.seek(0)
     
-    return pdf_buffer
+    # Save to folder automatically (like report cards)
+    file_path = None
+    try:
+        os.makedirs("data/broadsheet", exist_ok=True)
+        safe_class = class_name.replace(' ', '_')
+        safe_term = term.replace(' ', '_')
+        safe_session = session.replace('/', '_')
+        file_path = os.path.join("data/broadsheet", f"{safe_class}_{safe_term}_{safe_session}_Broadsheet.pdf")
+        
+        with open(file_path, 'wb') as f:
+            f.write(pdf_buffer.getvalue())
+        
+        # Reset buffer position for download
+        pdf_buffer.seek(0)
+    except Exception as e:
+        print(f"Error saving broadsheet to folder: {e}")
+        file_path = None
+    
+    return pdf_buffer, file_path
 
 
 def build_class_broadsheet_data(class_name, term, session, user_id, role):
@@ -385,8 +405,8 @@ def generate_all_classes_broadsheet_pdf(classes, user_id, role):
         
         broadsheet_data, subjects, class_average, is_sss2_or_sss3 = result
         
-        # Generate PDF for this class
-        class_pdf = generate_broadsheet_with_scores_pdf(
+        # Generate PDF for this class (returns buffer and file_path)
+        class_pdf, _ = generate_broadsheet_with_scores_pdf(
             class_name, term, session, broadsheet_data, subjects, 
             class_average, is_sss2_or_sss3
         )
