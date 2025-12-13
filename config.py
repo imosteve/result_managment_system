@@ -8,11 +8,12 @@ load_dotenv()
 # Application Configuration
 APP_CONFIG = {
     "school_name": "scripture union international schools".upper(),
+    "school_address": "64 IKOT ABASI STREET, UYO, AKWA IBOM STATE".upper(),
     "app_name": "Result Management System".upper(),
     "version": "1.0.0",
     "page_title": "Student Result System",
     "cookie_prefix": "student_results_app",
-    "session_timeout": 7200,  # 1 hour in seconds
+    "session_timeout": 7200,  # 2 hour in seconds
     "max_login_attempts": 5,
     "lockout_duration": 300,  # 5 minutes in seconds
 }

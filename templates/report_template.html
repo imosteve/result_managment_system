@@ -37,8 +37,8 @@
                    <img src="static/logos/SU_logo.png" class="logo-placeholder" alt="School Logo">
                 </div>
                 <div class="header-text">
-                   <div class="school-name">SCRIPTURE UNION INTERNATIONAL SCHOOLS</div>
-                    <div class="school-address">64 IKOT ABASI STREET, UYO, AKWA IBOM STATE</div>
+                   <div class="school-name">{{ school_name }}</div>
+                    <div class="school-address">{{ school_address }}</div>
                     <div class="report-title">TERMLY REPORT FOR {{ term.upper() }}, {{ session }} SESSION</div>
                 </div>
             </div>
@@ -179,27 +179,33 @@
                         <div class="grading-grid">
                             <div class="grading-item">
                                 <span>A - Excellent</span>
-                                <span>- 80% & Above</span>
+                                <span>-</span>
+                                <span>80% & Above</span>
                             </div>
                             <div class="grading-item">
                                 <span>B - Very Good</span>
-                                <span>- 70% - 79%</span>
+                                <span>-</span>
+                                <span>70% - 79%</span>
                             </div>
                             <div class="grading-item">
                                 <span>C - Good</span>
-                                <span>- 60% - 69%</span>
+                                <span>-</span>
+                                <span>60% - 69%</span>
                             </div>
                             <div class="grading-item">
                                 <span>D - Pass</span>
-                                <span>- 50% - 59%</span>
+                                <span>-</span>
+                                <span>50% - 59%</span>
                             </div>
                             <div class="grading-item">
                                 <span>E - Weak Pass</span>
-                                <span>- 45% - 49%</span>
+                                <span>-</span>
+                                <span>45% - 49%</span>
                             </div>
                             <div class="grading-item">
                                 <span>F - Fail</span>
-                                <span>- 1% - 44%</span>
+                                <span>-</span>
+                                <span>1% - 44%</span>
                             </div>
                         </div>
                     </div>

@@ -39,8 +39,8 @@ body {
 .signature_ht,
 .stamp-date {
     position: fixed;
-    top: 88%;
-    left: 80%;
+    top: 76%;
+    left: 82%;
     z-index: 90;
     opacity: 0.8; /* Adjust transparency */
     pointer-events: none;
@@ -48,13 +48,13 @@ body {
 }
 
 .stamp-sss {
-    top: 88.5%;
-    left: 79%;
+    top: 76.5%;
+    left: 81%;
 }
 
 .stamp-date {
-    top: 88.9%;
-    left: 82%;
+    top: 76.9%;
+    left: 84%;
     font-size: 32px;
     font-weight: bold;
     color: #00064a;
@@ -66,7 +66,7 @@ body {
 }
 
 .signature_ht {
-    top: 86%;
+    top: 74%;
     opacity: 1.5; 
     transform: translate(-50%, -50%) rotate(345deg) scale(0.2);
 }
@@ -105,7 +105,7 @@ body {
 }
 
 .school-address {
-    font-size: 14px;
+    font-size: 18px;
     margin: 8px 0;
 }
 

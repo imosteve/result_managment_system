@@ -23,6 +23,7 @@ from database import (
     get_psychomotor_rating, get_grade_distribution, get_next_term_begin_date, get_next_term_info
 )
 from auth.activity_tracker import ActivityTracker
+from config import APP_CONFIG
 
 # Email Configuration
 SMTP_SERVER = os.getenv('SMTP_SERVER', "smtp.gmail.com")
@@ -190,6 +191,8 @@ def generate_report_card(student_name, class_name, term, session, is_secondary_c
         env = Environment(loader=FileSystemLoader("templates"))
         template = env.get_template("report_template.html")
         html_out = template.render(
+            school_name=APP_CONFIG["school_name"],
+            school_address=APP_CONFIG["school_address"],
             name=student_name,
             class_name=class_name,
             term=term,
@@ -320,12 +323,14 @@ def send_email(to_email, student_name, pdf_path, term, session):
         env = Environment(loader=FileSystemLoader("templates"))
         template = env.get_template("email_template.html")
         html_body = template.render(
+            school_name=APP_CONFIG["school_name"],
             student_name=student_name,
             term=term,
             session=session,
             year=datetime.now().year
         )
         
+        school_name=APP_CONFIG["school_name"]
         # Plain text fallback
         text_body = f"""Dear Parent/Guardian,
 
@@ -342,7 +347,7 @@ We encourage you to review the report carefully and discuss your child's progres
 
 Best regards,
 School Administration
-
+{school_name.title()}
 ---
 This is an automated message. Please do not reply to this email."""
 
