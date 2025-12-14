@@ -300,92 +300,6 @@ def _render_score_tabs(students: List[tuple], score_map: Dict[str, tuple],
         st.session_state.enter_scores_active_tab = 2
         _render_clear_scores_tab(score_map, class_name, subject, term, session)
 
-def _render_score_entry_tab(students: List[tuple], score_map: Dict[str, tuple],
-                           class_name: str, subject: str, term: str, session: str):
-    """Render the score entry tab"""
-    st.subheader("Enter Scores")
-    
-    if not students:
-        st.warning("⚠️ No students available for score entry.")
-        return
-    
-    # Display score limits
-    st.info("📊 **Score Limits:** Test (0-30) | Exam (0-70) | Total (0-100)")
-    
-    # Build editable data - use a dict to prevent duplicates
-    student_scores = {}
-    for idx, student in enumerate(students, 1):
-        student_name = student[1]
-        # Skip if we've already processed this student
-        if student_name in student_scores:
-            continue
-            
-        existing = score_map.get(student_name)
-        test_score = float(existing[3]) if existing and existing[3] is not None else 0.0
-        exam_score = float(existing[4]) if existing and existing[4] is not None else 0.0
-        
-        student_scores[student_name] = {
-            "S/N": str(idx),
-            "Student": student_name,
-            "Test (30%)": test_score,
-            "Exam (70%)": exam_score,
-        }
-
-    # Convert to list for DataFrame with S/N
-    editable_rows = []
-    for idx, (_, data) in enumerate(student_scores.items(), 1):
-        editable_rows.append(data)
-
-    # Create editable DataFrame with validation
-    try:
-        editable_df = st.data_editor(
-            pd.DataFrame(editable_rows),
-            column_config={
-                "S/N": st.column_config.TextColumn(
-                    "S/N",
-                    disabled=True,
-                    width=20
-                ),
-                "Student": st.column_config.TextColumn(
-                    "Student", 
-                    disabled=True, 
-                    width=200
-                ),
-                "Test (30%)": st.column_config.NumberColumn(
-                    "Test (30%)",
-                    width="small",
-                    format="%d"
-                ),
-                "Exam (70%)": st.column_config.NumberColumn(
-                    "Exam (70%)",
-                    width="small",
-                    format="%d"
-                ),
-            },
-            hide_index=True,
-            width=500,
-            key=f"score_editor_{class_name}_{subject}_{term}_{session}",
-            height=35 * len(editable_rows) + 38,  # 35px per row + 38px header (approximate)
-            on_change=ActivityTracker.update  # Track data editor interactions
-        )
-
-        # Validate scores before saving
-        validation_result = _validate_scores(editable_df)
-        if validation_result["valid"]:
-            if st.button("💾 Save All Scores", key="save_scores", type="primary"):
-                # Track save button click
-                ActivityTracker.update()
-                _save_scores_to_database(editable_df, class_name, subject, term, session)
-        else:
-            # Display validation errors
-            for error in validation_result["errors"]:
-                st.error(error)
-            st.warning("⚠️ Please correct invalid scores before saving.")
-
-    except Exception as e:
-        logger.error(f"Error in score entry interface: {str(e)}")
-        st.error("❌ Error creating score entry interface.")
-
 def _validate_scores(df: pd.DataFrame) -> Dict[str, Any]:
     """Validate score data before saving"""
     errors = []
@@ -514,7 +428,7 @@ def _render_score_preview_tab(students: List[tuple], score_map: Dict[str, tuple]
             "Position": st.column_config.TextColumn("Position", width="small")
         },
         hide_index=True,
-        width="content",
+        width="stretch",
         height=35 * len(final_preview_data) + 38  # 35px per row + 38px header (approximate)
     )
 
@@ -566,6 +480,280 @@ def _clear_all_scores_from_database(class_name: str, subject: str, term: str, se
     except Exception as e:
         logger.error(f"Error clearing scores: {str(e)}")
         st.error("❌ Failed to clear scores. Please try again.")
+        return False
+
+
+def resolve_device_mode(choice: str) -> bool:
+    """
+    Resolve device mode based on user choice
+    
+    Args:
+        choice: "Auto", "Desktop", or "Mobile"
+    
+    Returns:
+        bool: True for mobile, False for desktop
+    """
+    if choice == "Mobile":
+        return True
+    if choice == "Desktop":
+        return False
+    # default desktop mode
+    return False
+
+def _render_score_entry_tab(students: List[tuple], score_map: Dict[str, tuple],
+                           class_name: str, subject: str, term: str, session: str):
+    """Smart rendering based on device type with manual toggle"""
+    
+    # View mode toggle in sidebar
+    with st.sidebar.expander("📱 View Mode"):
+        device_mode = st.radio(
+            "📱 View Mode",
+            ["Desktop", "Mobile"],
+            index=0,
+            horizontal=True,
+            label_visibility="collapsed",
+            width="stretch"
+            # help="Choose your preferred view mode"
+        )
+        # Track mode selection
+        ActivityTracker.watch_value("score_entry_view_mode", device_mode)
+    
+    # Resolve device mode
+    is_mobile = resolve_device_mode(device_mode)
+    
+    if is_mobile:
+        _render_mobile_score_entry(students, score_map, class_name, subject, term, session)
+    else:
+        _render_desktop_score_entry(students, score_map, class_name, subject, term, session)
+
+def _render_mobile_score_entry(students: List[tuple], score_map: Dict[str, tuple],
+                               class_name: str, subject: str, term: str, session: str):
+    """Mobile-optimized individual student entry with side-by-side inputs"""
+    
+    st.markdown("#### Enter Scores")
+    
+    # Initialize current student index
+    if 'current_student_idx' not in st.session_state:
+        st.session_state.current_student_idx = 0
+    
+    total_students = len(students)
+    current_idx = st.session_state.current_student_idx
+    
+    # Ensure index is within bounds
+    if current_idx >= total_students:
+        st.session_state.current_student_idx = 0
+        current_idx = 0
+    
+    # Navigation buttons
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col1:
+        if st.button("⬅️ Prev", disabled=current_idx == 0, width="stretch"):
+            st.session_state.current_student_idx -= 1
+            st.rerun()
+    
+    with col2:
+        st.markdown(f"<h4 style='text-align: center;'>{current_idx + 1} / {total_students} students</h4>", 
+                   unsafe_allow_html=True)
+    
+    with col3:
+        if st.button("Next ➡️", disabled=current_idx >= total_students - 1, width="stretch"):
+            st.session_state.current_student_idx += 1
+            st.rerun()
+    
+    st.markdown(" ")
+    
+    # Current student details
+    student = students[current_idx]
+    student_name = student[1]
+    
+    with st.container(key=f"individual_mobile_student_score{current_idx}", border=True):
+        st.markdown(f"##### {student_name}")
+        
+        # Get existing scores for THIS student only
+        existing = score_map.get(student_name)
+        current_test = float(existing[3]) if existing and existing[3] is not None else 0.0
+        current_exam = float(existing[4]) if existing and existing[4] is not None else 0.0
+        
+        # SIDE-BY-SIDE score inputs
+        col1, col2, col3 = st.columns(3, vertical_alignment="bottom")
+        
+        with col1:
+            test_score = st.number_input(
+                "Test Score",
+                min_value=0.0,
+                max_value=30.0,
+                value=current_test,
+                step=0.5,
+                key=f"mobile_test_{current_idx}_{student_name}",
+                help="Test (0-30) | Max: 30 marks"
+            )
+        
+        with col2:
+            exam_score = st.number_input(
+                "Exam Score",
+                min_value=0.0,
+                max_value=70.0,
+                value=current_exam,
+                step=0.5,
+                key=f"mobile_exam_{current_idx}_{student_name}",
+                help="Exam (0-70) | Max: 70 marks"
+            )
+        
+        # Calculate total and grade
+        total = test_score + exam_score
+        grade = assign_grade(total)
+
+        with col3:
+            if st.button("💾 Save", type="primary", width="stretch"):
+                success = _save_single_student_score(
+                    student_name, class_name, subject, term, session,
+                    test_score, exam_score, total, grade
+                )
+                
+                if success:
+                    st.success(f"✅ Saved {student_name}'s scores!")
+                    # Auto-advance to next student if not last
+                    if current_idx < total_students - 1:
+                        st.session_state.current_student_idx += 1
+                    st.rerun()
+    
+    st.markdown(" ")
+    
+    # Quick Jump functionality
+    with st.container(key="quick_jump_to_student", border=True):
+        # Show list of students with save status
+        st.markdown(f"##### Quick Jump to Student")
+        col1_1, col2_2 = st.columns([3, 1], vertical_alignment="bottom")
+        with col1_1:
+            jump_options = []
+            for i, stud in enumerate(students):
+                stud_name = stud[1]
+                has_scores = stud_name in score_map and score_map[stud_name][3] is not None
+                status = "✅" if has_scores else "⭕"
+                jump_options.append(f"{status} {i+1}. {stud_name}")
+            
+            selected_jump = st.selectbox(
+                "Select student:",
+                range(total_students),
+                format_func=lambda i: jump_options[i],
+                key="mobile_jump_selector"
+            )
+        with col2_2:
+            if st.button("Jump to Student", width="stretch"):
+                st.session_state.current_student_idx = selected_jump
+                st.rerun()
+    
+    # Show completion status
+    completed = sum(1 for s in students if s[1] in score_map and score_map[s[1]][3] is not None)
+    st.caption(f"📊 Completed: {completed}/{total_students} students")
+
+def _render_desktop_score_entry(students: List[tuple], score_map: Dict[str, tuple],
+                           class_name: str, subject: str, term: str, session: str):
+    """Render the score entry tab"""
+    st.subheader("Enter Scores")
+    
+    if not students:
+        st.warning("⚠️ No students available for score entry.")
+        return
+    
+    # Display score limits
+    st.info("📊 **Score Limits:** Test (0-30) | Exam (0-70) | Total (0-100)")
+    
+    # Build editable data - use a dict to prevent duplicates
+    student_scores = {}
+    for idx, student in enumerate(students, 1):
+        student_name = student[1]
+        # Skip if we've already processed this student
+        if student_name in student_scores:
+            continue
+            
+        existing = score_map.get(student_name)
+        test_score = float(existing[3]) if existing and existing[3] is not None else 0.0
+        exam_score = float(existing[4]) if existing and existing[4] is not None else 0.0
+        
+        student_scores[student_name] = {
+            "S/N": str(idx),
+            "Student": student_name,
+            "Test (30%)": test_score,
+            "Exam (70%)": exam_score,
+        }
+
+    # Convert to list for DataFrame with S/N
+    editable_rows = []
+    for idx, (_, data) in enumerate(student_scores.items(), 1):
+        editable_rows.append(data)
+
+    # Create editable DataFrame with validation
+    try:
+        editable_df = st.data_editor(
+            pd.DataFrame(editable_rows),
+            column_config={
+                "S/N": st.column_config.TextColumn(
+                    "S/N",
+                    disabled=True,
+                    width=20
+                ),
+                "Student": st.column_config.TextColumn(
+                    "Student", 
+                    disabled=True, 
+                    width=200
+                ),
+                "Test (30%)": st.column_config.NumberColumn(
+                    "Test (30%)",
+                    width="small",
+                    format="%d"
+                ),
+                "Exam (70%)": st.column_config.NumberColumn(
+                    "Exam (70%)",
+                    width="small",
+                    format="%d"
+                ),
+            },
+            hide_index=True,
+            width="stretch",
+            key=f"score_editor_{class_name}_{subject}_{term}_{session}",
+            height=35 * len(editable_rows) + 38,  # 35px per row + 38px header (approximate)
+            on_change=ActivityTracker.update  # Track data editor interactions
+        )
+
+        # Validate scores before saving
+        validation_result = _validate_scores(editable_df)
+        if validation_result["valid"]:
+            if st.button("💾 Save All Scores", key="save_scores", type="primary"):
+                # Track save button click
+                ActivityTracker.update()
+                _save_scores_to_database(editable_df, class_name, subject, term, session)
+        else:
+            # Display validation errors
+            for error in validation_result["errors"]:
+                st.error(error)
+            st.warning("⚠️ Please correct invalid scores before saving.")
+
+    except Exception as e:
+        logger.error(f"Error in score entry interface: {str(e)}")
+        st.error("❌ Error creating score entry interface.")
+
+def _save_single_student_score(student_name: str, class_name: str, subject: str, 
+                               term: str, session: str, test: float, exam: float, 
+                               total: float, grade: str) -> bool:
+    """
+    Save ONLY the current student's score without affecting others.
+    Uses your existing database functions with single-student update.
+    """
+    try:
+        from database.scores import update_score
+        
+        # Use the existing update_score function from your database module
+        # This function already handles UPSERT (INSERT OR REPLACE)
+        update_score(student_name, subject, class_name, term, session, test, exam)
+        
+        logger.info(f"Saved score for {student_name} in {subject} - {class_name}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error saving single student score: {str(e)}")
+        st.error(f"❌ Failed to save score: {str(e)}")
         return False
 
 if __name__ == "__main__":

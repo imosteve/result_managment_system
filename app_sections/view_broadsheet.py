@@ -10,7 +10,7 @@ from main_utils import (
     format_ordinal, render_page_header, inject_login_css, 
     render_persistent_class_selector
 )
-from pdf_generators.broadsheet_pdf_weasyprint import (
+from pdf_generators.broadsheet_pdf_reportlab import (
     generate_blank_broadsheet_pdf,
     generate_broadsheet_with_scores_pdf,
     generate_all_classes_broadsheet_pdf

@@ -31,7 +31,7 @@ SMTP_PORT = int(os.getenv('SMTP_PORT', 465))
 EMAIL_SENDER = os.getenv('EMAIL_SENDER', "SUIS Terminal Result <ideas.elites@gmail.com>")
 EMAIL_PASSWORD = os.getenv('EMAIL_PASSWORD', "lkydcrsaritupygu")
 
-from pdf_generators.report_card_pdf_weasyprint import (
+from pdf_generators.report_card_pdf_reportlab import (
     generate_report_card, 
     merge_pdfs_into_single_file,
 )
