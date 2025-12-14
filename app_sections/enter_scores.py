@@ -5,7 +5,7 @@ import pandas as pd
 import logging
 from typing import Optional, List, Dict, Any
 from main_utils import (
-    assign_grade, inject_login_css, format_ordinal, render_page_header
+    assign_grade, inject_login_css, format_ordinal, render_page_header, inject_metric_css
 )
 from database import (
     get_all_classes, get_students_by_class, get_subjects_by_class,
@@ -529,9 +529,7 @@ def _render_score_entry_tab(students: List[tuple], score_map: Dict[str, tuple],
 def _render_mobile_score_entry(students: List[tuple], score_map: Dict[str, tuple],
                                class_name: str, subject: str, term: str, session: str):
     """Mobile-optimized individual student entry with side-by-side inputs"""
-    
-    st.markdown("#### Enter Scores")
-    
+        
     # Initialize current student index
     if 'current_student_idx' not in st.session_state:
         st.session_state.current_student_idx = 0
@@ -544,6 +542,12 @@ def _render_mobile_score_entry(students: List[tuple], score_map: Dict[str, tuple
         st.session_state.current_student_idx = 0
         current_idx = 0
     
+    # Current student details
+    student = students[current_idx]
+    student_name = student[1]
+    
+    st.markdown(f"#### {student_name}")
+
     # Navigation buttons
     col1, col2, col3 = st.columns([1, 2, 1])
     
@@ -553,7 +557,7 @@ def _render_mobile_score_entry(students: List[tuple], score_map: Dict[str, tuple
             st.rerun()
     
     with col2:
-        st.markdown(f"<h4 style='text-align: center;'>{current_idx + 1} / {total_students} students</h4>", 
+        st.markdown(f"<h4 style='text-align: center;'>{current_idx + 1} of {total_students} students</h4>", 
                    unsafe_allow_html=True)
     
     with col3:
@@ -563,12 +567,8 @@ def _render_mobile_score_entry(students: List[tuple], score_map: Dict[str, tuple
     
     st.markdown(" ")
     
-    # Current student details
-    student = students[current_idx]
-    student_name = student[1]
-    
     with st.container(key=f"individual_mobile_student_score{current_idx}", border=True):
-        st.markdown(f"##### {student_name}")
+        st.markdown("##### Enter Scores")
         
         # Get existing scores for THIS student only
         existing = score_map.get(student_name)
@@ -618,10 +618,25 @@ def _render_mobile_score_entry(students: List[tuple], score_map: Dict[str, tuple
                         st.session_state.current_student_idx += 1
                     st.rerun()
     
-    st.markdown(" ")
-    
+        st.markdown(" ")
+        inject_metric_css()
+    # with st.container(key="quick_score_preview", border=True):
+        st.markdown(f"##### Quick Score Preview")
+        # Display results
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Test", f"{test_score:.1f}/30")
+        with col2:
+            st.metric("Exam", f"{exam_score:.1f}/70")
+        with col3:
+            st.metric("Total", f"{total:.1f}/100")
+        with col4:
+            st.metric("Grade", grade)
+
+        st.markdown(" ")
+
     # Quick Jump functionality
-    with st.container(key="quick_jump_to_student", border=True):
+    # with st.container(key="quick_jump_to_student", border=True):
         # Show list of students with save status
         st.markdown(f"##### Quick Jump to Student")
         col1_1, col2_2 = st.columns([3, 1], vertical_alignment="bottom")

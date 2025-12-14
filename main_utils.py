@@ -44,7 +44,7 @@ def inject_metric_css():
         <style>
             /* Make metric boxes look nice and uniform */
             [data-testid="stMetricValue"] {
-                font-size: 30px !important;
+                font-size: 24px !important;
                 color: #1f77b4;
             }
             [data-testid="stMetricLabel"] {
@@ -55,13 +55,13 @@ def inject_metric_css():
                 background: #f8f9fa;
                 border: 2px solid #4CAF50;
                 border-radius: 12px;
-                padding: 12px;
+                padding: 10px;
                 text-align: center;
                 box-shadow: 0 2px 6px rgba(0,0,0,0.05);
             }
             /* Adjust layout spacing */
             div[data-testid="stHorizontalBlock"] > div {
-                padding: 5px;
+                padding: 4px;
             }
         </style>
     """, unsafe_allow_html=True)
