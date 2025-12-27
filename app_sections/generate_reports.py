@@ -2,25 +2,19 @@
 
 import streamlit as st
 import re
-from datetime import datetime
 import os
-import zipfile
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
-from jinja2 import Environment, FileSystemLoader
-from weasyprint import HTML, CSS
-from PyPDF2 import PdfMerger
 from main_utils import (
     assign_grade, create_metric_5col_report, format_ordinal, 
     render_page_header, inject_login_css, render_persistent_class_selector
 )
 from database import (
     get_all_classes, get_students_by_class, get_student_scores, 
-    get_class_average, get_student_grand_totals, get_comment, get_subjects_by_class,
-    get_psychomotor_rating, get_grade_distribution, get_next_term_begin_date, get_next_term_info
+    get_class_average, get_student_grand_totals, get_grade_distribution
 )
 from auth.activity_tracker import ActivityTracker
 from config import APP_CONFIG
@@ -175,7 +169,6 @@ def generate_tab():
     term = selected_class_data['term']
     session = selected_class_data['session']
 
-    import re
     is_senior_class = bool(re.match(r"SSS [123].*$", class_name))
     is_junior_class = bool(re.match(r"JSS [123].*$", class_name))
     is_secondary_class = is_senior_class or is_junior_class
