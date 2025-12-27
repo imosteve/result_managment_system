@@ -409,13 +409,14 @@ def add_subjects():
                     st.dataframe(
                         pd.DataFrame(summary_data),
                         column_config={
-                            "S/N": st.column_config.TextColumn("S/N", width="small"),
-                            "Student Name": st.column_config.TextColumn("Student Name", width="medium"),
-                            "Selected Subjects": st.column_config.TextColumn("Selected Subjects", width="large"),
-                            "Number of Subjects": st.column_config.NumberColumn("Number of Subjects", width="small")
+                            "S/N": st.column_config.TextColumn("S/N", width=10),
+                            "Student Name": st.column_config.TextColumn("Student Name", width=150),
+                            "Selected Subjects": st.column_config.TextColumn("Selected Subjects", width=500),
+                            "Number of Subjects": st.column_config.NumberColumn("Number of Subjects", width=80)
                         },
                         hide_index=True,
-                        width="stretch"
+                        width="stretch",
+                        height=35 * len(summary_data) + 38,  # 35px per row + 38px header (approximate)
                     )
                 else:
                     st.info("No subject selections made yet.")

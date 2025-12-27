@@ -4,7 +4,6 @@ import streamlit as st
 import math
 import logging
 import pandas as pd
-from st_aggrid import AgGrid, GridOptionsBuilder
 
 
 logger = logging.getLogger(__name__)
@@ -17,12 +16,12 @@ def streamlit_paginator(data, table_name):
     df = pd.DataFrame(data) if not isinstance(data, pd.DataFrame) else data.copy()
     
     # Initialize session state for search and filter
-    if f"search_{table_name}" not in st.session_state:
-        st.session_state[f"search_{table_name}"] = ""
-    if f"filter_col_{table_name}" not in st.session_state:
-        st.session_state[f"filter_col_{table_name}"] = "All Columns"
-    if f"filter_value_{table_name}" not in st.session_state:
-        st.session_state[f"filter_value_{table_name}"] = ""
+    if f"paginator_search_{table_name}" not in st.session_state:
+        st.session_state[f"paginator_search_{table_name}"] = ""
+    if f"paginator_col_{table_name}" not in st.session_state:
+        st.session_state[f"paginator_col_{table_name}"] = "All Columns"
+    if f"paginator_value_{table_name}" not in st.session_state:
+        st.session_state[f"paginator_value_{table_name}"] = ""
     
     with st.container(border=True):
         # Search bar
@@ -33,15 +32,15 @@ def streamlit_paginator(data, table_name):
                 "Search across all columns",
                 key=f"search_input_{table_name}",
                 placeholder="Type to search...",
-                value=st.session_state[f"search_{table_name}"]
+                value=st.session_state[f"paginator_search_{table_name}"]
             )
-            st.session_state[f"search_{table_name}"] = search_term
+            st.session_state[f"paginator_search_{table_name}"] = search_term
         
         with col3:
             if st.button("Clear", key=f"clear_{table_name}"):
-                st.session_state[f"search_{table_name}"] = ""
-                st.session_state[f"filter_col_{table_name}"] = "All Columns"
-                st.session_state[f"filter_value_{table_name}"] = ""
+                st.session_state[f"paginator_search_{table_name}"] = ""
+                st.session_state[f"paginator_col_{table_name}"] = "All Columns"
+                st.session_state[f"paginator_value_{table_name}"] = ""
                 st.session_state[f"page_{table_name}"] = 1
                 st.rerun()
         
@@ -52,25 +51,25 @@ def streamlit_paginator(data, table_name):
                 with col_fil_col:
                     # Determine the correct index for the selectbox
                     all_options = ["All Columns"] + list(df.columns)
-                    current_filter = st.session_state[f"filter_col_{table_name}"]
+                    current_filter = st.session_state[f"paginator_col_{table_name}"]
                     default_index = all_options.index(current_filter) if current_filter in all_options else 0
                     
                     filter_col = st.selectbox(
                         "Filter by column",
                         options=all_options,
-                        key=f"filter_col_input_{table_name}",
+                        key=f"paginator_col_input_{table_name}",
                         index=default_index
                     )
-                    st.session_state[f"filter_col_{table_name}"] = filter_col
+                    st.session_state[f"paginator_col_{table_name}"] = filter_col
                     
                 with col_fil_val:
                     filter_value = st.text_input(
                         "Filter value",
-                        key=f"filter_value_input_{table_name}",
+                        key=f"paginator_value_input_{table_name}",
                         placeholder="Enter value to filter...",
-                        value=st.session_state[f"filter_value_{table_name}"]
+                        value=st.session_state[f"paginator_value_{table_name}"]
                     )
-                    st.session_state[f"filter_value_{table_name}"] = filter_value
+                    st.session_state[f"paginator_value_{table_name}"] = filter_value
         
         # Apply search filter
         filtered_df = df.copy()

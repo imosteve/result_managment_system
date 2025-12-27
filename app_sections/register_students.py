@@ -101,29 +101,30 @@ def register_students():
         st.subheader("Student List")
         # Display Name, Gender, Email but keep ID hidden from users by not including it in the editor.
         # Preserve a stable id list to map edited rows back to the correct student records.
-        display_df = df[["Name", "Gender", "Email", "Paid Fees"]] if not df.empty else pd.DataFrame(columns=["Name", "Gender", "Email", "Paid Fees"])
+        display_df = df[["S/N", "Name", "Gender", "Email", "Paid Fees"]] if not df.empty else pd.DataFrame(columns=["S/N", "Name", "Gender", "Email", "Paid Fees"])
         original_ids = df["ID"].tolist() if not df.empty else []
 
         filtered_display_df = streamlit_filter(display_df, table_name="students_table")
         edited_df = st.data_editor(
             filtered_display_df,
             column_config={
-                "Name": st.column_config.TextColumn("Name", required=True, width="medium"),
+                "S/N": st.column_config.TextColumn("S/N", disabled=True, width=10),
+                "Name": st.column_config.TextColumn("Name", required=True, width=300),
                 "Gender": st.column_config.SelectboxColumn(
                     "Gender",
                     options=["M", "F"],
                     required=True,
-                    width="small"
+                    width=50
                 ),
                 "Email": st.column_config.TextColumn(
                     "Email",
                     help="Enter a valid email address",
-                    width="medium"
+                    width=300
                 ),
                 "Paid Fees": st.column_config.SelectboxColumn(
                     "Paid Fees",
                     options=["NO", "YES"],
-                    width="small"
+                    width=80
                 ),
             },
             hide_index=True,
