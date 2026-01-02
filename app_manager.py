@@ -500,7 +500,8 @@ class ApplicationManager:
             return {
                 "🔧 System Dashboard": system_dashboard.system_dashboard
             }
-       
+    
+    
     # Add this method to ApplicationManager class in app_manager.py
     def handle_post_assignment_navigation(self, role: str):
         """
