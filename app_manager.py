@@ -49,9 +49,9 @@ class ApplicationManager:
         footer {visibility: hidden;}
         # header {visibility: hidden;}
 
-        .stApp {
-            background-color: #e5ece4;
-        }
+        # .stApp {
+        #     background-color: #e5ece4;
+        # }
         
         /* Responsive container */
         .block-container {
@@ -429,15 +429,6 @@ class ApplicationManager:
                 st.write(f"**Username**: {username.title()}")
                 st.write(f"**Role**: {role_display}")
                 st.write(f"**Login Time**: {st.session_state.get('login_time', 'Unknown')}")
-
-            # st.markdown(f"""
-            # <div class="user-info-card">
-            #     <h4>👤 User Information</h4>
-            #     <p><strong>Username:</strong> {username.title()}</p>
-            #     <p><strong>Role:</strong> {role_display}</p>
-            #     <p><strong>Login Time:</strong> {st.session_state.get('login_time', 'Unknown')}</p>
-            # </div>
-            # """, unsafe_allow_html=True)
 
             if st.button("🔄 Refresh", key="refresh_data", width="stretch", type="secondary"):
                 st.rerun()

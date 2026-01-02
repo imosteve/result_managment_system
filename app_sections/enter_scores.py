@@ -614,8 +614,8 @@ def _render_mobile_score_entry(students: List[tuple], score_map: Dict[str, tuple
                 if success:
                     st.success(f"✅ Saved {student_name}'s scores!")
                     # Auto-advance to next student if not last
-                    if current_idx < total_students - 1:
-                        st.session_state.current_student_idx += 1
+                    # if current_idx < total_students - 1:
+                    #     st.session_state.current_student_idx += 1
                     st.rerun()
     
         st.markdown(" ")
