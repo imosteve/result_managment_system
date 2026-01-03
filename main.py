@@ -52,14 +52,18 @@ def get_first_app_section(options: dict, role: str) -> str:
     """
     option_keys = list(options.keys())
     
-    # Skip Dashboard, Admin Panel, and Change Assignment for initial navigation
-    skip_keys = ["🏠 Dashboard", "👥 Admin Panel", "🔄 Change Assignment"]
+    # Skip Profile, Dashboard, Admin Panel, and Change Assignment for initial navigation
+    skip_keys = ["👤 My Profile", "🏠 Dashboard", "🔧 System Dashboard", "👥 Admin Panel", "🔄 Change Assignment"]
     
     for key in option_keys:
         if key not in skip_keys:
             return key
     
-    # If all keys are in skip list, return first available
+    # If all keys are in skip list, return first available (excluding profile)
+    for key in option_keys:
+        if key != "👤 My Profile":
+            return key
+    
     return option_keys[0] if option_keys else None
 
 def handle_post_assignment_navigation(app: ApplicationManager, role: str, options: dict) -> str:
@@ -107,26 +111,12 @@ def handle_navigation(app: ApplicationManager, options: dict, role: str):
         if param_page in option_keys:
             current_page = param_page
         else:
+            # Default to first page (which is now "My Profile")
             current_page = option_keys[0]
 
-    # Navigation with clickable buttons
-    st.markdown("""
-        <style>
-            .sidebar-title {
-                font-family: 'Arial', sans-serif;
-                # background: #0a84ff22;
-                padding: 6px 10px;
-                border-radius: 6px;
-                font-size: 19px;
-                # font-weight: 10;
-            }
-        </style>
-    """, unsafe_allow_html=True)
+    st.logo('static/logos/SU_logo.png', size='large')
     
-    st.logo('static\logos\SU_logo.png', size='large')
-
-    st.sidebar.markdown("<div class='sidebar-title'>NAVIGATION</div>", unsafe_allow_html=True)
-    for page in option_keys:
+    for idx, page in enumerate(option_keys):
         # Check if this is the current page
         is_current = (page == current_page)
         
@@ -134,7 +124,6 @@ def handle_navigation(app: ApplicationManager, options: dict, role: str):
         if st.sidebar.button(
             page,
             key=f"nav_{page}",
-            # width="stretch",
             type="secondary" if is_current else "tertiary",
         ):
             # Update URL and navigate
@@ -153,110 +142,6 @@ def handle_navigation(app: ApplicationManager, options: dict, role: str):
         if st.session_state.get('role') in ['superadmin', 'admin']:
             with st.expander("🔧 Error Details (Admin Only)"):
                 st.code(str(e))
-
-# def handle_navigation(app: ApplicationManager, options: dict, role: str):
-#     """Handle navigation logic using st.navigation"""
-#     option_keys = list(options.keys())
-#     if not option_keys:
-#         st.error("❌ No navigation options available for your role.")
-#         return
-
-#     # Handle post-assignment navigation
-#     post_assignment_page = handle_post_assignment_navigation(app, role, options)
-#     if post_assignment_page:
-#         default_page = post_assignment_page
-#     else:
-#         # Handle URL parameters
-#         param_page = st.query_params.get("page", None)
-#         if param_page in option_keys:
-#             default_page = param_page
-#         else:
-#             default_page = option_keys[0]
-
-#     # Add custom styling for navigation
-#     st.sidebar.markdown("""
-#         <style>
-#             /* Sidebar title styling */
-#             .sidebar-title {
-#                 font-family: 'Arial', sans-serif;
-#                 # background: #0a84ff22;
-#                 padding: 6px 10px;
-#                 border-radius: 6px;
-#                 font-size: 19px;
-#                 # font-weight: 10;
-#             }
-            
-#             /* Navigation links styling */
-#             [data-testid="stSidebarNav"] a {
-#                 background-color: white;
-#                 border-radius: 3px;
-#                 padding: 5px 12px;
-#                 margin-bottom: 3px;
-#                 transition: all 0.2s ease;
-#                 border: 1px solid #e0e0e0;
-#                 font-size: 15px;
-#             }
-            
-#             /* Navigation link hover effect */
-#             [data-testid="stSidebarNav"] a:hover {
-#                 background-color: #e8f5e9;
-#                 border-color: #2E8B57;
-#                 transform: translateX(3px);
-#                 box-shadow: 0 2px 4px rgba(46, 139, 87, 0.15);
-#             }
-            
-#             /* Active/selected navigation link */
-#             [data-testid="stSidebarNav"] a[aria-current="page"] {
-#                 background: linear-gradient(135deg, #2E8B57, #228B22);
-#                 color: white !important;
-#                 border-color: #228B22;
-#                 font-weight: 600;
-#                 box-shadow: 0 3px 6px rgba(46, 139, 87, 0.3);
-#             }
-            
-#             /* Active link icon color */
-#             [data-testid="stSidebarNav"] a[aria-current="page"] span {
-#                 color: white !important;
-#             }
-#         </style>
-#     """, unsafe_allow_html=True)
-
-#     st.sidebar.markdown("<div class='sidebar-title'>NAVIGATION</div>", unsafe_allow_html=True)
-
-#     # Create page objects for st.navigation
-#     pages = []
-#     for page_name in option_keys:
-#         # Create a page object with icon and title
-#         page = st.Page(
-#             options[page_name],
-#             title=page_name,
-#             # icon=page_name.split()[0] if page_name.split() else "📄",
-#             default=(page_name == default_page)
-#         )
-#         pages.append(page)
-
-#     # Use st.navigation to handle page switching
-#     try:
-#         selected_page = st.navigation(pages)
-        
-#         # Update query params with current page
-#         current_page_name = selected_page.title
-#         st.query_params["page"] = current_page_name
-        
-#         # Log navigation
-#         logger.info(f"User {st.session_state.get('username')} accessed {current_page_name}")
-        
-#         # Run the selected page
-#         selected_page.run()
-        
-#     except Exception as e:
-#         logger.error(f"Error in navigation: {str(e)}\n{traceback.format_exc()}")
-#         st.error(f"❌ Error loading page. Please try again or contact support.")
-        
-#         # Show error details to admins
-#         if st.session_state.get('role') in ['superadmin', 'admin']:
-#             with st.expander("🔧 Error Details (Admin Only)"):
-#                 st.code(str(e))
 
 def render_logout_button():
     """Render logout button"""
@@ -329,11 +214,8 @@ def render_authenticated_app(app: ApplicationManager, cookies):
         # Render header
         app.render_header()
         
-        # Render user info
-        app.render_user_info(role, username)
-        
-        # Get navigation options based on role
-        options = app.get_navigation_options(role)
+        # Get navigation options based on role (NOW INCLUDES PROFILE)
+        options = app.get_navigation_options(role, username)
         
         # Handle navigation (including post-assignment redirect)
         handle_navigation(app, options, role)
@@ -345,7 +227,6 @@ def render_authenticated_app(app: ApplicationManager, cookies):
         
         # Update user activity timestamp
         st.session_state.last_activity = datetime.now()
-        # cookies["last_activity"] = st.session_state.last_activity.isoformat()
         
     except Exception as e:
         logger.error(f"Error in authenticated app: {str(e)}\n{traceback.format_exc()}")
@@ -380,11 +261,9 @@ def main():
         if cookies is None:
             st.stop()
         
-        # Handle authentication - this will either show login form or proceed if authenticated
+        # Handle authentication
         login(cookies)
         
-        # If we reach this point, user is authenticated
-        # Check if user is actually authenticated (login function should handle this)
         if st.session_state.get("authenticated"):
             render_authenticated_app(app, cookies)
         else:

@@ -25,7 +25,7 @@ def load_css(file_path):
                 css_content = f.read()
             return css_content
         else:
-            st.warning(f"CSS file not found: {file_path}")
+            # st.warning(f"CSS file not found: {file_path}")
             return ""
     except Exception as e:
         st.error(f"Error loading CSS file {file_path}: {str(e)}")

@@ -38,170 +38,16 @@ class ApplicationManager:
    
     def setup_custom_css(self):
         """Setup custom CSS styling with mobile responsiveness"""
-        # try:
-        #     inject_login_css("templates/main_styles.css")
-        # except Exception as e:
-        #     logger.warning(f"Could not load main styles: {e}")
+        try:
+            inject_login_css("templates/main_styles.css")
+        except Exception as e:
+            logger.warning(f"Could not load main styles: {e}")
 
-        st.markdown("""
-        <style>
-        #MainMenu {visibility: visible;}
-        footer {visibility: hidden;}
-        # header {visibility: hidden;}
-
-        # .stApp {
-        #     background-color: #e5ece4;
-        # }
-        
-        /* Responsive container */
-        .block-container {
-            padding-top: 1rem;
-            padding-left: 1rem;
-            padding-right: 1rem;
-            max-width: 100% !important;
-        }
-        
-        /* Desktop styles */
-        @media (min-width: 768px) {
-            .block-container {
-                max-width: 500px !important;
-                # margin: auto;
-                padding-top: 2rem;
-            }
-        }
-        
-        /* Mobile specific styles */
-        @media (max-width: 767px) {
-            .block-container {
-                padding-top: 0.5rem !important;
-                padding-left: 0.5rem !important;
-                padding-right: 0.5rem !important;
-            }
-            
-            .main-header h2 {
-                font-size: 20px !important;
-                padding: 10px !important;
-            }
-            
-            /* Make buttons full width on mobile */
-            .stButton > button {
-                width: 100% !important;
-                margin-bottom: 0.5rem;
-            }
-            
-            /* Responsive selectbox */
-            .stSelectbox > div > div {
-                font-size: 14px;
-            }
-            
-            /* Responsive text inputs */
-            .stTextInput > div > div > input {
-                font-size: 16px; /* Prevents zoom on iOS */
-            }
-            
-            /* Responsive metrics */
-            .custom-metric {
-                margin-bottom: 1rem !important;
-            }
-            
-            /* Responsive dataframes */
-            .stDataFrame {
-                font-size: 12px !important;
-            }
-            
-            /* Fix sidebar on mobile */
-            .css-1d391kg {
-                padding-top: 1rem;
-            }
-        }
-        
-        .main-header {
-            background: linear-gradient(135deg, #2E8B57, #228B22);
-            # padding: 15px;
-            border-radius: 5px;
-            margin-bottom: 5px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        }
-        
-        .main-header h2 {
-            color: white;
-            font-size: 35px;
-            font-weight: bold;
-            text-align: center;
-            margin: 0;
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
-            line-height: 1.2;
-        }
-        
-        .user-info-card {
-            background-color: #f8f9fa;
-            border: 1px solid #dee2e6;
-            border-radius: 8px;
-            padding: 15px;
-            margin-bottom: 20px;
-        }
-        
-        .error-container {
-            background-color: #f8d7da;
-            border: 1px solid #f5c6cb;
-            color: #721c24;
-            padding: 12px;
-            border-radius: 5px;
-            margin: 10px 0;
-        }
-        
-        .success-container {
-            background-color: #d4edda;
-            border: 1px solid #c3e6cb;
-            color: #155724;
-            padding: 12px;
-            border-radius: 5px;
-            margin: 10px 0;
-        }
-        
-        .warning-container {
-            background-color: #fff3cd;
-            border: 1px solid #ffeaa7;
-            color: #856404;
-            padding: 12px;
-            border-radius: 5px;
-            margin: 10px 0;
-        }
-        
-        /* Ensure touch targets are large enough on mobile */
-        @media (max-width: 767px) {
-            button, .stSelectbox, .stTextInput {
-                min-height: 44px;
-            }
-        }
-        
-        /* Responsive tables */
-        @media (max-width: 767px) {
-            .stDataFrame table {
-                font-size: 11px !important;
-            }
-            
-            .stDataFrame th, .stDataFrame td {
-                padding: 4px !important;
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                max-width: 80px;
-            }
-        }
-        
-        /* Mobile navigation improvements */
-        @media (max-width: 767px) {
-            .css-1v0mbdj {
-                padding: 0.5rem;
-            }
-            
-            .css-1y4p8pa {
-                padding: 0.5rem;
-            }
-        }
-        </style>
-        """, unsafe_allow_html=True)
+        # st.markdown("""
+        # <style>
+        # 
+        # </style>
+        # """, unsafe_allow_html=True)
 
     def initialize_mobile_support(self):
             """Initialize mobile-specific features without localStorage usage"""
@@ -414,28 +260,9 @@ class ApplicationManager:
         </div>
         """, unsafe_allow_html=True)
 
-    def render_user_info(self, role: str, username: str):
-        """Render user information in sidebar - UPDATED to handle None role"""
-        with st.sidebar:
-            # Format role display - handle None for teachers
-            if role is None:
-                role_display = "Teacher (No Assignment)"
-            elif role in ["admin", "superadmin"]:
-                role_display = role.replace('_', ' ').title()
-            else:
-                role_display = role.replace('_', ' ').title()
-
-            with st.expander("👤 User Information"):
-                st.write(f"**Username**: {username.title()}")
-                st.write(f"**Role**: {role_display}")
-                st.write(f"**Login Time**: {st.session_state.get('login_time', 'Unknown')}")
-
-            if st.button("🔄 Refresh", key="refresh_data", width="stretch", type="secondary"):
-                st.rerun()
-
     # app_manager.py - UPDATE the get_navigation_options method
-    def get_navigation_options(self, role: str) -> Dict[str, Callable]:
-        """Get navigation options based on user role"""
+    def get_navigation_options(self, role: str, username: str) -> Dict[str, Callable]:
+        """Get navigation options based on user role with profile included"""
         try:
             # Import functions with error handling
             from app_sections import (
@@ -443,13 +270,18 @@ class ApplicationManager:
                 manage_classes, register_students, manage_subjects, 
                 enter_scores, view_broadsheet, generate_reports,
                 system_dashboard, admin_panel, manage_comment_templates,
-                next_term_info
+                next_term_info, user_profile
             )
             from auth.assignment_selection import select_assignment
+            
+            # Create user profile function
+            profile_function = user_profile.create_user_info_page(role, username)
+            
             base_options = {}
             
             if role == "superadmin":
                 base_options = {
+                    "👤 My Profile": profile_function,
                     "🔧 System Dashboard": system_dashboard.system_dashboard,
                     "👥 Admin Panel": admin_panel.admin_panel,
                     "🗓️ Next Term Info": next_term_info.next_term_info,
@@ -464,6 +296,7 @@ class ApplicationManager:
                 }
             elif role == "admin":
                 base_options = {
+                    "👤 My Profile": profile_function,
                     "👥 Admin Panel": admin_panel.admin_panel,
                     "🗓️ Next Term Info": next_term_info.next_term_info,
                     "📝 Comments Template": manage_comment_templates.manage_comment_templates,
@@ -477,6 +310,7 @@ class ApplicationManager:
                 }
             elif role == "class_teacher":
                 base_options = {
+                    "👤 My Profile": profile_function,
                     "👥 Register Students": register_students.register_students,
                     "📚 Manage Subjects": manage_subjects.add_subjects,
                     "📝 Manage Comments": manage_comments.manage_comments,
@@ -487,6 +321,7 @@ class ApplicationManager:
                 
             elif role == "subject_teacher":
                 base_options = {
+                    "👤 My Profile": profile_function,
                     "📝 Enter Scores": enter_scores.enter_scores,
                     "📋 View Broadsheet": view_broadsheet.generate_broadsheet,
                     "🔄 Change Assignment": select_assignment
@@ -498,6 +333,7 @@ class ApplicationManager:
             logger.error(f"Error importing navigation modules: {e}")
             # Return minimal navigation if imports fail
             return {
+                "👤 My Profile": profile_function,
                 "🔧 System Dashboard": system_dashboard.system_dashboard
             }
        
