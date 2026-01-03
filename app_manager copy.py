@@ -8,7 +8,6 @@ from streamlit_cookies_manager import EncryptedCookieManager
 from config import APP_CONFIG, COOKIE_PASSWORD
 from database import create_tables, get_all_classes
 from main_utils import inject_login_css, render_page_header
-from app_sections.user_profile import get_navigation_options
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +45,7 @@ class ApplicationManager:
 
         st.markdown("""
         <style>
-        # MainMenu {visibility: visible;}
+        #MainMenu {visibility: visible;}
         footer {visibility: hidden;}
         # header {visibility: hidden;}
 
@@ -54,14 +53,9 @@ class ApplicationManager:
         #     background-color: #e5ece4;
         # }
         
-        # /* Push sidebar down */
-        # [data-testid="stSidebar"] {
-        #     margin-top: 70px;
-        # }
-                    
         /* Responsive container */
         .block-container {
-            padding-top: 1rem !important;
+            padding-top: 1rem;
             padding-left: 1rem;
             padding-right: 1rem;
             max-width: 100% !important;
@@ -72,7 +66,7 @@ class ApplicationManager:
             .block-container {
                 max-width: 500px !important;
                 # margin: auto;
-                # padding-top: 2rem;
+                padding-top: 2rem;
             }
         }
         
@@ -413,67 +407,415 @@ class ApplicationManager:
             return None
 
     def render_header(self):
-        st.markdown(
-            f"""
+        """Render application header"""
+        st.markdown(f"""
+        <div class="main-header">
+            <h2>{APP_CONFIG['school_name']}</h2>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # def render_user_info(self, role: str, username: str):
+    #     """Render user information in sidebar - UPDATED to handle None role"""
+    #     with st.sidebar:
+    #         # Format role display - handle None for teachers
+    #         if role is None:
+    #             role_display = "Teacher (No Assignment)"
+    #         elif role in ["admin", "superadmin"]:
+    #             role_display = role.replace('_', ' ').title()
+    #         else:
+    #             role_display = role.replace('_', ' ').title()
+
+    #         with st.expander("👤 User Information"):
+    #             st.write(f"**Username**: {username.title()}")
+    #             st.write(f"**Role**: {role_display}")
+    #             st.write(f"**Login Time**: {st.session_state.get('login_time', 'Unknown')}")
+
+    #         if st.button("🔄 Refresh", key="refresh_data", width="stretch", type="secondary"):
+    #             st.rerun()
+
+    # # app_manager.py - UPDATE the get_navigation_options method
+    # def get_navigation_options(self, role: str) -> Dict[str, Callable]:
+    #     """Get navigation options based on user role"""
+    #     try:
+    #         # Import functions with error handling
+    #         from app_sections import (
+    #             manage_comments,
+    #             manage_classes, register_students, manage_subjects, 
+    #             enter_scores, view_broadsheet, generate_reports,
+    #             system_dashboard, admin_panel, manage_comment_templates,
+    #             next_term_info
+    #         )
+    #         from auth.assignment_selection import select_assignment
+    #         base_options = {}
+            
+    #         if role == "superadmin":
+    #             base_options = {
+    #                 "🔧 System Dashboard": system_dashboard.system_dashboard,
+    #                 "👥 Admin Panel": admin_panel.admin_panel,
+    #                 "🗓️ Next Term Info": next_term_info.next_term_info,
+    #                 "📝 Comments Template": manage_comment_templates.manage_comment_templates,
+    #                 "🏫 Manage Classes": manage_classes.create_class_section,
+    #                 "👥 Register Students": register_students.register_students,
+    #                 "📚 Manage Subjects": manage_subjects.add_subjects,
+    #                 "📝 Enter Scores": enter_scores.enter_scores,
+    #                 "📝 Manage Comments": manage_comments.manage_comments,
+    #                 "📋 View Broadsheet": view_broadsheet.generate_broadsheet,
+    #                 "📄 Generate Reports": generate_reports.report_card_section
+    #             }
+    #         elif role == "admin":
+    #             base_options = {
+    #                 "👥 Admin Panel": admin_panel.admin_panel,
+    #                 "🗓️ Next Term Info": next_term_info.next_term_info,
+    #                 "📝 Comments Template": manage_comment_templates.manage_comment_templates,
+    #                 "🏫 Manage Classes": manage_classes.create_class_section,
+    #                 "👥 Register Students": register_students.register_students,
+    #                 "📚 Manage Subjects": manage_subjects.add_subjects,
+    #                 "📝 Enter Scores": enter_scores.enter_scores,
+    #                 "📝 Manage Comments": manage_comments.manage_comments,
+    #                 "📋 View Broadsheet": view_broadsheet.generate_broadsheet,
+    #                 "📄 Generate Reports": generate_reports.report_card_section
+    #             }
+    #         elif role == "class_teacher":
+    #             base_options = {
+    #                 "👥 Register Students": register_students.register_students,
+    #                 "📚 Manage Subjects": manage_subjects.add_subjects,
+    #                 "📝 Manage Comments": manage_comments.manage_comments,
+    #                 "📋 View Broadsheet": view_broadsheet.generate_broadsheet,
+    #                 "📄 Generate Reports": generate_reports.report_card_section,
+    #                 "🔄 Change Assignment": select_assignment
+    #             }
+                
+    #         elif role == "subject_teacher":
+    #             base_options = {
+    #                 "📝 Enter Scores": enter_scores.enter_scores,
+    #                 "📋 View Broadsheet": view_broadsheet.generate_broadsheet,
+    #                 "🔄 Change Assignment": select_assignment
+    #             }
+            
+    #         return base_options
+            
+    #     except ImportError as e:
+    #         logger.error(f"Error importing navigation modules: {e}")
+    #         # Return minimal navigation if imports fail
+    #         return {
+    #             "🔧 System Dashboard": system_dashboard.system_dashboard
+    #         }
+    
+    # app_manager.py - UPDATED METHODS
+    def get_navigation_options(self, role: str) -> dict:
+        """
+        Get navigation options organized by sections based on user role
+        
+        Returns:
+            Dict with section names as keys and list of page configs as values
+            Each page config is a dict with 'title', 'icon', 'function', and optional 'default'
+        """
+        try:
+            # Import functions with error handling
+            from app_sections import (
+                manage_comments,
+                manage_classes, register_students, manage_subjects, 
+                enter_scores, view_broadsheet, generate_reports,
+                system_dashboard, admin_panel, manage_comment_templates,
+                next_term_info
+            )
+            from auth.assignment_selection import select_assignment
+            
+            navigation_structure = {}
+            
+            if role == "superadmin":
+                navigation_structure = {
+                    "System Management": [
+                        {
+                            "title": "System Dashboard",
+                            "icon": ":material/dashboard:",
+                            "function": system_dashboard.system_dashboard,
+                            "default": True
+                        },
+                        {
+                            "title": "Admin Panel",
+                            "icon": ":material/admin_panel_settings:",
+                            "function": admin_panel.admin_panel
+                        },
+                        {
+                            "title": "Next Term Info",
+                            "icon": ":material/event:",
+                            "function": next_term_info.next_term_info
+                        },
+                        {
+                            "title": "Comments Template",
+                            "icon": ":material/comment:",
+                            "function": manage_comment_templates.manage_comment_templates
+                        }
+                    ],
+                    "Academic Management": [
+                        {
+                            "title": "Manage Classes",
+                            "icon": ":material/school:",
+                            "function": manage_classes.create_class_section
+                        },
+                        {
+                            "title": "Register Students",
+                            "icon": ":material/group_add:",
+                            "function": register_students.register_students
+                        },
+                        {
+                            "title": "Manage Subjects",
+                            "icon": ":material/book:",
+                            "function": manage_subjects.add_subjects
+                        }
+                    ],
+                    "Assessment & Reports": [
+                        {
+                            "title": "Enter Scores",
+                            "icon": ":material/edit_note:",
+                            "function": enter_scores.enter_scores
+                        },
+                        {
+                            "title": "Manage Comments",
+                            "icon": ":material/rate_review:",
+                            "function": manage_comments.manage_comments
+                        },
+                        {
+                            "title": "View Broadsheet",
+                            "icon": ":material/table_chart:",
+                            "function": view_broadsheet.generate_broadsheet
+                        },
+                        {
+                            "title": "Generate Reports",
+                            "icon": ":material/description:",
+                            "function": generate_reports.report_card_section
+                        }
+                    ]
+                }
+                
+            elif role == "admin":
+                navigation_structure = {
+                    "Administration": [
+                        {
+                            "title": "Admin Panel",
+                            "icon": ":material/admin_panel_settings:",
+                            "function": admin_panel.admin_panel,
+                            "default": True
+                        },
+                        {
+                            "title": "Next Term Info",
+                            "icon": ":material/event:",
+                            "function": next_term_info.next_term_info
+                        },
+                        {
+                            "title": "Comments Template",
+                            "icon": ":material/comment:",
+                            "function": manage_comment_templates.manage_comment_templates
+                        }
+                    ],
+                    "Academic Management": [
+                        {
+                            "title": "Manage Classes",
+                            "icon": ":material/school:",
+                            "function": manage_classes.create_class_section
+                        },
+                        {
+                            "title": "Register Students",
+                            "icon": ":material/group_add:",
+                            "function": register_students.register_students
+                        },
+                        {
+                            "title": "Manage Subjects",
+                            "icon": ":material/book:",
+                            "function": manage_subjects.add_subjects
+                        }
+                    ],
+                    "Assessment & Reports": [
+                        {
+                            "title": "Enter Scores",
+                            "icon": ":material/edit_note:",
+                            "function": enter_scores.enter_scores
+                        },
+                        {
+                            "title": "Manage Comments",
+                            "icon": ":material/rate_review:",
+                            "function": manage_comments.manage_comments
+                        },
+                        {
+                            "title": "View Broadsheet",
+                            "icon": ":material/table_chart:",
+                            "function": view_broadsheet.generate_broadsheet
+                        },
+                        {
+                            "title": "Generate Reports",
+                            "icon": ":material/description:",
+                            "function": generate_reports.report_card_section
+                        }
+                    ]
+                }
+                
+            elif role == "class_teacher":
+                navigation_structure = {
+                    "Class Management": [
+                        {
+                            "title": "Register Students",
+                            "icon": ":material/group_add:",
+                            "function": register_students.register_students,
+                            "default": True
+                        },
+                        {
+                            "title": "Manage Subjects",
+                            "icon": ":material/book:",
+                            "function": manage_subjects.add_subjects
+                        }
+                    ],
+                    "Assessment & Reports": [
+                        {
+                            "title": "Manage Comments",
+                            "icon": ":material/rate_review:",
+                            "function": manage_comments.manage_comments
+                        },
+                        {
+                            "title": "View Broadsheet",
+                            "icon": ":material/table_chart:",
+                            "function": view_broadsheet.generate_broadsheet
+                        },
+                        {
+                            "title": "Generate Reports",
+                            "icon": ":material/description:",
+                            "function": generate_reports.report_card_section
+                        }
+                    ],
+                    "Settings": [
+                        {
+                            "title": "Change Assignment",
+                            "icon": ":material/swap_horiz:",
+                            "function": select_assignment
+                        }
+                    ]
+                }
+                    
+            elif role == "subject_teacher":
+                navigation_structure = {
+                    "Teaching": [
+                        {
+                            "title": "Enter Scores",
+                            "icon": ":material/edit_note:",
+                            "function": enter_scores.enter_scores,
+                            "default": True
+                        },
+                        {
+                            "title": "View Broadsheet",
+                            "icon": ":material/table_chart:",
+                            "function": view_broadsheet.generate_broadsheet
+                        }
+                    ],
+                    "Settings": [
+                        {
+                            "title": "Change Assignment",
+                            "icon": ":material/swap_horiz:",
+                            "function": select_assignment
+                        }
+                    ]
+                }
+            
+            return navigation_structure
+            
+        except ImportError as e:
+            logger.error(f"Error importing navigation modules: {e}")
+            # Return minimal navigation if imports fail
+            return {
+                "System": [
+                    {
+                        "title": "Dashboard",
+                        "icon": ":material/dashboard:",
+                        "function": lambda: st.error("Navigation modules not available"),
+                        "default": True
+                    }
+                ]
+            }
+
+    def render_user_info(self, role: str, username: str):
+        """Render user information in sidebar with improved styling"""
+        with st.sidebar:
+            # User info card with better formatting
+            st.markdown("""
             <style>
-                /* Header aligned with main content */
-                .main-header {{
-                    position: fixed;
-                    top: 0;
-                    left: 0;
-                    width: 100%;
-                    height: 64px;
-                    background-color: #3498DB;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    z-index: 999;
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.15);
-                    pointer-events: none; /* avoid blocking sidebar toggle */
-                }}
-
-                /* Inner container matches main content width */
-                .main-header-inner {{
-                    width: 100%;
-                    max-width: calc(100% - 21rem); /* sidebar width */
-                    margin-left: 21rem;
-                    display: flex;
-                    justify-content: center;
-                }}
-
-                .main-header h2 {{
-                    margin: 0;
+                .user-info-container {
+                    background: linear-gradient(135deg, #2E8B57 0%, #228B22 100%);
+                    padding: 15px;
+                    border-radius: 10px;
+                    margin-bottom: 20px;
+                    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                }
+                .user-info-title {
                     color: white;
-                    font-size: 20px;
-                    font-weight: 700;
-                }}
-
-                /* When sidebar is collapsed */
-                [data-testid="stSidebar"][aria-expanded="false"] ~ .main-header .main-header-inner {{
-                    margin-left: 0;
-                    max-width: 100%;
-                }}
+                    font-size: 14px;
+                    font-weight: 600;
+                    margin-bottom: 8px;
+                    text-transform: uppercase;
+                    letter-spacing: 0.5px;
+                }
+                .user-info-detail {
+                    color: white;
+                    font-size: 13px;
+                    margin: 5px 0;
+                    padding: 5px 0;
+                    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+                }
+                .user-info-detail:last-child {
+                    border-bottom: none;
+                }
+                .user-info-label {
+                    font-weight: 600;
+                    opacity: 0.9;
+                }
+                .user-info-value {
+                    opacity: 1;
+                    font-weight: 400;
+                }
             </style>
-
-            <div class="main-header">
-                <div class="main-header-inner">
-                    <h2>{APP_CONFIG["school_name"]}</h2>
+            """, unsafe_allow_html=True)
+            
+            # Format role display - handle None for teachers
+            if role is None:
+                role_display = "Teacher (No Assignment)"
+            elif role in ["admin", "superadmin"]:
+                role_display = role.replace('_', ' ').title()
+            else:
+                role_display = role.replace('_', ' ').title()
+            
+            # Get login time
+            login_time = st.session_state.get('login_time', 'Unknown')
+            
+            # Render user info card
+            st.markdown(f"""
+            <div class="user-info-container">
+                <div class="user-info-title">👤 User Information</div>
+                <div class="user-info-detail">
+                    <span class="user-info-label">Username:</span> 
+                    <span class="user-info-value">{username.title()}</span>
+                </div>
+                <div class="user-info-detail">
+                    <span class="user-info-label">Role:</span> 
+                    <span class="user-info-value">{role_display}</span>
+                </div>
+                <div class="user-info-detail">
+                    <span class="user-info-label">Login:</span> 
+                    <span class="user-info-value">{login_time}</span>
                 </div>
             </div>
-            """,
-            unsafe_allow_html=True
-        )
+            """, unsafe_allow_html=True)
+            
+            # Refresh button with better styling
+            if st.button("🔄 Refresh", key="refresh_data", use_container_width=True, type="secondary"):
+                st.rerun()
 
-    def handle_navigation(self, role: str, username: str):
+    def handle_navigation(self, role: str):
         """
-        Handle navigation with sections - User info now integrated
+        Handle navigation with sections similar to the sample code
         
         Args:
             role: User role
-            username: Username
         """
-        # Get navigation structure (now includes user info)
-        navigation_structure = get_navigation_options(role, username)
+        # Get navigation structure
+        navigation_structure = self.get_navigation_options(role)
         
         if not navigation_structure:
             st.error("❌ No navigation options available for your role.")
@@ -511,42 +853,26 @@ class ApplicationManager:
                     background-color: #f8f9fa;
                 }
                 
-                /* Make User Profile section stand out */
-                [data-testid="stSidebarNav"] > div:first-child {
-                    background: linear-gradient(135deg, rgba(46, 139, 87, 0.1) 0%, rgba(34, 139, 34, 0.1) 100%);
-                    padding: 10px;
-                    border-radius: 10px;
-                    margin-bottom: 15px;
-                }
-                
-                /* Special styling for User Profile header */
-                [data-testid="stSidebarNav"] > div:first-child > div:first-child {
+                /* Navigation section headers */
+                [data-testid="stSidebarNav"] > div > div:first-child {
+                    font-weight: 600;
+                    color: #2E8B57;
                     font-size: 14px;
-                    font-weight: 700;
-                    color: #228B22;
+                    text-transform: uppercase;
+                    letter-spacing: 0.5px;
+                    padding: 10px 12px 5px 12px;
+                    margin-top: 10px;
                 }
                 
                 /* Navigation links styling */
                 [data-testid="stSidebarNav"] a {
-                    # background-color: white;
+                    background-color: white;
                     border-radius: 8px;
-                    padding: 2px 12px;
+                    padding: 4px 12px;
                     margin: 2px 4px;
                     transition: all 0.2s ease;
-                    # border: 1px solid #e0e0e0;
-                }
-                
-                /* User Profile link special styling */
-                [data-testid="stSidebarNav"] > div:first-child a {
-                    background: linear-gradient(135deg, #2E8B57, #228B22);
-                    color: white !important;
-                    border: none;
-                    font-weight: 600;
-                }
-                
-                [data-testid="stSidebarNav"] > div:first-child a span,
-                [data-testid="stSidebarNav"] > div:first-child a div {
-                    color: white !important;
+                    border: 1px solid #e0e0e0;
+                    font-size: 14px;
                 }
                 
                 /* Navigation link hover effect */
@@ -555,12 +881,6 @@ class ApplicationManager:
                     border-color: #2E8B57;
                     transform: translateX(3px);
                     box-shadow: 0 2px 4px rgba(46, 139, 87, 0.15);
-                }
-                
-                /* User Profile link hover */
-                [data-testid="stSidebarNav"] > div:first-child a:hover {
-                    background: linear-gradient(135deg, #228B22, #1a6e1a);
-                    transform: scale(1.02);
                 }
                 
                 /* Active/selected navigation link */
@@ -600,8 +920,9 @@ class ApplicationManager:
             if st.session_state.get('role') in ['superadmin', 'admin']:
                 with st.expander("🔧 Error Details (Admin Only)"):
                     st.code(str(e))
-     
-    def handle_post_assignment_navigation(self, role: str, username: str):
+        
+    # Add this method to ApplicationManager class in app_manager.py
+    def handle_post_assignment_navigation(self, role: str):
         """
         Handle navigation after assignment selection
         Should be called in your main app flow
@@ -612,7 +933,7 @@ class ApplicationManager:
             del st.session_state['assignment_just_selected']
             
             # Get the first available section for the role
-            nav_options = get_navigation_options(role, username)
+            nav_options = self.get_navigation_options(role)
             
             if nav_options:
                 # Get the first menu item (skip dashboard/admin panel if exists)

@@ -1,4 +1,4 @@
-# main.py - Refactored for Production with Assignment Navigation Fix
+# main.py - Updated for Section-Based Navigation
 import streamlit as st
 import logging
 import traceback
@@ -39,235 +39,16 @@ def setup_default_users():
     except Exception as e:
         logger.error(f"Error setting up default users: {str(e)}")
 
-def get_first_app_section(options: dict, role: str) -> str:
-    """
-    Get the first appropriate app section after assignment selection
-    
-    Args:
-        options: Navigation options dictionary
-        role: User role
-        
-    Returns:
-        First appropriate section key
-    """
-    option_keys = list(options.keys())
-    
-    # Skip Dashboard, Admin Panel, and Change Assignment for initial navigation
-    skip_keys = ["🏠 Dashboard", "👥 Admin Panel", "🔄 Change Assignment"]
-    
-    for key in option_keys:
-        if key not in skip_keys:
-            return key
-    
-    # If all keys are in skip list, return first available
-    return option_keys[0] if option_keys else None
-
-def handle_post_assignment_navigation(app: ApplicationManager, role: str, options: dict) -> str:
-    """
-    Handle navigation after assignment selection
-    
-    Args:
-        app: Application manager instance
-        role: User role
-        options: Navigation options
-        
-    Returns:
-        The page to navigate to
-    """
-    # Check if assignment was just selected
-    if st.session_state.get('assignment_just_selected'):
-        # Clear the flag
-        del st.session_state['assignment_just_selected']
-        
-        # Get the first appropriate section
-        first_section = get_first_app_section(options, role)
-        
-        if first_section:
-            logger.info(f"Navigating to first section after assignment: {first_section}")
-            # Set query parameter to navigate to this page
-            st.query_params["page"] = first_section
-            return first_section
-    
-    return None
-
-def handle_navigation(app: ApplicationManager, options: dict, role: str):
-    """Handle navigation logic with clickable menu buttons"""
-    option_keys = list(options.keys())
-    if not option_keys:
-        st.error("❌ No navigation options available for your role.")
-        return
-
-    # Handle post-assignment navigation
-    post_assignment_page = handle_post_assignment_navigation(app, role, options)
-    if post_assignment_page:
-        current_page = post_assignment_page
-    else:
-        # Handle URL parameters
-        param_page = st.query_params.get("page", None)
-        if param_page in option_keys:
-            current_page = param_page
-        else:
-            current_page = option_keys[0]
-
-    # Navigation with clickable buttons
-    st.markdown("""
-        <style>
-            .sidebar-title {
-                font-family: 'Arial', sans-serif;
-                # background: #0a84ff22;
-                padding: 6px 10px;
-                border-radius: 6px;
-                font-size: 19px;
-                # font-weight: 10;
-            }
-        </style>
-    """, unsafe_allow_html=True)
-    
-    st.logo('static\logos\SU_logo.png', size='large')
-
-    st.sidebar.markdown("<div class='sidebar-title'>NAVIGATION</div>", unsafe_allow_html=True)
-    for page in option_keys:
-        # Check if this is the current page
-        is_current = (page == current_page)
-        
-        # Create button with different styling for current page
-        if st.sidebar.button(
-            page,
-            key=f"nav_{page}",
-            # width="stretch",
-            type="secondary" if is_current else "tertiary",
-        ):
-            # Update URL and navigate
-            st.query_params["page"] = page
-            st.rerun()
-
-    # Execute selected function
-    try:
-        logger.info(f"User {st.session_state.get('username')} accessed {current_page}")
-        options[current_page]()
-    except Exception as e:
-        logger.error(f"Error in {current_page}: {str(e)}\n{traceback.format_exc()}")
-        st.error(f"❌ Error loading {current_page}. Please try again or contact support.")
-        
-        # Show error details to admins
-        if st.session_state.get('role') in ['superadmin', 'admin']:
-            with st.expander("🔧 Error Details (Admin Only)"):
-                st.code(str(e))
-
-# def handle_navigation(app: ApplicationManager, options: dict, role: str):
-#     """Handle navigation logic using st.navigation"""
-#     option_keys = list(options.keys())
-#     if not option_keys:
-#         st.error("❌ No navigation options available for your role.")
-#         return
-
-#     # Handle post-assignment navigation
-#     post_assignment_page = handle_post_assignment_navigation(app, role, options)
-#     if post_assignment_page:
-#         default_page = post_assignment_page
-#     else:
-#         # Handle URL parameters
-#         param_page = st.query_params.get("page", None)
-#         if param_page in option_keys:
-#             default_page = param_page
-#         else:
-#             default_page = option_keys[0]
-
-#     # Add custom styling for navigation
-#     st.sidebar.markdown("""
-#         <style>
-#             /* Sidebar title styling */
-#             .sidebar-title {
-#                 font-family: 'Arial', sans-serif;
-#                 # background: #0a84ff22;
-#                 padding: 6px 10px;
-#                 border-radius: 6px;
-#                 font-size: 19px;
-#                 # font-weight: 10;
-#             }
-            
-#             /* Navigation links styling */
-#             [data-testid="stSidebarNav"] a {
-#                 background-color: white;
-#                 border-radius: 3px;
-#                 padding: 5px 12px;
-#                 margin-bottom: 3px;
-#                 transition: all 0.2s ease;
-#                 border: 1px solid #e0e0e0;
-#                 font-size: 15px;
-#             }
-            
-#             /* Navigation link hover effect */
-#             [data-testid="stSidebarNav"] a:hover {
-#                 background-color: #e8f5e9;
-#                 border-color: #2E8B57;
-#                 transform: translateX(3px);
-#                 box-shadow: 0 2px 4px rgba(46, 139, 87, 0.15);
-#             }
-            
-#             /* Active/selected navigation link */
-#             [data-testid="stSidebarNav"] a[aria-current="page"] {
-#                 background: linear-gradient(135deg, #2E8B57, #228B22);
-#                 color: white !important;
-#                 border-color: #228B22;
-#                 font-weight: 600;
-#                 box-shadow: 0 3px 6px rgba(46, 139, 87, 0.3);
-#             }
-            
-#             /* Active link icon color */
-#             [data-testid="stSidebarNav"] a[aria-current="page"] span {
-#                 color: white !important;
-#             }
-#         </style>
-#     """, unsafe_allow_html=True)
-
-#     st.sidebar.markdown("<div class='sidebar-title'>NAVIGATION</div>", unsafe_allow_html=True)
-
-#     # Create page objects for st.navigation
-#     pages = []
-#     for page_name in option_keys:
-#         # Create a page object with icon and title
-#         page = st.Page(
-#             options[page_name],
-#             title=page_name,
-#             # icon=page_name.split()[0] if page_name.split() else "📄",
-#             default=(page_name == default_page)
-#         )
-#         pages.append(page)
-
-#     # Use st.navigation to handle page switching
-#     try:
-#         selected_page = st.navigation(pages)
-        
-#         # Update query params with current page
-#         current_page_name = selected_page.title
-#         st.query_params["page"] = current_page_name
-        
-#         # Log navigation
-#         logger.info(f"User {st.session_state.get('username')} accessed {current_page_name}")
-        
-#         # Run the selected page
-#         selected_page.run()
-        
-#     except Exception as e:
-#         logger.error(f"Error in navigation: {str(e)}\n{traceback.format_exc()}")
-#         st.error(f"❌ Error loading page. Please try again or contact support.")
-        
-#         # Show error details to admins
-#         if st.session_state.get('role') in ['superadmin', 'admin']:
-#             with st.expander("🔧 Error Details (Admin Only)"):
-#                 st.code(str(e))
-
 def render_logout_button():
-    """Render logout button"""
+    """Render logout button with improved styling"""
     with st.sidebar:
-        if st.button("Logout", type="primary", width="stretch"):
-            # Clear query parameters
+        # st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("🚪 Logout", type="primary", width="stretch"):
             st.query_params.clear()
             logout()
 
 def validate_session_data(role: str, username: str, user_id: int) -> bool:
-    """Validate user session data - UPDATED to allow None role for teachers"""
+    """Validate user session data - allows None role for teachers"""
     # Check username and user_id
     if not username or not user_id:
         logger.error(f"Invalid session data: role={role}, username={username}, user_id={user_id}")
@@ -275,7 +56,6 @@ def validate_session_data(role: str, username: str, user_id: int) -> bool:
         return False
     
     # Role can be None for teachers who haven't selected an assignment yet
-    # This is valid and expected behavior
     return True
 
 def check_teacher_assignment(role: str) -> bool:
@@ -304,7 +84,7 @@ def check_teacher_assignment(role: str) -> bool:
     return True
 
 def render_authenticated_app(app: ApplicationManager, cookies):
-    """Render the main authenticated application"""
+    """Render the main authenticated application with new navigation"""
     try:
         # Security checks
         if not SecurityManager.check_session_timeout():
@@ -329,14 +109,11 @@ def render_authenticated_app(app: ApplicationManager, cookies):
         # Render header
         app.render_header()
         
-        # Render user info
-        app.render_user_info(role, username)
+        # Setup sidebar with logo and user info
+        st.logo('static/logos/SU_logo.png', size='large')
         
-        # Get navigation options based on role
-        options = app.get_navigation_options(role)
-        
-        # Handle navigation (including post-assignment redirect)
-        handle_navigation(app, options, role)
+        # Handle navigation with sections
+        app.handle_navigation(role, username)
         
         # Render logout button
         render_logout_button()
@@ -345,7 +122,6 @@ def render_authenticated_app(app: ApplicationManager, cookies):
         
         # Update user activity timestamp
         st.session_state.last_activity = datetime.now()
-        # cookies["last_activity"] = st.session_state.last_activity.isoformat()
         
     except Exception as e:
         logger.error(f"Error in authenticated app: {str(e)}\n{traceback.format_exc()}")
@@ -380,17 +156,16 @@ def main():
         if cookies is None:
             st.stop()
         
-        # Handle authentication - this will either show login form or proceed if authenticated
+        # Handle authentication
         login(cookies)
         
-        # If we reach this point, user is authenticated
-        # Check if user is actually authenticated (login function should handle this)
-        if st.session_state.get("authenticated"):
+        # If authenticated, render the app
+        if st.session_state.get("authenticated", False):
             render_authenticated_app(app, cookies)
         else:
-            # This should not happen if login function works correctly
             logger.warning("User reached main app without authentication")
             st.stop()
+            pass
         
     except Exception as e:
         logger.critical(f"Critical error in main application: {str(e)}\n{traceback.format_exc()}")
@@ -410,5 +185,4 @@ if __name__ == "__main__":
         if logger:
             logger.critical(f"Application startup failed: {str(e)}")
         else:
-            # If logger is not available, at least print to console
             print(f"CRITICAL: Application startup failed: {str(e)}")

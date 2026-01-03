@@ -20,8 +20,9 @@ def logout():
         # Clear session and cookies
         if SessionManager.clear_session(cookies):
             logger.info(f"User {username} logged out successfully")
-            st.success(MESSAGES["logout_success"])
-            time.sleep(0.5)  # Brief pause for user feedback
+            # st.success(MESSAGES["logout_success"])
+            # time.sleep(0.5)  # Brief pause for user feedback
+            st.session_state.authenticated = False
             st.rerun()
         else:
             raise Exception("Failed to clear session")
