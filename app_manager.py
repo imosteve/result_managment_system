@@ -600,7 +600,8 @@ class ApplicationManager:
             if st.session_state.get('role') in ['superadmin', 'admin']:
                 with st.expander("🔧 Error Details (Admin Only)"):
                     st.code(str(e))
-     
+       
+    # Add this method to ApplicationManager class in app_manager.py
     def handle_post_assignment_navigation(self, role: str, username: str):
         """
         Handle navigation after assignment selection
