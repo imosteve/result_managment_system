@@ -1,6 +1,6 @@
 /* Hide Streamlit default elements */
 /* #MainMenu {visibility: visible;} */
-/* footer {visibility: hidden;} */
+footer {visibility: hidden;}
 /* header {visibility: hidden;} */
 
 .stApp {
@@ -9,18 +9,13 @@
 
 /* Responsive container */
 .block-container {
-    padding-top: 1rem;
-    padding-left: 1rem;
-    padding-right: 1rem;
     max-width: 100% !important;
 }
 
 /* Desktop styles */
 @media (min-width: 768px) {
     .block-container {
-        max-width: 500px !important;
-        /* margin: auto; */
-        padding-top: 2rem;
+        max-width: 1000px !important;
     }
 }
 
@@ -70,8 +65,8 @@
 }
 
 .main-header {
-    background: linear-gradient(135deg, #2E8B57, #228B22);
-    /* padding: 15px; */
+    background: linear-gradient(135deg, #198046, #228B22);
+    /* padding: 2px; */
     border-radius: 5px;
     margin-bottom: 5px;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
@@ -84,7 +79,7 @@
     text-align: center;
     margin: 0;
     text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
-    line-height: 1.2;
+    line-height: 0.9;
 }
 
 .user-info-card {

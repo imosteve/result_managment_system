@@ -56,7 +56,7 @@ def admin_panel():
     with col2:
         st.markdown(f"<div class='custom-metric'><div class='label'>Total Classes</div><div class='value'>{stats['classes']}</div></div>", unsafe_allow_html=True)
     with col3:
-        st.markdown(f"<div class='custom-metric'><div class='label'>Total Assignments</div><div class='value'>{stats['assignments']}</div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='custom-metric'><div class='label'>Total Assigned</div><div class='value'>{stats['assignments']}</div></div>", unsafe_allow_html=True)
     with col4:
         st.markdown(f"<div class='custom-metric'><div class='label'>Total Students</div><div class='value'>{stats['students']}</div></div>", unsafe_allow_html=True)
     with col5:

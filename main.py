@@ -158,21 +158,9 @@ def validate_session_data(role: str, username: str, user_id: int) -> bool:
         logger.error(f"Invalid session data: role={role}, username={username}, user_id={user_id}")
         SecurityManager.force_logout("Invalid session data")
         return False
-    
-    # Role can be None for teachers who haven't selected an assignment yet
-    # This is valid and expected behavior
     return True
 
 def check_teacher_assignment(role: str) -> bool:
-    """
-    Check if teacher has selected an assignment
-    
-    Args:
-        role: User role
-        
-    Returns:
-        True if assignment check passed, False otherwise
-    """
     # Teachers must have an assignment selected
     if role in ["class_teacher", "subject_teacher"]:
         if "assignment" not in st.session_state:
@@ -204,9 +192,9 @@ def render_authenticated_app(app: ApplicationManager, cookies):
         if not validate_session_data(role, username, user_id):
             return  # Validation failed, user logged out
         
-        # Check teacher assignment (if applicable)
-        if not check_teacher_assignment(role):
-            return  # Teacher needs to select assignment
+        # # Check teacher assignment (if applicable)
+        # if not check_teacher_assignment(role):
+        #     return  # Teacher needs to select assignment
         
         # Render main application
         st.markdown('<div class="main-content">', unsafe_allow_html=True)

@@ -65,7 +65,7 @@ class SecurityManager:
             if time_diff.total_seconds() > timeout_seconds:
                 logger.warning(f"Session timeout for user {st.session_state.get('username')}")
                 st.warning("Session expired. You have been logged out.")
-                time.sleep(2)
+                time.sleep(1)
                 logout()
                 return False
 

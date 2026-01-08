@@ -43,12 +43,6 @@ class ApplicationManager:
         except Exception as e:
             logger.warning(f"Could not load main styles: {e}")
 
-        # st.markdown("""
-        # <style>
-        # 
-        # </style>
-        # """, unsafe_allow_html=True)
-
     def initialize_mobile_support(self):
             """Initialize mobile-specific features without localStorage usage"""
             
