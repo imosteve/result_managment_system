@@ -93,7 +93,7 @@ def streamlit_paginator(data, table_name):
         if len(filtered_df) < len(df):
             st.info(f"Found {len(filtered_df)} matching results out of {len(df)} total entries")
         
-        col_page, col_items = st.columns([1, 3], vertical_alignment="bottom", gap="large")
+        col_page, col_items = st.columns([1, 4], vertical_alignment="bottom", gap="large")
         # Pagination settings
         with col_page:
             items_per_page = st.selectbox(
@@ -108,7 +108,7 @@ def streamlit_paginator(data, table_name):
 
         # Pagination controls in one compact row
         with col_items:
-            col1, col2, col3 = st.columns([0.8, 3, 0.6])
+            col1, col2, col3 = st.columns([1, 3, 0.8])
             
             with col1:
                 if st.button("◀ Previous", key=f"prev_{table_name}", disabled=(st.session_state.get(f"page_{table_name}", 1) <= 1)):

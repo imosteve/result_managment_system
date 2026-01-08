@@ -1,49 +1,92 @@
 /* Hide Streamlit default elements */
-#MainMenu {visibility: hidden;}
+/* #MainMenu {visibility: visible;} */
 footer {visibility: hidden;}
 /* header {visibility: hidden;} */
 
-/* Custom background color */
 .stApp {
     background-color: #e5ece4;
 }
 
-/* Make titles bigger */
-h1 {
-    font-size: 3rem !important;
-    color: #2E86C1;
+/* Responsive container */
+.block-container {
+    max-width: 100% !important;
 }
 
-/* Center content */
-.main-content {
-    padding-top: 2rem;
-    max-width: 300px !important;
-    /* margin: auto; */
+/* Desktop styles */
+@media (min-width: 768px) {
+    .block-container {
+        max-width: 1000px !important;
+    }
+}
+
+/* Mobile specific styles */
+@media (max-width: 767px) {
+    .block-container {
+        padding-top: 0.5rem !important;
+        padding-left: 0.5rem !important;
+        padding-right: 0.5rem !important;
+    }
+    
+    .main-header h2 {
+        font-size: 20px !important;
+        padding: 10px !important;
+    }
+    
+    /* Make buttons full width on mobile */
+    .stButton > button {
+        width: 100% !important;
+        margin-bottom: 0.5rem;
+    }
+    
+    /* Responsive selectbox */
+    .stSelectbox > div > div {
+        font-size: 14px;
+    }
+    
+    /* Responsive text inputs */
+    .stTextInput > div > div > input {
+        font-size: 16px; /* Prevents zoom on iOS */
+    }
+    
+    /* Responsive metrics */
+    .custom-metric {
+        margin-bottom: 1rem !important;
+    }
+    
+    /* Responsive dataframes */
+    .stDataFrame {
+        font-size: 12px !important;
+    }
+    
+    /* Fix sidebar on mobile */
+    .css-1d391kg {
+        padding-top: 1rem;
+    }
 }
 
 .main-header {
-    /* background: linear-gradient(135deg, #2E8B57, #228B22); */
-    /* padding: 10px; */
-    /* border-radius: 10px; */
+    background: linear-gradient(135deg, #198046, #228B22);
+    /* padding: 2px; */
+    border-radius: 5px;
     margin-bottom: 5px;
-    /* height: 50px; */
-    /* box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); */
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
 .main-header h2 {
-    color: rgb(1, 137, 3);
+    color: white;
     font-size: 35px;
     font-weight: bold;
     text-align: center;
     margin: 0;
-    /* text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3); */
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+    line-height: 0.9;
 }
 
 .user-info-card {
     background-color: #f8f9fa;
     border: 1px solid #dee2e6;
     border-radius: 8px;
-    padding: 10px;
+    padding: 15px;
     margin-bottom: 20px;
 }
 
@@ -72,4 +115,37 @@ h1 {
     padding: 12px;
     border-radius: 5px;
     margin: 10px 0;
+}
+
+/* Ensure touch targets are large enough on mobile */
+@media (max-width: 767px) {
+    button, .stSelectbox, .stTextInput {
+        min-height: 44px;
+    }
+}
+
+/* Responsive tables */
+@media (max-width: 767px) {
+    .stDataFrame table {
+        font-size: 11px !important;
+    }
+    
+    .stDataFrame th, .stDataFrame td {
+        padding: 4px !important;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 80px;
+    }
+}
+
+/* Mobile navigation improvements */
+@media (max-width: 767px) {
+    .css-1v0mbdj {
+        padding: 0.5rem;
+    }
+    
+    .css-1y4p8pa {
+        padding: 0.5rem;
+    }
 }

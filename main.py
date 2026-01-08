@@ -39,6 +39,110 @@ def setup_default_users():
     except Exception as e:
         logger.error(f"Error setting up default users: {str(e)}")
 
+def get_first_app_section(options: dict, role: str) -> str:
+    """
+    Get the first appropriate app section after assignment selection
+    
+    Args:
+        options: Navigation options dictionary
+        role: User role
+        
+    Returns:
+        First appropriate section key
+    """
+    option_keys = list(options.keys())
+    
+    # Skip Profile, Dashboard, Admin Panel, and Change Assignment for initial navigation
+    skip_keys = ["👤 My Profile", "🏠 Dashboard", "🔧 System Dashboard", "👥 Admin Panel", "🔄 Change Assignment"]
+    
+    for key in option_keys:
+        if key not in skip_keys:
+            return key
+    
+    # If all keys are in skip list, return first available (excluding profile)
+    for key in option_keys:
+        if key != "👤 My Profile":
+            return key
+    
+    return option_keys[0] if option_keys else None
+
+def handle_post_assignment_navigation(app: ApplicationManager, role: str, options: dict) -> str:
+    """
+    Handle navigation after assignment selection
+    
+    Args:
+        app: Application manager instance
+        role: User role
+        options: Navigation options
+        
+    Returns:
+        The page to navigate to
+    """
+    # Check if assignment was just selected
+    if st.session_state.get('assignment_just_selected'):
+        # Clear the flag
+        del st.session_state['assignment_just_selected']
+        
+        # Get the first appropriate section
+        first_section = get_first_app_section(options, role)
+        
+        if first_section:
+            logger.info(f"Navigating to first section after assignment: {first_section}")
+            # Set query parameter to navigate to this page
+            st.query_params["page"] = first_section
+            return first_section
+    
+    return None
+
+def handle_navigation(app: ApplicationManager, options: dict, role: str):
+    """Handle navigation logic with clickable menu buttons"""
+    option_keys = list(options.keys())
+    if not option_keys:
+        st.error("❌ No navigation options available for your role.")
+        return
+
+    # Handle post-assignment navigation
+    post_assignment_page = handle_post_assignment_navigation(app, role, options)
+    if post_assignment_page:
+        current_page = post_assignment_page
+    else:
+        # Handle URL parameters
+        param_page = st.query_params.get("page", None)
+        if param_page in option_keys:
+            current_page = param_page
+        else:
+            # Default to first page (which is now "My Profile")
+            current_page = option_keys[0]
+
+    st.logo('static/logos/SU_logo.png', size='large')
+    
+    for idx, page in enumerate(option_keys):
+        # Check if this is the current page
+        is_current = (page == current_page)
+        
+        # Create button with different styling for current page
+        if st.sidebar.button(
+            page,
+            key=f"nav_{page}",
+            type="secondary" if is_current else "tertiary",
+        ):
+            # Update URL and navigate
+            st.query_params["page"] = page
+            st.rerun()
+
+    # Execute selected function
+    try:
+        logger.info(f"User {st.session_state.get('username')} accessed {current_page}")
+        options[current_page]()
+    except Exception as e:
+        logger.error(f"Error in {current_page}: {str(e)}\n{traceback.format_exc()}")
+        st.error(f"❌ Error loading {current_page}. Please try again or contact support.")
+        
+        # Show error details to admins
+        if st.session_state.get('role') in ['superadmin', 'admin']:
+            with st.expander("🔧 Error Details (Admin Only)"):
+                st.code(str(e))
+
 def render_logout_button():
     """Render logout button with improved styling"""
     with st.sidebar:
@@ -54,20 +158,9 @@ def validate_session_data(role: str, username: str, user_id: int) -> bool:
         logger.error(f"Invalid session data: role={role}, username={username}, user_id={user_id}")
         SecurityManager.force_logout("Invalid session data")
         return False
-    
-    # Role can be None for teachers who haven't selected an assignment yet
     return True
 
 def check_teacher_assignment(role: str) -> bool:
-    """
-    Check if teacher has selected an assignment
-    
-    Args:
-        role: User role
-        
-    Returns:
-        True if assignment check passed, False otherwise
-    """
     # Teachers must have an assignment selected
     if role in ["class_teacher", "subject_teacher"]:
         if "assignment" not in st.session_state:
@@ -99,9 +192,9 @@ def render_authenticated_app(app: ApplicationManager, cookies):
         if not validate_session_data(role, username, user_id):
             return  # Validation failed, user logged out
         
-        # Check teacher assignment (if applicable)
-        if not check_teacher_assignment(role):
-            return  # Teacher needs to select assignment
+        # # Check teacher assignment (if applicable)
+        # if not check_teacher_assignment(role):
+        #     return  # Teacher needs to select assignment
         
         # Render main application
         st.markdown('<div class="main-content">', unsafe_allow_html=True)
@@ -109,11 +202,11 @@ def render_authenticated_app(app: ApplicationManager, cookies):
         # Render header
         app.render_header()
         
-        # Setup sidebar with logo and user info
-        st.logo('static/logos/SU_logo.png', size='large')
+        # Get navigation options based on role (NOW INCLUDES PROFILE)
+        options = app.get_navigation_options(role, username)
         
-        # Handle navigation with sections
-        app.handle_navigation(role, username)
+        # Handle navigation (including post-assignment redirect)
+        handle_navigation(app, options, role)
         
         # Render logout button
         render_logout_button()
@@ -159,8 +252,7 @@ def main():
         # Handle authentication
         login(cookies)
         
-        # If authenticated, render the app
-        if st.session_state.get("authenticated", False):
+        if st.session_state.get("authenticated"):
             render_authenticated_app(app, cookies)
         else:
             logger.warning("User reached main app without authentication")

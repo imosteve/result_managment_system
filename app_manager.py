@@ -39,175 +39,10 @@ class ApplicationManager:
    
     def setup_custom_css(self):
         """Setup custom CSS styling with mobile responsiveness"""
-        # try:
-        #     inject_login_css("templates/main_styles.css")
-        # except Exception as e:
-        #     logger.warning(f"Could not load main styles: {e}")
-
-        st.markdown("""
-        <style>
-        # MainMenu {visibility: visible;}
-        footer {visibility: hidden;}
-        # header {visibility: hidden;}
-
-        # .stApp {
-        #     background-color: #e5ece4;
-        # }
-        
-        # /* Push sidebar down */
-        # [data-testid="stSidebar"] {
-        #     margin-top: 70px;
-        # }
-                    
-        /* Responsive container */
-        .block-container {
-            padding-top: 1rem !important;
-            padding-left: 1rem;
-            padding-right: 1rem;
-            max-width: 100% !important;
-        }
-        
-        /* Desktop styles */
-        @media (min-width: 768px) {
-            .block-container {
-                max-width: 500px !important;
-                # margin: auto;
-                # padding-top: 2rem;
-            }
-        }
-        
-        /* Mobile specific styles */
-        @media (max-width: 767px) {
-            .block-container {
-                padding-top: 0.5rem !important;
-                padding-left: 0.5rem !important;
-                padding-right: 0.5rem !important;
-            }
-            
-            .main-header h2 {
-                font-size: 20px !important;
-                padding: 10px !important;
-            }
-            
-            /* Make buttons full width on mobile */
-            .stButton > button {
-                width: 100% !important;
-                margin-bottom: 0.5rem;
-            }
-            
-            /* Responsive selectbox */
-            .stSelectbox > div > div {
-                font-size: 14px;
-            }
-            
-            /* Responsive text inputs */
-            .stTextInput > div > div > input {
-                font-size: 16px; /* Prevents zoom on iOS */
-            }
-            
-            /* Responsive metrics */
-            .custom-metric {
-                margin-bottom: 1rem !important;
-            }
-            
-            /* Responsive dataframes */
-            .stDataFrame {
-                font-size: 12px !important;
-            }
-            
-            /* Fix sidebar on mobile */
-            .css-1d391kg {
-                padding-top: 1rem;
-            }
-        }
-        
-        .main-header {
-            background: linear-gradient(135deg, #2E8B57, #228B22);
-            # padding: 15px;
-            border-radius: 5px;
-            margin-bottom: 5px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        }
-        
-        .main-header h2 {
-            color: white;
-            font-size: 35px;
-            font-weight: bold;
-            text-align: center;
-            margin: 0;
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
-            line-height: 1.2;
-        }
-        
-        .user-info-card {
-            background-color: #f8f9fa;
-            border: 1px solid #dee2e6;
-            border-radius: 8px;
-            padding: 15px;
-            margin-bottom: 20px;
-        }
-        
-        .error-container {
-            background-color: #f8d7da;
-            border: 1px solid #f5c6cb;
-            color: #721c24;
-            padding: 12px;
-            border-radius: 5px;
-            margin: 10px 0;
-        }
-        
-        .success-container {
-            background-color: #d4edda;
-            border: 1px solid #c3e6cb;
-            color: #155724;
-            padding: 12px;
-            border-radius: 5px;
-            margin: 10px 0;
-        }
-        
-        .warning-container {
-            background-color: #fff3cd;
-            border: 1px solid #ffeaa7;
-            color: #856404;
-            padding: 12px;
-            border-radius: 5px;
-            margin: 10px 0;
-        }
-        
-        /* Ensure touch targets are large enough on mobile */
-        @media (max-width: 767px) {
-            button, .stSelectbox, .stTextInput {
-                min-height: 44px;
-            }
-        }
-        
-        /* Responsive tables */
-        @media (max-width: 767px) {
-            .stDataFrame table {
-                font-size: 11px !important;
-            }
-            
-            .stDataFrame th, .stDataFrame td {
-                padding: 4px !important;
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                max-width: 80px;
-            }
-        }
-        
-        /* Mobile navigation improvements */
-        @media (max-width: 767px) {
-            .css-1v0mbdj {
-                padding: 0.5rem;
-            }
-            
-            .css-1y4p8pa {
-                padding: 0.5rem;
-            }
-        }
-        </style>
-        """, unsafe_allow_html=True)
+        try:
+            inject_login_css("templates/main_styles.css")
+        except Exception as e:
+            logger.warning(f"Could not load main styles: {e}")
 
     def initialize_mobile_support(self):
             """Initialize mobile-specific features without localStorage usage"""
@@ -432,91 +267,71 @@ class ApplicationManager:
                     pointer-events: none; /* avoid blocking sidebar toggle */
                 }}
 
-                /* Inner container matches main content width */
-                .main-header-inner {{
-                    width: 100%;
-                    max-width: calc(100% - 21rem); /* sidebar width */
-                    margin-left: 21rem;
-                    display: flex;
-                    justify-content: center;
-                }}
-
-                .main-header h2 {{
-                    margin: 0;
-                    color: white;
-                    font-size: 20px;
-                    font-weight: 700;
-                }}
-
-                /* When sidebar is collapsed */
-                [data-testid="stSidebar"][aria-expanded="false"] ~ .main-header .main-header-inner {{
-                    margin-left: 0;
-                    max-width: 100%;
-                }}
-            </style>
-
-            <div class="main-header">
-                <div class="main-header-inner">
-                    <h2>{APP_CONFIG["school_name"]}</h2>
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
-    def handle_navigation(self, role: str, username: str):
-        """
-        Handle navigation with sections - User info now integrated
-        
-        Args:
-            role: User role
-            username: Username
-        """
-        # Get navigation structure (now includes user info)
-        navigation_structure = get_navigation_options(role, username)
-        
-        if not navigation_structure:
-            st.error("❌ No navigation options available for your role.")
-            return
-        
-        # Convert navigation structure to st.navigation format
-        pages_dict = {}
-        default_page = None
-        
-        for section_name, pages_list in navigation_structure.items():
-            section_pages = []
+    # app_manager.py - UPDATE the get_navigation_options method
+    def get_navigation_options(self, role: str, username: str) -> Dict[str, Callable]:
+        """Get navigation options based on user role with profile included"""
+        try:
+            # Import functions with error handling
+            from app_sections import (
+                manage_comments,
+                manage_classes, register_students, manage_subjects, 
+                enter_scores, view_broadsheet, generate_reports,
+                system_dashboard, admin_panel, manage_comment_templates,
+                next_term_info, user_profile
+            )
+            from auth.assignment_selection import select_assignment
             
-            for page_config in pages_list:
-                # Create st.Page object
-                page = st.Page(
-                    page_config["function"],
-                    title=page_config["title"],
-                    icon=page_config["icon"],
-                    default=page_config.get("default", False)
-                )
-                
-                section_pages.append(page)
-                
-                # Track default page
-                if page_config.get("default", False):
-                    default_page = page
+            # Create user profile function
+            profile_function = user_profile.create_user_info_page(role, username)
             
-            pages_dict[section_name] = section_pages
-        
-        # Add custom styling for navigation
-        st.markdown("""
-            <style>
-                /* Sidebar styling */
-                [data-testid="stSidebarContent"] {
-                    background-color: #f8f9fa;
+            base_options = {}
+            
+            if role == "superadmin":
+                base_options = {
+                    "👤 My Profile": profile_function,
+                    "🔧 System Dashboard": system_dashboard.system_dashboard,
+                    "👥 Admin Panel": admin_panel.admin_panel,
+                    "🗓️ Next Term Info": next_term_info.next_term_info,
+                    "📝 Comments Template": manage_comment_templates.manage_comment_templates,
+                    "🏫 Manage Classes": manage_classes.create_class_section,
+                    "👥 Register Students": register_students.register_students,
+                    "📚 Manage Subjects": manage_subjects.add_subjects,
+                    "📝 Enter Scores": enter_scores.enter_scores,
+                    "📝 Manage Comments": manage_comments.manage_comments,
+                    "📋 View Broadsheet": view_broadsheet.generate_broadsheet,
+                    "📄 Generate Reports": generate_reports.report_card_section
+                }
+            elif role == "admin":
+                base_options = {
+                    "👤 My Profile": profile_function,
+                    "👥 Admin Panel": admin_panel.admin_panel,
+                    "🗓️ Next Term Info": next_term_info.next_term_info,
+                    "📝 Comments Template": manage_comment_templates.manage_comment_templates,
+                    "🏫 Manage Classes": manage_classes.create_class_section,
+                    "👥 Register Students": register_students.register_students,
+                    "📚 Manage Subjects": manage_subjects.add_subjects,
+                    "📝 Enter Scores": enter_scores.enter_scores,
+                    "📝 Manage Comments": manage_comments.manage_comments,
+                    "📋 View Broadsheet": view_broadsheet.generate_broadsheet,
+                    "📄 Generate Reports": generate_reports.report_card_section
+                }
+            elif role == "class_teacher":
+                base_options = {
+                    "👤 My Profile": profile_function,
+                    "👥 Register Students": register_students.register_students,
+                    "📚 Manage Subjects": manage_subjects.add_subjects,
+                    "📝 Manage Comments": manage_comments.manage_comments,
+                    "📋 View Broadsheet": view_broadsheet.generate_broadsheet,
+                    "📄 Generate Reports": generate_reports.report_card_section,
+                    "🔄 Change Assignment": select_assignment
                 }
                 
-                /* Make User Profile section stand out */
-                [data-testid="stSidebarNav"] > div:first-child {
-                    background: linear-gradient(135deg, rgba(46, 139, 87, 0.1) 0%, rgba(34, 139, 34, 0.1) 100%);
-                    padding: 10px;
-                    border-radius: 10px;
-                    margin-bottom: 15px;
+            elif role == "subject_teacher":
+                base_options = {
+                    "👤 My Profile": profile_function,
+                    "📝 Enter Scores": enter_scores.enter_scores,
+                    "📋 View Broadsheet": view_broadsheet.generate_broadsheet,
+                    "🔄 Change Assignment": select_assignment
                 }
                 
                 /* Special styling for User Profile header */
@@ -596,10 +411,15 @@ class ApplicationManager:
             logger.error(f"Error in navigation: {str(e)}")
             st.error(f"❌ Error loading page. Please try again or contact support.")
             
-            # Show error details to admins
-            if st.session_state.get('role') in ['superadmin', 'admin']:
-                with st.expander("🔧 Error Details (Admin Only)"):
-                    st.code(str(e))
+            return base_options
+            
+        except ImportError as e:
+            logger.error(f"Error importing navigation modules: {e}")
+            # Return minimal navigation if imports fail
+            return {
+                "👤 My Profile": profile_function,
+                "🔧 System Dashboard": system_dashboard.system_dashboard
+            }
        
     # Add this method to ApplicationManager class in app_manager.py
     def handle_post_assignment_navigation(self, role: str, username: str):

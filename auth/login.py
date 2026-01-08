@@ -15,18 +15,10 @@ logger = logging.getLogger(__name__)
 
 def reset_main_app_styles():
     """Reset styles for main app after login"""
-    st.markdown("""
-    <style>
-    .stApp {
-        min-height: auto;
-    }
-    .block-container {
-        padding-top: 3rem !important;
-        padding-bottom: 2rem !important;
-        max-width: 1000px !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+    try:
+        inject_login_css("templates/main_styles.css")
+    except Exception as e:
+        logger.warning(f"Could not load main styles: {e}")
 
 def render_login_form() -> tuple[str, str, bool]:
     """Render the login form"""
@@ -37,7 +29,7 @@ def render_login_form() -> tuple[str, str, bool]:
     with st.form("login_form", clear_on_submit=False):
         username = st.text_input("Username", placeholder="Enter your username")
         password = st.text_input("Password", type="password", placeholder="Enter your password")
-        login_button = st.form_submit_button("Sign in", use_container_width=True)
+        login_button = st.form_submit_button("Sign in", width="content")
         
         return username, password, login_button
 
@@ -124,7 +116,8 @@ def login(cookies):
             
             # Admins go directly to main app
             if role in ["admin", "superadmin"]:
-                reset_main_app_styles()
+                # reset_main_app_styles()
+                inject_login_css("templates/main_styles.css")
                 return
             
             # Teachers need assignment selection
@@ -140,6 +133,7 @@ def login(cookies):
             
             # Show assignment selection if needed
             if "assignment" not in st.session_state:
+                inject_login_css("templates/login_styles.css")
                 select_assignment()
                 return
             else:
@@ -166,6 +160,7 @@ def login(cookies):
                         logout()
                     st.stop()
                     return
+                inject_login_css("templates/login_styles.css")
                 select_assignment()
                 return
             else:
