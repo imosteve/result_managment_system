@@ -8,7 +8,6 @@ from streamlit_cookies_manager import EncryptedCookieManager
 from config import APP_CONFIG, COOKIE_PASSWORD
 from database import create_tables, get_all_classes
 from main_utils import inject_login_css, render_page_header
-from app_sections.user_profile import get_navigation_options
 
 logger = logging.getLogger(__name__)
 
@@ -248,24 +247,12 @@ class ApplicationManager:
             return None
 
     def render_header(self):
-        st.markdown(
-            f"""
-            <style>
-                /* Header aligned with main content */
-                .main-header {{
-                    position: fixed;
-                    top: 0;
-                    left: 0;
-                    width: 100%;
-                    height: 64px;
-                    background-color: #3498DB;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    z-index: 999;
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.15);
-                    pointer-events: none; /* avoid blocking sidebar toggle */
-                }}
+        """Render application header"""
+        st.markdown(f"""
+        <div class="main-header">
+            <h2>{APP_CONFIG['school_name']}</h2>
+        </div>
+        """, unsafe_allow_html=True)
 
     # app_manager.py - UPDATE the get_navigation_options method
     def get_navigation_options(self, role: str, username: str) -> Dict[str, Callable]:
@@ -333,83 +320,6 @@ class ApplicationManager:
                     "📋 View Broadsheet": view_broadsheet.generate_broadsheet,
                     "🔄 Change Assignment": select_assignment
                 }
-                
-                /* Special styling for User Profile header */
-                [data-testid="stSidebarNav"] > div:first-child > div:first-child {
-                    font-size: 14px;
-                    font-weight: 700;
-                    color: #228B22;
-                }
-                
-                /* Navigation links styling */
-                [data-testid="stSidebarNav"] a {
-                    # background-color: white;
-                    border-radius: 8px;
-                    padding: 2px 12px;
-                    margin: 2px 4px;
-                    transition: all 0.2s ease;
-                    # border: 1px solid #e0e0e0;
-                }
-                
-                /* User Profile link special styling */
-                [data-testid="stSidebarNav"] > div:first-child a {
-                    background: linear-gradient(135deg, #2E8B57, #228B22);
-                    color: white !important;
-                    border: none;
-                    font-weight: 600;
-                }
-                
-                [data-testid="stSidebarNav"] > div:first-child a span,
-                [data-testid="stSidebarNav"] > div:first-child a div {
-                    color: white !important;
-                }
-                
-                /* Navigation link hover effect */
-                [data-testid="stSidebarNav"] a:hover {
-                    background-color: #e8f5e9;
-                    border-color: #2E8B57;
-                    transform: translateX(3px);
-                    box-shadow: 0 2px 4px rgba(46, 139, 87, 0.15);
-                }
-                
-                /* User Profile link hover */
-                [data-testid="stSidebarNav"] > div:first-child a:hover {
-                    background: linear-gradient(135deg, #228B22, #1a6e1a);
-                    transform: scale(1.02);
-                }
-                
-                /* Active/selected navigation link */
-                [data-testid="stSidebarNav"] a[aria-current="page"] {
-                    background: linear-gradient(135deg, #2E8B57, #228B22);
-                    color: white !important;
-                    border-color: #228B22;
-                    font-weight: 600;
-                    box-shadow: 0 3px 6px rgba(46, 139, 87, 0.3);
-                }
-                
-                /* Active link icon and text color */
-                [data-testid="stSidebarNav"] a[aria-current="page"] span,
-                [data-testid="stSidebarNav"] a[aria-current="page"] div {
-                    color: white !important;
-                }
-            </style>
-        """, unsafe_allow_html=True)
-        
-        # Create navigation with sections
-        pg = st.navigation(pages_dict)
-        
-        # Log navigation
-        try:
-            logger.info(f"User {st.session_state.get('username')} accessed {pg.title}")
-        except:
-            pass
-        
-        # Run the selected page
-        try:
-            pg.run()
-        except Exception as e:
-            logger.error(f"Error in navigation: {str(e)}")
-            st.error(f"❌ Error loading page. Please try again or contact support.")
             
             return base_options
             
@@ -422,7 +332,7 @@ class ApplicationManager:
             }
        
     # Add this method to ApplicationManager class in app_manager.py
-    def handle_post_assignment_navigation(self, role: str, username: str):
+    def handle_post_assignment_navigation(self, role: str):
         """
         Handle navigation after assignment selection
         Should be called in your main app flow
@@ -433,7 +343,7 @@ class ApplicationManager:
             del st.session_state['assignment_just_selected']
             
             # Get the first available section for the role
-            nav_options = get_navigation_options(role, username)
+            nav_options = self.get_navigation_options(role)
             
             if nav_options:
                 # Get the first menu item (skip dashboard/admin panel if exists)
