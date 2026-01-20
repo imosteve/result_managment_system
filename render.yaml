@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: result-management-system
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: streamlit run main.py --server.port $PORT --server.headless true
