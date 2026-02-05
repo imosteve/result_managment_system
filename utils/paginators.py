@@ -47,6 +47,10 @@ def streamlit_paginator(data, table_name):
         # Column-specific filter
         with col1:
             col_fil_col, col_fil_val = st.columns(2)
+            # Initialize variables with default values to prevent UnboundLocalError
+            filter_col = st.session_state[f"paginator_col_{table_name}"]
+            filter_value = st.session_state[f"paginator_value_{table_name}"]
+            
             if len(df.columns) > 0:
                 with col_fil_col:
                     # Determine the correct index for the selectbox
@@ -193,6 +197,10 @@ def streamlit_filter(data, table_name):
         # Column-specific filter
         with col1:
             col_fil_col, col_fil_val = st.columns(2)
+            # Initialize variables with default values to prevent UnboundLocalError
+            filter_col = st.session_state[f"filter_col_{table_name}"]
+            filter_value = st.session_state[f"filter_value_{table_name}"]
+            
             if len(df.columns) > 0:
                 with col_fil_col:
                     # Determine the correct index for the selectbox
