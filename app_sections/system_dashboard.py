@@ -16,6 +16,7 @@ from database import (
 )
 from main_utils import inject_login_css, render_page_header, format_ordinal, inject_metric_css
 from config import DB_CONFIG, APP_CONFIG
+from database.connection import DB_PATH
 from utils.paginators import streamlit_paginator
 
 logger = logging.getLogger(__name__)
@@ -196,14 +197,15 @@ def render_system_health_tab():
 
 def render_database_management_tab():
     """Render database management tab"""
-    st.subheader("💾 Database Management")
+    # st.subheader("💾 Database Management")
     
     # Backup Section
-    st.markdown("#### 📦 Database Backup")
-    col1, col2 = st.columns([2, 1], vertical_alignment="bottom")
+    st.markdown("#### 📦 Database Backup", 
+                help="Create a backup of the current database. Backups are stored in the backups directory."
+                )
+    col1, col2, download = st.columns([2, 1, 1], vertical_alignment="top")
     
     with col1:
-        st.info("Create a backup of the current database. Backups are stored in the backups directory.")
         backup_name = st.text_input(
             "Backup Name (optional)",
             placeholder=f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
@@ -214,6 +216,22 @@ def render_database_management_tab():
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("💾 Create Backup", type="primary", width='stretch'):
             create_database_backup(backup_name if backup_name else None)
+    
+    with download:
+        st.markdown("<br>", unsafe_allow_html=True)
+        sch_abrv = APP_CONFIG["sch_abrv"]
+
+        # Read the actual file as bytes
+        with open(DB_PATH, "rb") as f:
+            db_data = f.read()
+
+        st.download_button(
+            label="Download DB",
+            data=db_data,
+            file_name=f"{sch_abrv}_database.db",
+            mime="application/octet-stream",
+            use_container_width=True
+    )
     
     # List existing backups
     st.markdown("---")
@@ -231,7 +249,13 @@ def render_database_management_tab():
                 "Age": backup['age']
             })
         
-        streamlit_paginator(backup_data, table_name="backups")
+        # streamlit_paginator(backup_data, table_name="backups")
+        if len(backup_data) > 0:
+            st.dataframe(
+                backup_data, 
+                width="stretch", 
+                hide_index=True
+                )
         
         # Initialize session state for confirmations
         if 'show_restore_confirm' not in st.session_state:
@@ -344,6 +368,7 @@ def render_database_management_tab():
                         delete_backup_file(backup_name)
                         st.session_state.show_delete_backup_confirm = False
                         st.session_state.selected_delete_backup = None
+                        st.rerun()
             
             confirm_delete_backup()
     else:
@@ -353,25 +378,26 @@ def render_database_management_tab():
     st.markdown("---")
     st.markdown("#### ⚡ Database Optimization")
     
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     
     with col1:
         # Rebuild database file to reclaim unused space and improve performance.
-        st.markdown("**Vacuum Database**")
-        st.info("Rebuild database file to improve performance.")
-        if st.button("🧹 Vacuum Database", width='stretch'):
+        st.markdown("**Vacuum Database**", help="Rebuild the database file to reclaim unused space and improve performance. This can help reduce file size and optimize query speed.")
+        # st.info("Rebuild database file to improve performance.")
+        if st.button("🧹 Vacuum Database", width=200):
             vacuum_database()
     
     with col2:
-        st.markdown("**Analyze Database**")
-        st.info("Update database statistics for better query optimization.")
-        if st.button("📊 Analyze Database", width='stretch'):
+        st.markdown("**Analyze Database**", help="Update database statistics for better query optimization.")
+        # st.info("Update database statistics for better query optimization.")
+        if st.button("📊 Analyze Database", width=200):
             analyze_database()
     
-    # Create indexes
-    st.markdown("---")
-    if st.button("🔍 Create/Update Performance Indexes", use_container_width=False):
-        create_indexes()
+    with col3:
+        # Create indexes
+        st.markdown("**Performance Indexes**", help="Create or update indexes on key columns to improve query performance. This can speed up data retrieval but may take time on large datasets.")
+        if st.button("🔍 Create/Update PI", width=200):
+            create_indexes()
 
 
 def render_analytics_tab(stats):
@@ -657,7 +683,7 @@ def get_database_info():
         }
 
 
-def create_database_backup(backup_name=None):
+def create_database_backup(backup_name):
     """Create database backup"""
     try:
         os.makedirs(DB_CONFIG['backup_dir'], exist_ok=True)
@@ -751,7 +777,7 @@ def delete_backup_file(backup_name):
             os.remove(backup_path)
             st.success(f"✅ Backup deleted: {backup_name}")
             time.sleep(1)
-            st.rerun()
+            # st.rerun()
         else:
             st.error("❌ Backup file not found")
     except Exception as e:

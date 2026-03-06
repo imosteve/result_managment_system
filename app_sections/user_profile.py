@@ -22,7 +22,7 @@ def create_user_info_page(role: str, username: str):
         st.markdown("""
         <style>
             .user-profile-card {
-                background: linear-gradient(135deg, #2E8B57 0%, #228B22 100%);
+                background: linear-gradient(135deg, #01857156 60%, #01857156 100%);
                 padding: 25px;
                 border-radius: 15px;
                 box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
@@ -50,7 +50,7 @@ def create_user_info_page(role: str, username: str):
                 letter-spacing: 1px;
             }
             .profile-details {
-                background: rgba(255, 255, 255, 0.1);
+                background: rgba(18, 0, 0, 0.286);;
                 padding: 15px;
                 border-radius: 10px;
                 margin-top: 15px;

@@ -8,6 +8,7 @@ load_dotenv()
 # Application Configuration
 APP_CONFIG = {
     "school_name": "scripture union international schools".upper(),
+    "sch_abrv": "suis",
     "school_address": "64 IKOT ABASI STREET, UYO, AKWA IBOM STATE".upper(),
     "app_name": "Result Management System".upper(),
     "version": "1.0.0",

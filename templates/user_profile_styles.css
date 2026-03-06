@@ -1,0 +1,51 @@
+.user-profile-card {
+background: linear-gradient(135deg, #01857156 0%, #228B22 100%);
+padding: 25px;
+border-radius: 15px;
+box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+max-width: 400px !important;
+margin: auto;
+}
+.profile-header {
+text-align: center;
+color: white;
+margin-bottom: 20px;
+}
+.profile-avatar {
+font-size: 60px;
+margin-bottom: 10px;
+}
+.profile-name {
+font-size: 24px;
+font-weight: bold;
+margin-bottom: 5px;
+}
+.profile-role {
+font-size: 14px;
+opacity: 0.9;
+text-transform: uppercase;
+letter-spacing: 1px;
+}
+.profile-details {
+background: rgba(18, 0, 0, 0.286);
+padding: 15px;
+border-radius: 10px;
+margin-top: 15px;
+}
+.profile-detail-item {
+display: flex;
+justify-content: space-between;
+padding: 8px 0;
+border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+color: white;
+}
+.profile-detail-item:last-child {
+border-bottom: none;
+}
+.detail-label {
+font-weight: 600;
+opacity: 0.8;
+}
+.detail-value {
+font-weight: 400;
+}
