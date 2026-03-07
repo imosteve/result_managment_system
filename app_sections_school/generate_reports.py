@@ -471,10 +471,12 @@ def report_card_section():
 
     st.set_page_config(page_title="Generate Report Card")
     
+    # Tab-based interface for different operations
+    inject_login_css("templates/tabs_styles.css")
+
     # Page header
     render_page_header("Generate Report Card")
 
-    inject_login_css("templates/tabs_styles.css")
     # Create tabs
     tab1, tab2 = st.tabs(["Generate Reports", "Email Reports"])
     

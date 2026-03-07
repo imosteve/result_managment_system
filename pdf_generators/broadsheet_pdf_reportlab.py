@@ -26,8 +26,8 @@ from main_utils import format_ordinal
 from config import APP_CONFIG
 
 # School information constants
-SCHOOL_NAME = APP_CONFIG["school_name"]
-SCHOOL_ADDRESS = APP_CONFIG["school_address"]
+SCHOOL_NAME = 'APP_CONFIG["school_name"]'
+SCHOOL_ADDRESS = 'APP_CONFIG["school_address"]'
 
 # Get paths
 BASE_DIR = Path(__file__).resolve().parent.parent

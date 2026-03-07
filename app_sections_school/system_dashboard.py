@@ -41,6 +41,10 @@ def system_dashboard():
 
     # Page configuration
     st.set_page_config(page_title="System Dashboard", layout="wide")
+    
+    # Tab-based interface for different operations
+    inject_login_css("templates/tabs_styles.css")
+
     render_page_header("🔧 System Dashboard")
     
     # Get system statistics
@@ -66,8 +70,6 @@ def system_dashboard():
     
     st.markdown("---")
     
-    # Tab-based interface for different operations
-    inject_login_css("templates/tabs_styles.css")
     
     tabs = st.tabs([
         "🏥 System Health",
@@ -219,16 +221,17 @@ def render_database_management_tab():
     
     with download:
         st.markdown("<br>", unsafe_allow_html=True)
-        sch_abrv = APP_CONFIG["sch_abrv"]
-
+        school_code = st.session_state.school_code
+        session_path = st.session_state.get("school_db_path")
+        
         # Read the actual file as bytes
-        with open(DB_PATH, "rb") as f:
+        with open(session_path, "rb") as f:
             db_data = f.read()
 
         st.download_button(
             label="Download DB",
             data=db_data,
-            file_name=f"{sch_abrv}_database.db",
+            file_name=f"{school_code}_database.db",
             mime="application/octet-stream",
             use_container_width=True
     )
@@ -552,16 +555,16 @@ def render_system_settings_tab():
     
     # Display current settings
     col1, col2 = st.columns(2)
-    
+    school_name = st.session_state.school_name
     with col1:
         st.markdown("**School Information**")
-        st.info(f"**Name**: {APP_CONFIG['school_name']}")
+        st.info(f"**Name**: {school_name}")
         st.info(f"**App Version**: {APP_CONFIG['version']}")
         st.info(f"**Session Timeout**: {APP_CONFIG['session_timeout']} seconds")
     
     with col2:
         st.markdown("**Database Information**")
-        st.info(f"**Path**: {DB_CONFIG['path']}")
+        st.info(f"**Path**: {DB_CONFIG['schools_dir']}")
         st.info(f"**Backup Dir**: {DB_CONFIG['backup_dir']}")
         st.info(f"**Foreign Keys**: {DB_CONFIG['enable_foreign_keys']}")
     
@@ -635,7 +638,7 @@ def check_memory_health():
 def get_database_info():
     """Get database file information"""
     try:
-        db_path = DB_CONFIG['path']
+        db_path = DB_CONFIG['schools_dir']
         if os.path.exists(db_path):
             size = os.path.getsize(db_path)
             size_mb = size / (1024 * 1024)
@@ -755,7 +758,7 @@ def restore_database_from_backup(backup_name):
             backup_database(os.path.join(DB_CONFIG['backup_dir'], current_backup))
             
             # Restore from selected backup
-            shutil.copy2(backup_path, DB_CONFIG['path'])
+            shutil.copy2(backup_path, DB_CONFIG['schools_dir'])
             
             time.sleep(1)
         

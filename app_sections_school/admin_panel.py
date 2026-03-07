@@ -30,7 +30,8 @@ def admin_panel():
     user_id = st.session_state.get('user_id', None)
     admin_role = get_user_role(user_id)
     
-    if admin_role not in ["superadmin", "admin"]:
+    # ── CHANGE: 'teacher' replaces 'class_teacher' as the non-admin role ──
+    if admin_role not in ("superadmin", "admin"):
         st.error("⚠️ Access denied. Admins only.")
         st.switch_page("main.py")
         return
@@ -44,6 +45,9 @@ def admin_panel():
 
     st.set_page_config(page_title="Admin Panel", layout="wide")
     
+    # Tab-based interface for different operations
+    inject_login_css("templates/tabs_styles.css")
+
     render_page_header("Admin Dashboard")
     
     # Dashboard Metrics
@@ -64,7 +68,7 @@ def admin_panel():
     with col6:
         st.markdown(f"<div class='custom-metric'><div class='label'>Total Scores</div><div class='value'>{stats.get('scores', 0)}</div></div>", unsafe_allow_html=True)
 
-    inject_login_css("templates/tabs_styles.css")
+    st.markdown("---")
     
     tabs = st.tabs([
         "View/Delete User",
@@ -127,14 +131,15 @@ def render_view_delete_user_tab(user_id, admin_role):
         for u in users:
             username = u[1]
             password = u[2]
-            role = u[3] if u[3] else "Teacher"
+            role = u[3] if u[3] else "teacher"
             
-            if admin_role == "admin" and role in ["superadmin", "admin"]:
+            # admins cannot see superadmin/admin rows
+            if admin_role == "admin" and role in ("superadmin", "admin"):
                 continue
                 
             user_data.append({
                 "Username": username,
-                "Role": role.replace("_", " ").title() if role else "Teacher",
+                "Role": role.title(),
                 "Password": password
             })
         
@@ -153,7 +158,10 @@ def render_view_delete_user_tab(user_id, admin_role):
             with st.expander("✏️ Edit User", expanded=False):
                 st.info("Update username and password for existing users")
                 
-                editable_users = [u for u in users if admin_role == "superadmin" or (u[3] not in ["superadmin", "admin"])]
+                editable_users = [
+                    u for u in users
+                    if admin_role == "superadmin" or u[3] not in ("superadmin", "admin")
+                ]
                 user_ids = [""] + [u[0] for u in editable_users]
                 
                 user_id_to_edit = st.selectbox(
@@ -166,7 +174,7 @@ def render_view_delete_user_tab(user_id, admin_role):
                 
                 if user_id_to_edit and user_id_to_edit != "":
                     selected_user = next(u for u in editable_users if u[0] == user_id_to_edit)
-                    role_display = selected_user[3].replace('_', ' ').title() if selected_user[3] else "Teacher"
+                    role_display = selected_user[3].title() if selected_user[3] else "Teacher"
                     st.info(f"Editing: **{selected_user[1]}** (Role: {role_display})")
                     
                     col1, col2 = st.columns(2)
@@ -193,7 +201,10 @@ def render_view_delete_user_tab(user_id, admin_role):
             with st.expander("🗑️ Delete User", expanded=False):
                 st.warning("⚠️ **Warning:** This action cannot be undone. Deleting a user will remove all their data and assignments.")
                 
-                deletable_users = [u for u in users if admin_role == "superadmin" or (u[3] not in ["superadmin", "admin"])]
+                deletable_users = [
+                    u for u in users
+                    if admin_role == "superadmin" or u[3] not in ("superadmin", "admin")
+                ]
                 user_ids = [""] + [u[0] for u in deletable_users]
                 
                 user_id_to_delete = st.selectbox(
@@ -206,7 +217,7 @@ def render_view_delete_user_tab(user_id, admin_role):
                 
                 if user_id_to_delete and user_id_to_delete != "":
                     selected_user = next(u for u in deletable_users if u[0] == user_id_to_delete)
-                    role_display = selected_user[3].replace('_', ' ').title() if selected_user[3] else "Teacher"
+                    role_display = selected_user[3].title() if selected_user[3] else "Teacher"
                     st.info(f"Selected user: **{selected_user[1]}** (Role: {role_display})")
                 
                 if st.button("❌ Delete Selected User", key="delete_user_button", type="primary"):
@@ -218,7 +229,7 @@ def render_view_delete_user_tab(user_id, admin_role):
                         st.error("⚠️ Cannot delete your own account.")
                     else:
                         selected_user = next(u for u in deletable_users if u[0] == user_id_to_delete)
-                        role_display = selected_user[3].replace('_', ' ').title() if selected_user[3] else "Teacher"
+                        role_display = selected_user[3].title() if selected_user[3] else "Teacher"
                         st.session_state.user_to_delete_info = {
                             'id': user_id_to_delete,
                             'name': selected_user[1],
@@ -284,7 +295,11 @@ def render_add_user_tab(admin_role):
         
         if submitted:
             if username and password and user_type:
-                role_map = {"Teacher": None, "Admin": "admin", "Superadmin": "superadmin"}
+                role_map = {
+                    "Teacher":    "teacher",
+                    "Admin":      "admin",
+                    "Superadmin": "superadmin",
+                }
                 role = role_map.get(user_type)
                 
                 if create_user(username, password, role):
@@ -305,7 +320,7 @@ def render_assignments_tab(user_id, admin_role, get_fresh_classes, get_fresh_sub
     sn_counter = 1
     
     for u in users:
-        if admin_role == "admin" and u[3] in ["superadmin", "admin"]:
+        if admin_role == "admin" and u[3] in ("superadmin", "admin"):
             continue
             
         user_assignments = get_user_assignments(u[0])
@@ -456,7 +471,7 @@ def render_assign_class_teacher_tab(get_fresh_classes):
     with st.form("assign_class_teacher_form"):
         st.subheader("Assign Class Teacher")
         users = get_all_users()
-        teacher_users = [u for u in users if not u[3] or u[3] not in ["superadmin", "admin"]]
+        teacher_users = [u for u in users if u[3] == "teacher"]
         
         if not teacher_users:
             st.warning("⚠️ No teachers available. Add teachers in the Add New User tab.")
@@ -500,7 +515,7 @@ def render_assign_subject_teacher_tab(get_fresh_classes, get_fresh_subjects):
         st.session_state.selected_class_for_subject = None
     
     users = get_all_users()
-    teacher_users = [u for u in users if not u[3] or u[3] not in ["superadmin", "admin"]]
+    teacher_users = [u for u in users if u[3] == "teacher"]
     
     if not teacher_users:
         st.warning("⚠️ No teachers available. Add teachers in the Add New User tab.")

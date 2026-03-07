@@ -1,50 +1,51 @@
-# config.py
+# config.py  — FINAL VERSION
+"""
+Changes from single-tenant version:
+  - school_name, sch_abrv, school_address removed from APP_CONFIG
+    → these now live per-school in master.db, loaded into session state at login
+  - platform_name added — shown in header when no school session is active
+  - DB_CONFIG updated to reference master.db and schools directory
+"""
+
 from dotenv import load_dotenv
 import os
 
-# Load variables from .env into environment
 load_dotenv()
 
-# Application Configuration
 APP_CONFIG = {
-    "school_name": "scripture union international schools".upper(),
-    "sch_abrv": "suis",
-    "school_address": "64 IKOT ABASI STREET, UYO, AKWA IBOM STATE".upper(),
-    "app_name": "Result Management System".upper(),
-    "version": "1.0.0",
-    "page_title": "Student Result System",
-    "cookie_prefix": "student_results_app",
-    "session_timeout": 7200,  # 2 hour in seconds
+    "platform_name":      "School Result Management System",
+    "app_name":           "Result Management System".upper(),
+    "version":            "2.0.0",
+    "page_title":         "Student Result System",
+    "cookie_prefix":      "student_results_app",
+    "session_timeout":    7200,   # 2 hours
     "max_login_attempts": 5,
-    "lockout_duration": 300,  # 5 minutes in seconds
+    "lockout_duration":   300,    # 5 minutes
 }
 
-# Environment Configuration
-ENVIRONMENT = os.getenv('ENVIRONMENT', 'development')
-DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'
-COOKIE_PASSWORD = os.getenv('COOKIE_PASSWORD', 'fallback-secure-password-change-in-production')
+ENVIRONMENT     = os.getenv("ENVIRONMENT", "development")
+DEBUG           = os.getenv("DEBUG", "True").lower() == "true"
+COOKIE_PASSWORD = os.getenv("COOKIE_PASSWORD", "fallback-secure-password-change-in-production")
 
-# Database Configuration
 DB_CONFIG = {
-    "path": os.path.join("data", "school.db"),
-    "backup_dir": os.path.join("data", "backups"),
-    "enable_foreign_keys": True
+    "master_path": os.path.join("data", "master.db"),
+    "schools_dir": os.path.join("data", "schools"),
+    "backup_dir":  os.path.join("data", "backups"),
+    "enable_foreign_keys": True,
 }
 
-# Logging Configuration
 LOG_CONFIG = {
-    "level": "INFO",
-    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    "dir": "logs",
-    "file": "logs/app.log",
-    "max_size": 10 * 1024 * 1024,  # 10MB
-    "backup_count": 5
+    "level":        "INFO",
+    "format":       "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    "dir":          "logs",
+    "file":         "logs/app.log",
+    "max_size":     10 * 1024 * 1024,
+    "backup_count": 5,
 }
 
-# Security Configuration
 SECURITY_CONFIG = {
-    "disable_right_click": True,
-    "disable_dev_tools": True,
+    "disable_right_click":     True,
+    "disable_dev_tools":       True,
     "session_timeout_enabled": True,
-    "force_https": ENVIRONMENT == 'production'
+    "force_https":             ENVIRONMENT == "production",
 }

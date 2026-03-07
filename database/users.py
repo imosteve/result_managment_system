@@ -1,6 +1,8 @@
-# database/users.py
-
-"""User management and teacher assignment operations"""
+# database/users.py  — MULTI-TENANT VERSION
+# database/users.py  — POST-MIGRATION VERSION
+"""
+User management and teacher assignment operations.
+"""
 
 import sqlite3
 import logging
@@ -8,99 +10,111 @@ from .connection import get_connection
 
 logger = logging.getLogger(__name__)
 
+VALID_ROLES = ("superadmin", "admin", "teacher")
 
-def create_user(username, password, role=None):
+
+# ─────────────────────────────────────────────
+# User CRUD
+# ─────────────────────────────────────────────
+
+def create_user(username: str, password: str, email: str, role: str = "teacher") -> bool:
     """
-    Create a new user with username and password
-    
+    Create a new user.
+
     Args:
-        username: Username for the new user
-        password: Password (should be pre-hashed)
-        role: Optional role ('admin' or 'superadmin')
-    
+        username : Unique username
+        password : Plain-text password (swap for bcrypt in production)
+        email    : Unique email address (used for multi-tenant login)
+        role     : 'superadmin' | 'admin' | 'teacher'  (default: 'teacher')
+
     Returns:
-        bool: True if user created successfully, False otherwise
+        True if created, False if username/email already exists or invalid role.
     """
     if len(password) < 4:
-        logger.error(f"Password for user '{username}' is too short (length: {len(password)})")
+        logger.error(f"Password for '{username}' is too short (min 4 chars)")
         return False
-    
+
+    if role not in VALID_ROLES:
+        logger.error(f"Invalid role '{role}' for user '{username}'")
+        return False
+
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        # Create user
         cursor.execute("""
-            INSERT INTO users (username, password)
-            VALUES (?, ?)
-        """, (username, password))
-        
-        user_id = cursor.lastrowid
-        
-        # If role is provided and is admin/superadmin, add to admin_users table
-        if role in ['admin', 'superadmin']:
-            cursor.execute("""
-                INSERT INTO admin_users (user_id, role)
-                VALUES (?, ?)
-            """, (user_id, role))
-        
+            INSERT INTO users (username, password, email, role)
+            VALUES (?, ?, ?, ?)
+        """, (username, password, email.lower().strip() if email else None, role))
+
         conn.commit()
-        logger.info(f"User '{username}' created successfully")
+        logger.info(f"User '{username}' created (role='{role}')")
         return True
+
     except sqlite3.IntegrityError:
-        logger.warning(f"Failed to create user '{username}' - may already exist")
+        logger.warning(f"User '{username}' or email '{email}' already exists")
         return False
     finally:
         conn.close()
 
 
-def get_user_by_username(username):
+def get_user_by_username(username: str):
     """
-    Retrieve user by username with role information
-    
-    Args:
-        username: Username to search for
-    
+    Retrieve a user row by username.
+
     Returns:
-        sqlite3.Row or None: User record with role information
+        Row with columns: id, username, password, role, email
+        None if not found.
     """
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT u.id, u.username, u.password, au.role
-        FROM users u
-        LEFT JOIN admin_users au ON u.id = au.user_id
-        WHERE u.username = ?
+        SELECT id, username, password, role, email
+        FROM users
+        WHERE username = ?
     """, (username,))
     user = cursor.fetchone()
     conn.close()
     return user
 
 
-def get_user_role(user_id):
+def get_user_by_email(email: str):
     """
-    Get user's admin role if they have one
-    
-    Args:
-        user_id: User ID
-    
+    Retrieve a user row by email address.
+    Used by login.py for email-based authentication.
+
     Returns:
-        str or None: Role ('admin' or 'superadmin') or None if not admin
+        Row with columns: id, username, password, role, email
+        None if not found.
     """
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT role FROM admin_users WHERE user_id = ?", (user_id,))
+    cursor.execute("""
+        SELECT id, username, password, role, email
+        FROM users
+        WHERE LOWER(email) = LOWER(?)
+    """, (email.strip(),))
+    user = cursor.fetchone()
+    conn.close()
+    return user
+
+
+def get_user_role(user_id: int) -> str | None:
+    """
+    Return the role for a user.
+
+    Returns:
+        'superadmin' | 'admin' | 'teacher' — or None if user not found.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT role FROM users WHERE id = ?", (user_id,))
     result = cursor.fetchone()
     conn.close()
     return result[0] if result else None
 
 
-def delete_user(user_id):
-    """
-    Delete a user and their assignments (CASCADE)
-    
-    Args:
-        user_id: User ID to delete
-    """
+def delete_user(user_id: int) -> None:
+    """Delete a user (CASCADE removes assignments)."""
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
@@ -108,62 +122,66 @@ def delete_user(user_id):
     conn.close()
 
 
-def get_all_users():
+def get_all_users() -> list:
     """
-    Get all users with their roles
-    
+    Get all users ordered by username.
+
     Returns:
-        list: List of user records with role information
+        List of rows, each with columns: id, username, password, role, email
     """
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT u.id, u.username, u.password, au.role
-        FROM users u
-        LEFT JOIN admin_users au ON u.id = au.user_id
-        ORDER BY u.username
+        SELECT id, username, password, role, email
+        FROM users
+        ORDER BY username
     """)
     users = cursor.fetchall()
     conn.close()
     return users
 
 
-def update_user(user_id, new_username, new_password=None):
+def update_user(
+    user_id: int,
+    new_username: str,
+    new_password: str | None = None,
+    new_email: str | None = None,
+) -> bool:
     """
-    Update user's username and optionally password
-    
-    Args:
-        user_id: User ID to update
-        new_username: New username
-        new_password: Optional new password (pre-hashed)
-    
+    Update a user's username, optionally password and email.
+
     Returns:
-        bool: True if updated successfully, False otherwise
+        True if updated, False on unique-constraint conflict.
     """
+    if new_password and len(new_password) < 4:
+        logger.error(f"New password for user {user_id} is too short (min 4 chars)")
+        return False
+
     conn = get_connection()
     cursor = conn.cursor()
     try:
         if new_password:
-            if len(new_password) < 4:
-                logger.error(f"Password for user '{new_username}' is too short")
-                return False
             cursor.execute("""
-                UPDATE users 
-                SET username = ?, password = ?
+                UPDATE users
+                SET username = ?, password = ?, email = ?
                 WHERE id = ?
-            """, (new_username, new_password, user_id))
+            """, (new_username, new_password,
+                  new_email.lower().strip() if new_email else None,
+                  user_id))
         else:
             cursor.execute("""
-                UPDATE users 
-                SET username = ?
+                UPDATE users
+                SET username = ?, email = ?
                 WHERE id = ?
-            """, (new_username, user_id))
-        
+            """, (new_username,
+                  new_email.lower().strip() if new_email else None,
+                  user_id))
+
         conn.commit()
-        logger.info(f"User {user_id} updated successfully")
+        logger.info(f"User {user_id} updated")
         return True
     except sqlite3.IntegrityError:
-        logger.warning(f"Failed to update user - username may already exist")
+        logger.warning(f"Update failed for user {user_id} — username/email conflict")
         return False
     finally:
         conn.close()

@@ -11,6 +11,7 @@ from .schema import create_tables, create_performance_indexes
 from .users import (
     create_user,
     get_user_by_username,
+    get_user_by_email,
     get_user_role,
     delete_user,
     get_all_users,
@@ -122,6 +123,7 @@ __all__ = [
     # Users
     'create_user',
     'get_user_by_username',
+    'get_user_by_email',
     'get_user_role',
     'delete_user',
     'get_all_users',

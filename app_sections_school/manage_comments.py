@@ -43,6 +43,9 @@ def manage_comments():
 
     st.set_page_config(page_title="Manage Comments & Ratings", layout="wide")
     
+    # Tab-based interface for different operations
+    inject_login_css("templates/tabs_styles.css")
+
     # Page header
     render_page_header("Manage Comments & Psychomotor Ratings")
     
@@ -85,9 +88,6 @@ def manage_comments():
     is_nursery_class = bool(re.match(r"NURSERY [12345].*$", class_name))
     is_pri_class = bool(re.match(r"PRIMARY [123456].*$", class_name))
     is_primary_class = is_kg_class or is_nursery_class or is_pri_class
-
-    # Inject CSS for tabs
-    inject_login_css("templates/tabs_styles.css")
 
     # Create tabs
     if role in ["admin", "superadmin"]:

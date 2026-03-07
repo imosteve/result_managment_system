@@ -1,4 +1,4 @@
-# database/schema.py
+# database/schema.py - UPDATED VERSION to support MULTI-TENANT architecture
 
 """Database schema definitions and table creation"""
 
@@ -8,9 +8,17 @@ from .connection import get_connection
 logger = logging.getLogger(__name__)
 
 
-def create_tables():
-    """Create all database tables"""
-    conn = get_connection()
+def create_tables(db_path=None):
+    """
+    Create all database tables.
+
+    Args:
+        db_path: Optional explicit path to the target database.
+                 Pass this when creating a NEW school database from
+                 master_database._initialize_school_database().
+                 Leave as None for normal in-app usage (reads from session).
+    """
+    conn = get_connection(db_path)
     cursor = conn.cursor()
     
     # Classes table
@@ -98,8 +106,9 @@ def create_tables():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT NOT NULL UNIQUE,
             password TEXT NOT NULL,
+            email TEXT UNIQUE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            role TEXT DEFAULT 'class_teacher' CHECK(role IN ('superadmin', 'admin', 'class_teacher'))
+            role TEXT DEFAULT 'class_teacher' CHECK(role IN ('superadmin', 'admin', 'teacher'))
         )
     """)
     
@@ -120,16 +129,6 @@ def create_tables():
             FOREIGN KEY (subject_name, class_name, term, session) 
                 REFERENCES subjects(name, class_name, term, session) ON DELETE CASCADE ON UPDATE CASCADE,
             UNIQUE(user_id, class_name, term, session, subject_name, assignment_type)
-        )
-    """)
-    
-    # Admin users table
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS admin_users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL UNIQUE,
-            role TEXT NOT NULL CHECK(role IN ('superadmin', 'admin')),
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE ON UPDATE CASCADE
         )
     """)
     
@@ -241,14 +240,14 @@ def create_tables():
     conn.close()
     
     # Create performance indexes
-    create_performance_indexes()
-    
-    logger.info("Database tables created successfully")
+    create_performance_indexes(db_path=db_path)
+
+    logger.info(f"Tables created/verified for: {db_path or 'active session DB'}")
 
 
-def create_performance_indexes():
+def create_performance_indexes(db_path=None):
     """Create indexes for better query performance"""
-    conn = get_connection()
+    conn = get_connection(db_path)
     cursor = conn.cursor()
     try:
         indexes = [
@@ -258,7 +257,8 @@ def create_performance_indexes():
             "CREATE INDEX IF NOT EXISTS idx_scores_student_class_term_session ON scores(student_name, class_name, term, session)",
             "CREATE INDEX IF NOT EXISTS idx_teacher_assignments_user ON teacher_assignments(user_id)",
             "CREATE INDEX IF NOT EXISTS idx_scores_total_score ON scores(total_score DESC)",
-            "CREATE INDEX IF NOT EXISTS idx_comment_templates_type_range ON comment_templates(comment_type, average_lower, average_upper)"
+            "CREATE INDEX IF NOT EXISTS idx_comment_templates_type_range ON comment_templates(comment_type, average_lower, average_upper)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email)"
         ]
         
         for index_sql in indexes:

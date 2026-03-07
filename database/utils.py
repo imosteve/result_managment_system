@@ -48,7 +48,7 @@ def get_database_stats():
     cursor.execute("""
         SELECT COUNT(*) 
         FROM users 
-        WHERE id NOT IN (SELECT user_id FROM admin_users WHERE role IN ('admin', 'superadmin'))
+        WHERE role == 'teacher'
     """)
     stats['teachers'] = cursor.fetchone()[0]
     
