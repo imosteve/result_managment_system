@@ -9,14 +9,14 @@ import time
 import logging
 from datetime import datetime, timedelta
 from pathlib import Path
-from database import (
+from database_school import (
     get_database_stats, get_all_users, get_all_classes,
     get_classes_summary, database_health_check, backup_database,
     get_connection, create_performance_indexes, get_user_role
 )
 from main_utils import inject_login_css, render_page_header, format_ordinal, inject_metric_css
 from config import DB_CONFIG, APP_CONFIG
-from database.connection import DB_PATH
+from database_school.connection import DB_PATH
 from utils.paginators import streamlit_paginator
 
 logger = logging.getLogger(__name__)

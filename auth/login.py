@@ -24,8 +24,8 @@ from .config import MESSAGES, CSS_CLASSES
 from .validators import validate_platform_admin_credentials, validate_school_user_credentials, validate_session_cookies
 from .session_manager import SessionManager
 from .assignment_selection import select_assignment
-from database import get_user_assignments
-from master_database import (
+from database_school import get_user_assignments
+from database_master import (
     create_master_tables,
     get_platform_admin_by_email,
     resolve_school_from_email,

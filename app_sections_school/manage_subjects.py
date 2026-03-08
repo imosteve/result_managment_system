@@ -3,7 +3,7 @@
 import streamlit as st
 import pandas as pd
 import time
-from database import (
+from database_school import (
     get_all_classes, get_subjects_by_class, create_subject, delete_subject, update_subject, clear_all_subjects,
     get_students_by_class, get_student_selected_subjects, save_student_subject_selections, 
     get_all_student_subject_selections

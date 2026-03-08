@@ -11,7 +11,7 @@ from PyPDF2 import PdfMerger
 from main_utils import (
     assign_grade, format_ordinal
 )
-from database import (
+from database_school import (
     get_all_classes, get_students_by_class, get_student_scores, 
     get_class_average, get_student_grand_totals, get_comment, get_subjects_by_class,
     get_psychomotor_rating, get_grade_distribution, get_next_term_begin_date, get_next_term_info
@@ -45,7 +45,7 @@ def calculate_next_term(current_term, current_session):
 
 def generate_report_card(student_name, class_name, term, session, is_secondary_class, is_primary_class):
     """Generate PDF report card for a student"""
-    from database import get_head_teacher_comment_by_average, get_student_average
+    from database_school import get_head_teacher_comment_by_average, get_student_average
     
     user_id = st.session_state.user_id
     role = st.session_state.role

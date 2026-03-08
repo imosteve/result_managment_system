@@ -87,7 +87,7 @@ def create_metric_4col(class_name, term, session, subjects_or_students, type):
 
 
 def create_metric_5col_broadsheet(subjects, students, class_average, broadsheet_data, class_name, term, session, user_id, role):
-    from database import get_subjects_by_class
+    from database_school import get_subjects_by_class
     
     # Get all possible subjects for the class
     all_subjects = get_subjects_by_class(class_name, term, session, user_id, role)

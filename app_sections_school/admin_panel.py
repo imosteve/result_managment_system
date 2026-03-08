@@ -4,7 +4,7 @@ import streamlit as st
 import math
 import time
 import pandas as pd
-from database import (
+from database_school import (
     get_all_classes, get_subjects_by_class,
     create_user, get_all_users, delete_user, assign_teacher, get_user_assignments,
     delete_assignment, get_database_stats, update_user, update_assignment, get_user_role,

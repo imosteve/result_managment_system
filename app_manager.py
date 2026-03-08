@@ -91,7 +91,7 @@ class ApplicationManager:
         Individual school databases are NOT touched here.
         """
         try:
-            from master_database import create_master_tables
+            from database_master import create_master_tables
             create_master_tables()
             logger.info("Master database initialised")
             return True

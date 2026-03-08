@@ -2,7 +2,7 @@
 
 import streamlit as st
 import pandas as pd
-from database import get_all_classes, get_students_by_class, create_student, update_student, delete_student, delete_all_students
+from database_school import get_all_classes, get_students_by_class, create_student, update_student, delete_student, delete_all_students
 from main_utils import clean_input, create_metric_4col, inject_login_css, render_page_header, render_persistent_class_selector
 from auth.activity_tracker import ActivityTracker
 from utils.paginators import streamlit_filter

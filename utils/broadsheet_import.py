@@ -4,7 +4,7 @@
 
 import pandas as pd
 import streamlit as st
-from database import (
+from database_school import (
     get_students_by_class, get_subjects_by_class,
     save_scores
 )

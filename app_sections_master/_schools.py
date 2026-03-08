@@ -13,7 +13,7 @@ import logging
 import time
 from main_utils import inject_login_css
 
-from master_database import (
+from database_master import (
     get_all_schools,
     register_school,
     update_school_status,

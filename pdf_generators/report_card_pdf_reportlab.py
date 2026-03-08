@@ -17,12 +17,12 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
 from main_utils import assign_grade, format_ordinal
-from database import (
+from database_school import (
     get_students_by_class, get_student_scores, 
     get_class_average, get_student_grand_totals, get_comment, get_subjects_by_class,
     get_psychomotor_rating, get_grade_distribution, get_next_term_begin_date, get_next_term_info
 )
-from master_database import get_school_by_code
+from database_master import get_school_by_code
 
 school_name = st.session_state.get("school_name", "platform")
 school_code = st.session_state.get("school_code", "platform")
@@ -218,7 +218,7 @@ class ReportCardCanvas(canvas.Canvas):
 
 def generate_report_card(student_name, class_name, term, session, is_secondary_class, is_primary_class):
     """Generate PDF report card for a student using ReportLab - exact WeasyPrint replica"""
-    from database import get_head_teacher_comment_by_average
+    from database_school import get_head_teacher_comment_by_average
     
     user_id = st.session_state.user_id
     role = st.session_state.role

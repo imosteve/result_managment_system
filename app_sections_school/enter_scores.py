@@ -7,7 +7,7 @@ from typing import Optional, List, Dict, Any
 from main_utils import (
     assign_grade, inject_login_css, format_ordinal, render_page_header, inject_metric_css
 )
-from database import (
+from database_school import (
     get_all_classes, get_students_by_class, get_subjects_by_class,
     get_scores_by_class_subject, save_scores, clear_all_scores,
     get_user_assignments, get_student_selected_subjects
@@ -757,7 +757,7 @@ def _save_single_student_score(student_name: str, class_name: str, subject: str,
     Uses your existing database functions with single-student update.
     """
     try:
-        from database.scores import update_score
+        from database_school.scores import update_score
         
         # Use the existing update_score function from your database module
         # This function already handles UPSERT (INSERT OR REPLACE)

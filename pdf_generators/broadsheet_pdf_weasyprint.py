@@ -9,7 +9,7 @@ from weasyprint import HTML, CSS
 from jinja2 import Environment, FileSystemLoader
 from PyPDF2 import PdfMerger
 
-from database import (
+from database_school import (
     get_students_by_class, 
     get_subjects_by_class, 
     get_student_scores, 
@@ -18,7 +18,7 @@ from database import (
 )
 from main_utils import format_ordinal
 import streamlit as st
-from master_database import get_school_by_code
+from database_master import get_school_by_code
 
 
 school_code = st.session_state.get("school_code", "platform")

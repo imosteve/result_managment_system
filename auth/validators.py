@@ -83,7 +83,7 @@ def validate_school_user_credentials(
     Returns:
         User data dict {id, username, role, email} on success, None on failure
     """
-    from master_database import get_school_db_path
+    from database_master import get_school_db_path
 
     db_path = get_school_db_path(school_info["school_code"])
     user_record = _get_user_by_email_direct(email, db_path)
@@ -150,7 +150,7 @@ def validate_session_cookies(cookies) -> bool:
         role        = st.session_state.get("role")
 
         if school_code and role != "platform_superadmin":
-            from master_database import get_school_by_code
+            from database_master import get_school_by_code
             school = get_school_by_code(school_code, active_only=True)
 
             if school is None:

@@ -388,7 +388,7 @@ def delete_school(
 def _initialize_school_database(db_path: str) -> None:
     """Create all application tables in the new school database."""
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
-    from database.schema import create_tables
+    from database_school.schema import create_tables
     create_tables(db_path=db_path)
     logger.info(f"School database initialised: {db_path}")
 
@@ -405,7 +405,7 @@ def _create_school_default_users(
       superadmin@<domain> / superadmin
       admin@<domain>      / admin
     """
-    from database.connection import get_connection
+    from database_school.connection import get_connection
 
     conn = get_connection(db_path)
     cursor = conn.cursor()

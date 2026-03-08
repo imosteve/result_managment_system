@@ -12,7 +12,7 @@ from main_utils import (
     assign_grade, create_metric_5col_report, format_ordinal, 
     render_page_header, inject_login_css, render_persistent_class_selector
 )
-from database import (
+from database_school import (
     get_all_classes, get_students_by_class, get_student_scores, 
     get_class_average, get_student_grand_totals, get_grade_distribution
 )

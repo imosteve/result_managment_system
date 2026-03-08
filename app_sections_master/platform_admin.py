@@ -16,7 +16,7 @@ Each is wired as a standalone sidebar nav item — same pattern as school sectio
 import streamlit as st
 import logging
 
-from master_database import get_master_db_info
+from database_master import get_master_db_info
 from main_utils import inject_metric_css
 
 logger = logging.getLogger(__name__)

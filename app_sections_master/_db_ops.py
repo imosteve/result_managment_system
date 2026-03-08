@@ -13,15 +13,15 @@ import logging
 import time
 from datetime import datetime
 
-from master_database import (
+from database_master import (
     backup_master_db,
     restore_master_db,
     get_master_db_info,
     vacuum_master_db,
     master_db_health_check,
 )
-from master_database.db_ops    import list_master_backups, delete_master_backup
-from master_database.connection import MASTER_DB_PATH
+from database_master.db_ops    import list_master_backups, delete_master_backup
+from database_master.connection import MASTER_DB_PATH
 from main_utils import inject_login_css
 
 logger = logging.getLogger(__name__)

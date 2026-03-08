@@ -2,7 +2,7 @@
 
 import streamlit as st
 import pandas as pd
-from database import (
+from database_school import (
     add_comment_template,
     get_all_comment_templates,
     delete_comment_template,

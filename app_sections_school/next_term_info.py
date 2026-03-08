@@ -4,7 +4,7 @@ import streamlit as st
 from datetime import date
 import json
 
-from database import (
+from database_school import (
     get_all_classes,
     get_next_term_info,
     create_or_update_next_term_info,

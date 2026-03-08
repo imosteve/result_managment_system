@@ -3,7 +3,7 @@
 import streamlit as st
 import pandas as pd
 import re
-from database import (
+from database_school import (
     get_all_classes, get_students_by_class, create_comment, get_comment, 
     delete_comment, create_psychomotor_rating, get_psychomotor_rating,
     delete_psychomotor_rating, get_all_comment_templates, get_student_average,

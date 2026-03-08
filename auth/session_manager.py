@@ -62,7 +62,7 @@ class SessionManager:
 
             # ── School context ────────────────────────────────────────────
             if school_info:
-                from master_database import get_school_db_path
+                from database_master import get_school_db_path
                 st.session_state.school_code    = school_info["school_code"]
                 st.session_state.school_name    = school_info["school_name"]
                 st.session_state.school_address = school_info["address"]
@@ -212,7 +212,7 @@ class SessionManager:
 
             if school_code:
                 # School user — verify school is still active
-                from master_database import get_school_by_code, get_school_db_path
+                from database_master import get_school_by_code, get_school_db_path
 
                 school_info = get_school_by_code(school_code, active_only=True)
                 if school_info is None:

@@ -14,7 +14,7 @@ import pandas as pd
 import logging
 from datetime import datetime
 
-from master_database import get_audit_log, get_audit_log_by_school
+from database_master import get_audit_log, get_audit_log_by_school
 
 logger = logging.getLogger(__name__)
 

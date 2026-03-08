@@ -5,7 +5,7 @@ import streamlit as st
 import time
 import logging
 from typing import List, Dict, Any
-from database import get_user_assignments
+from database_school import get_user_assignments
 from .config import MESSAGES, CSS_CLASSES
 from .session_manager import SessionManager
 from .logout import logout

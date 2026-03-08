@@ -4,7 +4,7 @@ import streamlit as st
 import pandas as pd
 import re
 import os
-from database import get_all_classes, get_students_by_class, get_subjects_by_class, get_student_scores, get_student_grand_totals, get_grade_distribution
+from database_school import get_all_classes, get_students_by_class, get_subjects_by_class, get_student_scores, get_student_grand_totals, get_grade_distribution
 from main_utils import (
     assign_grade, create_metric_5col_broadsheet, 
     format_ordinal, render_page_header, inject_login_css, 
