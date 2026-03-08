@@ -5,7 +5,6 @@ Contains all the main functional sections of the application
 """
 
 # Import all sections for easy access
-from . import platform_admin
 from . import admin_panel
 from . import user_profile
 from . import manage_classes
@@ -18,7 +17,6 @@ from . import generate_reports
 from . import system_dashboard
 
 __all__ = [
-    'platform_admin',
     'admin_panel',
     'user_profile',
     'manage_classes',

@@ -18,7 +18,7 @@ from auth.logout import logout
 def get_first_app_section(options: dict, role: str) -> str:
     skip_keys = [
         "👤 My Profile", "🏠 Dashboard", "🔧 System Dashboard",
-        # "👥 Admin Panel", "🌐 Platform Admin", "🔄 Change Assignment",
+        "👥 Admin Panel", "🌐 Platform Admin", "🔄 Change Assignment",
     ]
     option_keys = list(options.keys())
     for key in option_keys:
@@ -54,7 +54,11 @@ def handle_navigation(app, options: dict, role: str):
         param_page = st.query_params.get("page", None)
         current_page = param_page if param_page in option_keys else option_keys[0]
 
-    st.logo("static/logos/SU_logo.png", size="large")
+    school_code = st.session_state.get("school_code", "platform")
+    if not school_code:
+        school_code = "platform"
+    logo_path = f"static/logos/{school_code}_logo.png"
+    st.logo(logo_path, size="large")
 
     for page in option_keys:
         if st.sidebar.button(

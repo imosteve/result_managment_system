@@ -22,7 +22,15 @@ from database import (
     get_class_average, get_student_grand_totals, get_comment, get_subjects_by_class,
     get_psychomotor_rating, get_grade_distribution, get_next_term_begin_date, get_next_term_info
 )
-from config import APP_CONFIG
+from master_database import get_school_by_code
+
+school_name = st.session_state.get("school_name", "platform")
+school_code = st.session_state.get("school_code", "platform")
+if not school_code:
+    school_code = "platform"
+
+school_info = get_school_by_code(school_code) if school_code != "platform" else None
+school_address = school_info.get("address") if school_info else " "
 
 # Register Arial fonts if available (fallback to Helvetica if not)
 try:
@@ -90,7 +98,7 @@ class ReportCardCanvas(canvas.Canvas):
         # self.rect(10*mm, 10*mm, page_width - 20*mm, page_height - 20*mm)
         
         # Draw watermark (centered, faded logo)
-        watermark_path = "static/logos/SU_logo.png"
+        watermark_path = f"static/logos/{school_code}_logo.png"
         if os.path.exists(watermark_path):
             self.saveState()
             self.setFillAlpha(0.1)
@@ -106,7 +114,7 @@ class ReportCardCanvas(canvas.Canvas):
         # Draw stamps and signature (positioned exactly as in CSS)
         if self.is_secondary:
             # SSS stamp
-            stamp_path = "static/stamps/su_stamp_sss.png"
+            stamp_path = f"static/stamps/{school_code}/su_stamp_sss.png"
             if os.path.exists(stamp_path):
                 self.saveState()
                 self.setFillAlpha(1.0)
@@ -121,7 +129,7 @@ class ReportCardCanvas(canvas.Canvas):
                 self.restoreState()
             
             # Principal signature
-            sig_path = "static/stamps/signature_principal.png"
+            sig_path = f"static/stamps/{school_code}/signature_principal.png"
             if os.path.exists(sig_path):
                 self.saveState()
                 self.setFillAlpha(1.0)
@@ -136,7 +144,7 @@ class ReportCardCanvas(canvas.Canvas):
         
         elif self.is_primary:
             # Primary stamp
-            stamp_path = "static/stamps/su_stamp_primary.png"
+            stamp_path = f"static/stamps/{school_code}/su_stamp_primary.png"
             if os.path.exists(stamp_path):
                 self.saveState()
                 self.setFillAlpha(1.0)
@@ -150,7 +158,7 @@ class ReportCardCanvas(canvas.Canvas):
                 self.restoreState()
             
             # Head teacher signature
-            sig_path = "static/stamps/signature_ht.png"
+            sig_path = f"static/stamps/{school_code}/signature_ht.png"
             if os.path.exists(sig_path):
                 self.saveState()
                 self.setFillAlpha(1.0)
@@ -398,7 +406,7 @@ def generate_report_card(student_name, class_name, term, session, is_secondary_c
         )
         
         # Header with logo
-        logo_path = "static/logos/SU_logo.png"
+        logo_path = f"static/logos/{school_code}_logo.png"
         if os.path.exists(logo_path):
             logo = Image(logo_path, width=60, height=60)
         else:
@@ -407,8 +415,8 @@ def generate_report_card(student_name, class_name, term, session, is_secondary_c
         header_data = [[
             logo,
             [
-                Paragraph(f"<b>{APP_CONFIG['school_name']}</b>", title_style),
-                Paragraph(APP_CONFIG['school_address'], subtitle_style),
+                Paragraph(f"<b>{school_name.upper()}</b>", title_style),
+                Paragraph(school_address.upper(), subtitle_style),
                 Paragraph(f"<b>TERMLY REPORT FOR {term.upper()}, {session} SESSION</b>", report_title_style)
             ]
         ]]

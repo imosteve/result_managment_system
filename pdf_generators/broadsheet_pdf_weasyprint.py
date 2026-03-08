@@ -17,11 +17,19 @@ from database import (
     get_grade_distribution
 )
 from main_utils import format_ordinal
-from config import APP_CONFIG
+import streamlit as st
+from master_database import get_school_by_code
+
+
+school_code = st.session_state.get("school_code", "platform")
+if not school_code:
+    school_code = "platform"
+
+school_info = get_school_by_code(school_code) if school_code != "platform" else None
 
 # School information constants
-SCHOOL_NAME = APP_CONFIG["school_name"]
-SCHOOL_ADDRESS = APP_CONFIG["school_address"]
+SCHOOL_NAME = st.session_state.get("school_name", "platform")
+SCHOOL_ADDRESS = school_info.get("address") if school_info else " "
 
 # Get paths
 BASE_DIR = Path(__file__).resolve().parent.parent

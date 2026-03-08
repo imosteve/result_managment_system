@@ -65,6 +65,7 @@ class SessionManager:
                 from master_database import get_school_db_path
                 st.session_state.school_code    = school_info["school_code"]
                 st.session_state.school_name    = school_info["school_name"]
+                st.session_state.school_address = school_info["address"]
                 st.session_state.school_db_path = get_school_db_path(
                     school_info["school_code"]
                 )
@@ -72,6 +73,7 @@ class SessionManager:
                 # Platform superadmin — no school context
                 st.session_state.school_code    = None
                 st.session_state.school_name    = None
+                st.session_state.school_address = None
                 st.session_state.school_db_path = None
 
             # ── Cookies ───────────────────────────────────────────────────
@@ -155,7 +157,7 @@ class SessionManager:
                 "authenticated", "user_id", "role", "username",
                 "login_time", "last_activity", "assignment",
                 "assignment_just_selected", "session_id",
-                "school_code", "school_name", "school_db_path",
+                "school_code", "school_name", "school_address", "school_db_path",
             ]:
                 st.session_state.pop(key, None)
 
@@ -222,12 +224,14 @@ class SessionManager:
 
                 st.session_state.school_code    = school_code
                 st.session_state.school_name    = school_info["school_name"]
+                st.session_state.school_address = school_info["address"]
                 st.session_state.school_db_path = get_school_db_path(school_code)
 
             else:
                 # Platform superadmin or legacy — no school context
                 st.session_state.school_code    = None
                 st.session_state.school_name    = None
+                st.session_state.school_address = None
                 st.session_state.school_db_path = None
 
             # ── Assignment (teachers only) ─────────────────────────────────
@@ -297,6 +301,7 @@ class SessionManager:
             "assignment":  st.session_state.get("assignment"),
             "school_code": st.session_state.get("school_code"),
             "school_name": st.session_state.get("school_name"),
+            "school_address": st.session_state.get("school_address"),
         }
 
     @staticmethod

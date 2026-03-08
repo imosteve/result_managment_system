@@ -4,10 +4,12 @@ Changes from single-tenant version:
   - initialize_master_database() replaces initialize_database()
     → only ensures master.db tables exist at startup
   - render_header() reads school name from session state
-    (platform superadmins see platform_name from config)
+    (platform superadmins see the live metrics header instead)
   - get_navigation_options() handles platform_superadmin role
-    → shows ONLY Platform Admin panel (no school-level sections)
-  - superadmin nav includes "🌐 Platform Admin"
+    → shows 3 sidebar sections mirroring the school-section pattern:
+        🏫 Schools & Admins
+        💾 Database
+        📋 Audit Log
   - setup_default_users() removed entirely
 """
 
@@ -95,7 +97,10 @@ class ApplicationManager:
             return True
         except Exception as e:
             logger.error(f"Master database initialisation failed: {e}")
-            st.error("❌ Platform database initialisation failed. Please contact the system administrator.")
+            st.error(
+                "❌ Platform database initialisation failed. "
+                "Please contact the system administrator."
+            )
             return False
 
     def initialize_cookies(self) -> Optional[EncryptedCookieManager]:
@@ -109,42 +114,53 @@ class ApplicationManager:
             return cookies
         except Exception as e:
             logger.error(f"Cookie manager initialisation failed: {e}")
-            st.error("❌ Session management initialisation failed. Please refresh the page.")
+            st.error(
+                "❌ Session management initialisation failed. "
+                "Please refresh the page."
+            )
             return None
 
     def render_header(self):
         """
-        School users    → school_name from session state (set at login)
-        Platform admin  → platform_name from APP_CONFIG
+        platform_superadmin → renders the live metrics header via
+                              render_platform_header() so the summary bar
+                              appears on every platform page.
+        School users        → school_name from session state (set at login).
         """
-        display_name = (
-            st.session_state.get("school_name")
-            or APP_CONFIG.get("platform_name", "School Result Management System")
-        )
-        st.markdown(
-            f'<div class="main-header"><h2>{display_name.upper()}</h2></div>',
-            unsafe_allow_html=True,
-        )
+        role = st.session_state.get("role")
+
+        if role == "platform_superadmin":
+            from app_sections_master import render_platform_header
+            render_platform_header()
+        else:
+            display_name = (
+                st.session_state.get("school_name")
+                or APP_CONFIG.get("platform_name", "School Result Management System")
+            )
+            st.markdown(
+                f'<div class="main-header"><h2>{display_name.upper()}</h2></div>',
+                unsafe_allow_html=True,
+            )
 
     def get_navigation_options(self, role: str, username: str) -> Dict[str, Callable]:
         """
         Return sidebar navigation for the current role.
-
-        platform_superadmin → Platform Admin panel ONLY (no school context)
-        superadmin          → All school sections + Platform Admin
-        admin               → All school sections
-        class_teacher       → Restricted school sections
-        subject_teacher     → Restricted school sections
         """
         try:
-            from app_sections_master import platform_admin as platform_admin_module
-
-            # Platform superadmin has no school DB — must not see school sections
+            # ── Platform superadmin — no school DB, platform sections only ──
             if role == "platform_superadmin":
+                from app_sections_master import (
+                    platform_schools_section,
+                    platform_db_section,
+                    platform_audit_section,
+                )
                 return {
-                    "🌐 Platform Admin": platform_admin_module.platform_admin,
+                    "🏫 Schools & Admins": platform_schools_section,
+                    "💾 Database":         platform_db_section,
+                    "📋 Audit Log":        platform_audit_section,
                 }
 
+            # ── School roles ──────────────────────────────────────────────
             from app_sections_school import (
                 manage_comments, manage_classes, register_students,
                 manage_subjects, enter_scores, view_broadsheet,
@@ -186,7 +202,7 @@ class ApplicationManager:
                     "👤 My Profile":        profile_function,
                 }
 
-            if role == "class_teacher":
+            if role == "teacher":
                 return {
                     "👥 Register Students": register_students.register_students,
                     "📚 Manage Subjects":   manage_subjects.add_subjects,
