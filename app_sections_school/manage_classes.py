@@ -1,7 +1,7 @@
 # app_sections/manage_classes.py
 
 import streamlit as st
-from database_school import get_all_classes, create_class, delete_class, update_class, clear_all_classes
+from database_school import get_all_classes, create_class, delete_class, update_class
 from main_utils import inject_login_css, render_page_header
 from auth.activity_tracker import ActivityTracker
 
@@ -15,34 +15,26 @@ def create_class_section():
         st.error("⚠️ Access denied. Admins only.")
         return
 
-    # Initialize activity tracker
     ActivityTracker.init()
 
     st.set_page_config(page_title="Manage Classes", layout="wide")
-
-    # Custom CSS for better table styling
     inject_login_css("templates/tabs_styles.css")
-
-    # Subheader
     render_page_header("Manage Class")
 
-    # FIX: Pass user_id and role to get_all_classes
-    classes = get_all_classes(user_id=st.session_state.user_id, role=st.session_state.role)
+    # New schema: get_all_classes() → [{id, class_name, description, created_at}]
+    classes = get_all_classes()
 
-    # Create tabs
-    tab1, tab2, tab3 = st.tabs(["View/Edit Classes", "Add Class", "Clear All Classes"])
-    
-    # Track active tab
+    tab1, tab2 = st.tabs(["View/Edit Classes", "Add Class"])
+
     active_tab = st.session_state.get("manage_classes_active_tab", 0)
     ActivityTracker.watch_tab("manage_classes", active_tab)
 
+    # ── TAB 1: VIEW / EDIT ─────────────────────────────────────────────────────
     with tab1:
         st.session_state.manage_classes_active_tab = 0
         st.subheader("View/Edit Classes")
 
-        
         with st.container(border=True):
-            # Filter options
             col1, col2, col3 = st.columns([1, 1, 1])
             with col1:
                 filter_type = st.selectbox(
@@ -50,94 +42,83 @@ def create_class_section():
                     ["All", "Kindergarten", "Nursery", "Primary", "JSS", "SSS"],
                     key="filter_class_view"
                 )
-                # Track filter selection
                 ActivityTracker.watch_value("filter_class_view", filter_type)
-            
             with col3:
                 search_query = st.text_input(
                     "🔍 Search",
                     placeholder="Search class...",
                     key="search_class_view"
                 )
-                # Track search input (only when it changes significantly)
                 if search_query:
                     ActivityTracker.watch_value("search_class_view", search_query)
-        
-        # Filter classes by type and search query
+
         filtered_classes = classes
-        
-        # Apply class type filter
+
         if filter_type != "All":
-            filtered_classes = [cls for cls in filtered_classes if cls['class_name'].upper().startswith(filter_type.upper())]
-        
-        # Apply search filter
+            filtered_classes = [
+                cls for cls in filtered_classes
+                if cls['class_name'].upper().startswith(filter_type.upper())
+            ]
+
         if search_query:
-            filtered_classes = [cls for cls in filtered_classes if search_query.lower() in cls['class_name'].lower() or search_query.lower() in cls['term'].lower() or search_query.lower() in cls['session'].lower()]
+            filtered_classes = [
+                cls for cls in filtered_classes
+                if search_query.lower() in cls['class_name'].lower()
+            ]
 
         if filtered_classes:
-            header_cols = st.columns([3, 3, 3, 1.2, 1.2])
+            header_cols = st.columns([3, 4, 1.2, 1.2])
             header_cols[0].markdown("**Class Name**")
-            header_cols[1].markdown("**Term**")
-            header_cols[2].markdown("**Session**")
-            header_cols[3].markdown("**Update**")
-            header_cols[4].markdown("**Delete**")
+            header_cols[1].markdown("**Description**")
+            header_cols[2].markdown("**Update**")
+            header_cols[3].markdown("**Delete**")
 
             for i, cls in enumerate(filtered_classes):
-                col1, col2, col3, col4, col5 = st.columns([3, 3, 3, 1.2, 1.2], gap="small", vertical_alignment="bottom")
-                new_class = col1.text_input("Class", 
-                                            value=cls['class_name'], 
-                                            key=f"class_name_{i}", 
-                                            label_visibility="collapsed"
-                                            ).strip().upper()
-                new_term = col2.selectbox("Term", 
-                                          options=["1st Term", "2nd Term", "3rd Term"], 
-                                          index=["1st Term", "2nd Term", "3rd Term"].index(cls['term']), 
-                                          key=f"term_{i}", 
-                                          label_visibility="collapsed"
-                                          )
-                new_session = col3.text_input("Session", 
-                                              value=cls['session'], 
-                                              key=f"session_{i}", 
-                                              label_visibility="collapsed"
-                                              )
+                col1, col2, col3, col4 = st.columns([3, 4, 1.2, 1.2], gap="small", vertical_alignment="bottom")
 
-                if col4.button("💾", key=f"update_{i}"):
-                    # Track update button click
+                new_class = col1.text_input(
+                    "Class",
+                    value=cls['class_name'],
+                    key=f"class_name_{i}",
+                    label_visibility="collapsed"
+                ).strip().upper()
+
+                new_desc = col2.text_input(
+                    "Description",
+                    value=cls.get('description') or "",
+                    key=f"desc_{i}",
+                    label_visibility="collapsed"
+                ).strip()
+
+                if col3.button("💾", key=f"update_{i}"):
                     ActivityTracker.update()
-                    
                     new_class_upper = new_class.strip().upper()
+                    # Duplicate check (exclude self)
                     if any(
-                        cls_other["class_name"].strip().upper() == new_class_upper and
-                        cls_other["term"] == new_term and
-                        cls_other["session"].strip() == new_session.strip() and
-                        not (
-                            cls_other["class_name"] == cls["class_name"] and
-                            cls_other["term"] == cls["term"] and
-                            cls_other["session"] == cls["session"]
-                        )
-                        for cls_other in classes
+                        c["class_name"].strip().upper() == new_class_upper
+                        and c["class_name"] != cls["class_name"]
+                        for c in classes
                     ):
-                        st.markdown(f'<div class="error-container">⚠️ A class with name "{new_class_upper}", term "{new_term}", and session "{new_session}" already exists.</div>', unsafe_allow_html=True)
+                        st.markdown(
+                            f'<div class="error-container">⚠️ A class named "{new_class_upper}" already exists.</div>',
+                            unsafe_allow_html=True
+                        )
                     else:
                         update_class(
-                            original_class_name=cls['class_name'],
-                            original_term=cls['term'], 
-                            original_session=cls['session'],
-                            new_class_name=new_class_upper,
-                            new_term=new_term,
-                            new_session=new_session.strip()
+                            class_name=cls['class_name'],
+                            new_name=new_class_upper,
+                            description=new_desc or None
                         )
-                        st.markdown(f'<div class="success-container">✅ Updated to {new_class_upper} - {new_term} - {new_session}</div>', unsafe_allow_html=True)
+                        st.markdown(
+                            f'<div class="success-container">✅ Updated to {new_class_upper}</div>',
+                            unsafe_allow_html=True
+                        )
                         st.rerun()
 
-                if col5.button("❌", key=f"delete_{i}"):
-                    # Track delete button click
+                if col4.button("❌", key=f"delete_{i}"):
                     ActivityTracker.update()
-                    
                     st.session_state["delete_pending"] = {
                         "class_name": cls["class_name"],
-                        "term": cls["term"],
-                        "session": cls["session"],
                         "index": i
                     }
 
@@ -146,15 +127,19 @@ def create_class_section():
                     def confirm_delete_class():
                         pending = st.session_state["delete_pending"]
                         if pending["index"] == i:
-                            st.warning(f"⚠️ Are you sure you want to delete '{pending['class_name']}' for {pending['term']}, {pending['session']}?")
-                            st.error(f"This will also delete all associated students, subjects, and scores.")
+                            st.warning(f"⚠️ Are you sure you want to delete '{pending['class_name']}'?")
+                            st.error("This will also delete all associated students, subjects, and scores.")
                             confirm_col1, confirm_col2 = st.columns(2)
                             if confirm_col1.button("✅ Delete", key=f"confirm_delete_{i}"):
-                                # Track confirmation
                                 ActivityTracker.update()
-                                
-                                delete_class(pending["class_name"], pending["term"], pending["session"])
-                                st.markdown(f'<div class="success-container">❌ Deleted {pending["class_name"]} - {pending["term"]} - {pending["session"]}</div>', unsafe_allow_html=True)
+                                success, msg = delete_class(pending["class_name"])
+                                if success:
+                                    st.markdown(
+                                        f'<div class="success-container">❌ Deleted {pending["class_name"]}</div>',
+                                        unsafe_allow_html=True
+                                    )
+                                else:
+                                    st.error(f"❌ {msg}")
                                 del st.session_state["delete_pending"]
                                 st.rerun()
                             elif confirm_col2.button("❌ Cancel", key=f"cancel_delete_{i}"):
@@ -166,128 +151,68 @@ def create_class_section():
         else:
             st.info("No classes found matching your filters.")
 
+    # ── TAB 2: ADD CLASS ───────────────────────────────────────────────────────
     with tab2:
         st.session_state.manage_classes_active_tab = 1
         st.subheader("Add Class")
 
-        # Use a flag to reset fields AFTER rerun, not before widget instantiation
         if st.session_state.get("reset_add_class", False):
             st.session_state["class_input"] = ""
             st.session_state["arm_input"] = ""
-            st.session_state["term_input"] = "1st Term"
-            st.session_state["session_input"] = ""
             st.session_state["reset_add_class"] = False
 
-        if "class_input" not in st.session_state:
-            st.session_state["class_input"] = ""
-        if "arm_input" not in st.session_state:
-            st.session_state["arm_input"] = ""
-        if "term_input" not in st.session_state:
-            st.session_state["term_input"] = "1st Term"
-        if "session_input" not in st.session_state:
-            st.session_state["session_input"] = ""
+        for key, default in [("class_input", ""), ("arm_input", "")]:
+            if key not in st.session_state:
+                st.session_state[key] = default
 
         with st.form("add_class_form"):
-            col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
+            col1, col2 = st.columns([2, 2])
             class_name = col1.selectbox(
                 "Class",
                 ["", "Kindergarten", "Nursery", "Primary", "JSS", "SSS"],
                 key="class_input"
             )
-
             class_arm = col2.text_input(
                 "Arm (e.g. 4, 4A, 4B)",
                 key="arm_input"
             ).strip().upper()
 
-            new_class = f'{class_name.upper()} {class_arm}'
+            new_class = f'{class_name.upper()} {class_arm}'.strip()
 
-            term = col3.selectbox(
-                "Term",
-                ["1st Term", "2nd Term", "3rd Term"],
-                key="term_input"
-            )
-
-            session = col4.selectbox(
-                "Session",
-                ["2025/2026"],
-                key="session_input"
-            )
+            description = st.text_input(
+                "Description (optional)",
+                placeholder="e.g. Morning class"
+            ).strip()
 
             submitted = st.form_submit_button("➕ Add Class")
-            
-            # Track form submission
             ActivityTracker.watch_form(submitted)
 
             if submitted:
-                if not class_name or not class_arm or not session or not term:
-                    st.markdown('<div class="error-container">⚠️ Please fill all fields.</div>', unsafe_allow_html=True)
+                if not class_name or not class_arm:
+                    st.markdown(
+                        '<div class="error-container">⚠️ Please fill all required fields.</div>',
+                        unsafe_allow_html=True
+                    )
+                elif any(
+                    cls["class_name"].strip().upper() == new_class.upper()
+                    for cls in classes
+                ):
+                    st.markdown(
+                        f'<div class="error-container">⚠️ Class "{new_class}" already exists.</div>',
+                        unsafe_allow_html=True
+                    )
                 else:
-                    session_parts = session.split('/')
-                    if len(session_parts) != 2 or not (session_parts[0].isdigit() and session_parts[1].isdigit() and len(session_parts[0]) == 4 and len(session_parts[1]) == 4):
-                        st.markdown('<div class="error-container">⚠️ Session must be in format YYYY/YYYY (e.g., 2024/2025).</div>', unsafe_allow_html=True)
-                    elif any(
-                        cls["class_name"].strip().upper() == new_class and
-                        cls["term"] == term and
-                        cls["session"].strip() == session
-                        for cls in classes
-                    ):
-                        st.markdown(f'<div class="error-container">⚠️ Class with name "{new_class}", term "{term}", and session "{session}" already exists.</div>', unsafe_allow_html=True)
-                    else:
-                        success = create_class(new_class, term, session)
-                        if success:
-                            st.markdown(f'<div class="success-container">✅ Class "{new_class}" added for {term}, {session}.</div>', unsafe_allow_html=True)
-                            reset_add_class_fields()  # Set flag, not direct assignment
-                            st.rerun()
-                        else:
-                            st.markdown(f'<div class="error-container">❌ Failed to add class "{new_class}". A class with this name, term, and session may already exist in the database.</div>', unsafe_allow_html=True)
-                            st.rerun()
-
-    with tab3:
-        st.session_state.manage_classes_active_tab = 2
-        st.subheader("Clear All Classes")
-        st.warning("⚠️ This action will permanently delete all classes and their associated students, subjects, and scores. This cannot be undone.")
-        if classes:
-            confirm_clear = st.checkbox("I confirm I want to clear all classes")
-            # Track checkbox interaction
-            ActivityTracker.watch_value("confirm_clear_all_classes", confirm_clear)
-            
-            clear_all_button = st.button("🗑️ Clear All Classes", key="clear_all_classes", disabled=not confirm_clear)
-            
-            if 'clear_all_class' not in st.session_state:
-                st.session_state.clear_all_class = None
-            
-            # Confirmation dialog
-            if clear_all_button and confirm_clear:
-                # Track clear all button click
-                ActivityTracker.update()
-                
-                @st.dialog("Confirm All Classes Deletion", width="small")
-                def confirm_delete_all_classes():
-                    st.warning(f"⚠️ Are you sure you want to delete all classes and their associated students, subjects, and scores?")
-                    
-                    confirm_col1, confirm_col2 = st.columns(2)
-                    if confirm_col1.button("✅ Delete", key="confirm_clear_all"):
-                        # Track final confirmation
-                        ActivityTracker.update()
-                        
-                        st.session_state.clear_all_class = clear_all_classes()
-                        if st.session_state.clear_all_class:
-                            st.markdown('<div class="success-container">✅ All classes cleared successfully!</div>', unsafe_allow_html=True)
-                            st.session_state.clear_all_class = None
-                            st.rerun()
-                        else:
-                            st.markdown('<div class="error-container">❌ Failed to clear classes. Please try again.</div>', unsafe_allow_html=True)
-                    elif confirm_col2.button("❌ Cancel", key="cancel_clear_all"):
-                        st.session_state.clear_all_class = None
-                        st.info("Deletion cancelled.")
+                    success = create_class(new_class, description or None)
+                    if success:
+                        st.markdown(
+                            f'<div class="success-container">✅ Class "{new_class}" added.</div>',
+                            unsafe_allow_html=True
+                        )
+                        st.session_state["reset_add_class"] = True
                         st.rerun()
-                
-                confirm_delete_all_classes()
-
-        else:
-            st.info("No classes available to clear.")
-
-def reset_add_class_fields():
-    # Use st.experimental_rerun to reset fields after rerun, not before widgets are created
-    st.session_state["reset_add_class"] = True
+                    else:
+                        st.markdown(
+                            f'<div class="error-container">❌ Failed to add class "{new_class}". It may already exist.</div>',
+                            unsafe_allow_html=True
+                        )
+                        st.rerun()

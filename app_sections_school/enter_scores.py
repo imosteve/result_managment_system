@@ -3,294 +3,216 @@
 import streamlit as st
 import pandas as pd
 import logging
+import re
 from typing import Optional, List, Dict, Any
 from main_utils import (
     assign_grade, inject_login_css, format_ordinal, render_page_header, inject_metric_css
 )
 from database_school import (
-    get_all_classes, get_students_by_class, get_subjects_by_class,
-    get_scores_by_class_subject, save_scores, clear_all_scores,
-    get_user_assignments, get_student_selected_subjects
+    get_active_session, get_active_term_name, get_classes_for_session,
+    get_subjects_by_class, get_enrolled_students,
+    get_scores_for_subject, save_score, delete_scores_for_term,
+    get_student_selected_subjects, get_user_assignments
 )
 from auth.activity_tracker import ActivityTracker
 
-# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
 
 def enter_scores():
     """Main function to handle score entry with role-based access control"""
     try:
-        # Authentication check
         if not _check_authentication():
             return
-
-        # Role-based authorization check
         if not _check_authorization():
             return
 
-        # Initialize activity tracker
         ActivityTracker.init()
-
-        # Initialize session state variables
         _initialize_session_state()
 
-        # Set page configuration
         st.set_page_config(page_title="Enter Scores", layout="wide")
         inject_login_css("templates/tabs_styles.css")
-
-        # Subheader
         render_page_header("Manage Subject Scores")
 
-        # Main application logic
         _render_score_management_interface()
 
     except Exception as e:
         logger.error(f"Error in enter_scores: {str(e)}")
         st.error("❌ An unexpected error occurred. Please try again or contact support.")
 
+
 def _check_authentication() -> bool:
-    """Check if user is authenticated"""
     if not st.session_state.get("authenticated", False):
         st.error("⚠️ Please log in first.")
         st.switch_page("main.py")
         return False
     return True
 
+
 def _check_authorization() -> bool:
-    """Check if user has proper role-based authorization"""
     allowed_roles = ["superadmin", "admin", "class_teacher", "subject_teacher"]
-    user_role = st.session_state.get("role")
-    
-    if user_role not in allowed_roles:
-        st.error("⚠️ Access denied. You don't have permission to enter scores.")
-        logger.warning(f"Unauthorized access attempt by user {st.session_state.get('user_id')} with role {user_role}")
+    if st.session_state.get("role") not in allowed_roles:
+        st.error("⚠️ Access denied.")
         return False
     return True
 
+
 def _initialize_session_state():
-    """Initialize required session state variables"""
-    if 'user_id' not in st.session_state:
-        st.session_state.user_id = None
-    if 'role' not in st.session_state:
-        st.session_state.role = None
-    if 'assignment' not in st.session_state:
-        st.session_state.assignment = None
+    for key in ['user_id', 'role', 'assignment']:
+        if key not in st.session_state:
+            st.session_state[key] = None
+
 
 def _render_score_management_interface():
-    """Render the main score management interface"""
     user_id = st.session_state.user_id
     role = st.session_state.role
 
-    # Get classes based on user role
-    classes = _get_accessible_classes(user_id, role)
+    # Active session/term from academic_settings — teachers never pick these
+    session = get_active_session()
+    if not session:
+        st.warning("⚠️ No active session. Ask an admin to configure academic settings.")
+        return
+
+    term = get_active_term_name()
+    if not term:
+        st.warning("⚠️ No active term. Ask an admin to configure academic settings.")
+        return
+
+    classes = get_classes_for_session(session)
     if not classes:
-        st.warning("⚠️ No classes found or accessible to you.")
+        st.warning(f"⚠️ No classes found for session {session}.")
         return
 
-    # Class selection interface
-    selected_class_data = _render_class_selection(classes, role)
-    if not selected_class_data:
+    selected_class = _render_class_selection(classes, role)
+    if not selected_class:
         return
 
-    # Extract class details
-    class_name = selected_class_data['class_name']
-    term = selected_class_data['term']
-    session = selected_class_data['session']
+    class_name = selected_class
+    ActivityTracker.watch_value("enter_scores_class", f"{class_name}_{session}_{term}")
 
-    # Get subjects for the selected class (filtered by assignment)
-    subjects = _get_accessible_subjects(class_name, term, session, user_id, role)
+    subjects = _get_accessible_subjects(class_name, user_id, role)
     if not subjects:
-        st.warning(f"⚠️ No subjects found or assigned to you for {class_name} - {term} - {session}.")
+        st.warning(f"⚠️ No subjects found or assigned to you for {class_name}.")
         return
 
-    # Subject selection interface
-    selected_subject = _render_subject_selection(subjects, role)
+    selected_subject = _render_subject_selection(subjects)
     if not selected_subject:
         return
 
-    # Check if this is a senior class requiring subject selection consideration
-    import re
     is_senior_class = bool(re.match(r"SSS [23].*$", class_name))
 
-    # Get students for the selected class and subject
-    students = _get_accessible_students(class_name, term, session, user_id, role, selected_subject, is_senior_class)
+    students = _get_accessible_students(class_name, session, term, user_id, role, selected_subject, is_senior_class)
     if not students:
-        # For SSS2/SSS3, show specific message about subject selection
         if is_senior_class:
-            st.warning(f"⚠️ No students have selected {selected_subject} in {class_name} - {term} - {session}.")
-            st.info("💡 Students need to make their subject selections in the 'Manage Subject Combination' section first.")
+            st.warning(f"⚠️ No students have selected {selected_subject} in {class_name}.")
+            st.info("💡 Students need to make subject selections in 'Manage Subject Combination' first.")
         else:
-            st.warning(f"⚠️ No students found in {class_name} - {term} - {session}.")
+            st.warning(f"⚠️ No students found in {class_name}.")
         return
 
-    # Get existing scores
-    existing_scores = _get_existing_scores(class_name, selected_subject, term, session, user_id, role)
-    
-    # Show info message for senior classes
+    existing_scores = _get_existing_scores(class_name, selected_subject, session, term)
+
     if is_senior_class:
         st.info(f"Showing {len(students)} student(s) who selected {selected_subject}")
-    
-    # Render tabs for different operations
-    _render_score_tabs(students, existing_scores, class_name, selected_subject, term, session)
 
-def _get_accessible_classes(user_id: int, role: str) -> List[Dict[str, Any]]:
-    """Get classes accessible to the user based on their role"""
-    try:
-        classes = get_all_classes(user_id, role)
-        
-        if not classes:
-            st.warning("⚠️ No classes found.")
-            return []
-        
-        return classes
-    except Exception as e:
-        logger.error(f"Error fetching classes for user {user_id}: {str(e)}")
-        st.error("❌ Failed to load classes. Please try again.")
-        return []
+    _render_score_tabs(students, existing_scores, class_name, selected_subject, session, term)
 
-def _render_class_selection(classes: List[Dict[str, Any]], role: str) -> Optional[Dict[str, Any]]:
-    """Render class selection interface with persistence"""
-    from main_utils import render_persistent_class_selector
-    # Get selected class details
-    try:
-        selected_class = render_persistent_class_selector(
-            classes,
-            widget_key="enter_scores_class"
-        )
-        
-        # Track class selection
-        if selected_class:
-            class_identifier = f"{selected_class['class_name']}_{selected_class['term']}_{selected_class['session']}"
-            ActivityTracker.watch_value("enter_scores_class", class_identifier)
-        
-        return selected_class
-    except (ValueError, IndexError) as e:
-        logger.error(f"Error selecting class: {str(e)}")
-        st.error("❌ Invalid class selection.")
-        return None
 
-def _get_accessible_subjects(class_name: str, term: str, session: str, user_id: int, role: str) -> List[tuple]:
-    """Get subjects accessible to the user for the selected class"""
+def _render_class_selection(classes, role) -> Optional[str]:
+    class_names = [c['class_name'] for c in classes]
+    selected = st.selectbox("Select Class", class_names, key="enter_scores_class")
+    return selected
+
+
+def _get_accessible_subjects(class_name: str, user_id: int, role: str) -> list:
     try:
-        # Admins see all subjects in the class
-        if role in ["superadmin", "admin"]:
-            return get_subjects_by_class(class_name, term, session, user_id, role)
-        
-        # Class teachers see all subjects in their assigned class
-        if role == "class_teacher":
-            assignments = get_user_assignments(user_id)
-            # Check if user is class teacher for this class
-            for assignment in assignments:
-                if (assignment['assignment_type'] == 'class_teacher' and
-                    assignment['class_name'] == class_name and
-                    assignment['term'] == term and
-                    assignment['session'] == session):
-                    return get_subjects_by_class(class_name, term, session, user_id, role)
-            return []
-        
-        # Subject teachers see only their assigned subjects
+        # New schema: get_subjects_by_class(class_name) — no term/session
+        all_subjects = get_subjects_by_class(class_name)
+
+        if role in ["superadmin", "admin", "class_teacher"]:
+            return all_subjects
+
+        # subject_teacher — filter to assigned subjects only
         if role == "subject_teacher":
             assignments = get_user_assignments(user_id)
-            all_subjects = get_subjects_by_class(class_name, term, session, user_id, role)
-            
-            # Filter to only show assigned subjects
-            assigned_subjects = set()
-            for assignment in assignments:
-                if (assignment['assignment_type'] == 'subject_teacher' and
-                    assignment['class_name'] == class_name and
-                    assignment['term'] == term and
-                    assignment['session'] == session and
-                    assignment['subject_name']):
-                    assigned_subjects.add(assignment['subject_name'])
-            
-            # Return only subjects that match assignments
-            return [subj for subj in all_subjects if subj[1] in assigned_subjects]
-        
+            assigned_subjects = {
+                a['subject_name'] for a in assignments
+                if a.get('assignment_type') == 'subject_teacher'
+                and a.get('class_name') == class_name
+                and a.get('subject_name')
+            }
+            return [s for s in all_subjects if
+                    (s['subject_name'] if isinstance(s, dict) else s[1]) in assigned_subjects]
+
         return []
     except Exception as e:
-        logger.error(f"Error fetching subjects for class {class_name}: {str(e)}")
-        st.error("❌ Failed to load subjects. Please try again.")
+        logger.error(f"Error fetching subjects: {str(e)}")
+        st.error("❌ Failed to load subjects.")
         return []
 
-def _render_subject_selection(subjects: List[tuple], role: str) -> Optional[str]:
-    """Render subject selection interface"""
-    subject_names = [s[1] for s in subjects]
-    
-    selected_subject = st.selectbox("Select Subject", subject_names)
-    
-    # Track subject selection
-    ActivityTracker.watch_value("enter_scores_subject", selected_subject)
-    
-    return selected_subject
 
-def _get_accessible_students(class_name: str, term: str, session: str, user_id: int, role: str, 
-                           subject_name: str, is_senior_class: bool = False) -> List[tuple]:
-    """Get students accessible to the user for the selected class and subject"""
+def _render_subject_selection(subjects: list) -> Optional[str]:
+    subject_names = [
+        s['subject_name'] if isinstance(s, dict) else s[1]
+        for s in subjects
+    ]
+    selected = st.selectbox("Select Subject", subject_names)
+    ActivityTracker.watch_value("enter_scores_subject", selected)
+    return selected
+
+
+def _get_accessible_students(class_name: str, session: str, term: str,
+                              user_id: int, role: str,
+                              subject_name: str, is_senior_class: bool) -> list:
     try:
-        # For SSS 2 and SSS 3, get students who selected this subject
+        # New schema: get_enrolled_students(class_name, session) → [{student_name,...}]
+        all_students = get_enrolled_students(class_name, session)
+
         if is_senior_class and subject_name:
-            return _get_students_for_subject(class_name, subject_name, term, session, user_id, role)
-        else:
-            # For other classes, get all students
-            return get_students_by_class(class_name, term, session, user_id, role)
-        
+            filtered = []
+            seen = set()
+            for student in all_students:
+                sn = student['student_name'] if isinstance(student, dict) else student[1]
+                if sn in seen:
+                    continue
+                # New schema: get_student_selected_subjects(name, class_name, session, term)
+                sels = get_student_selected_subjects(sn, class_name, session, term)
+                if subject_name in sels:
+                    filtered.append(student)
+                    seen.add(sn)
+            return filtered
+
+        return all_students
     except Exception as e:
-        logger.error(f"Error fetching students for class {class_name}: {str(e)}")
-        st.error("❌ Failed to load students. Please try again.")
+        logger.error(f"Error fetching students: {str(e)}")
+        st.error("❌ Failed to load students.")
         return []
 
-def _get_students_for_subject(class_name: str, subject_name: str, term: str, session: str, 
-                            user_id: int, role: str) -> List[tuple]:
-    """Get students who selected a particular subject (for SSS 2 and SSS 3)"""
-    try:
-        # Get all students in the class first
-        all_students = get_students_by_class(class_name, term, session, user_id, role)
-        
-        # Use a set to track processed student IDs and prevent duplicates
-        processed_students = set()
-        students_with_subject = []
 
-        for student in all_students:
-            student_id = student[0]  # Assuming student[0] is the student ID
-            student_name = student[1]  # student[1] is the name
-            
-            # Skip if we've already processed this student
-            if student_id in processed_students:
-                continue
-                
-            selected_subjects = get_student_selected_subjects(student_name, class_name, term, session)
-            if subject_name in selected_subjects:
-                students_with_subject.append(student)
-                processed_students.add(student_id)
-        
-        return students_with_subject
-    except Exception as e:
-        logger.error(f"Error filtering students for subject {subject_name}: {str(e)}")
-        return []
-
-def _get_existing_scores(class_name: str, subject: str, term: str, session: str, user_id: int, role: str) -> Dict[str, tuple]:
-    """Get existing scores for the class and subject"""
+def _get_existing_scores(class_name: str, subject: str, session: str, term: str) -> Dict:
     try:
-        scores = get_scores_by_class_subject(class_name, subject, term, session, user_id, role)
-        return {score[1]: score for score in scores}  # score[1] is student_name
+        # New schema: get_scores_for_subject(class_name, session, term, subject_name)
+        scores = get_scores_for_subject(class_name, session, term, subject)
+        # returns list of dicts with student_name, ca_score, exam_score, total_score
+        return {
+            (s['student_name'] if isinstance(s, dict) else s[1]): s
+            for s in scores
+        }
     except Exception as e:
-        logger.error(f"Error fetching existing scores: {str(e)}")
-        st.error("❌ Failed to load existing scores.")
+        logger.error(f"Error fetching scores: {str(e)}")
         return {}
 
-def _render_score_tabs(students: List[tuple], score_map: Dict[str, tuple], 
-                      class_name: str, subject: str, term: str, session: str):
-    """Render the tabs for score management operations"""
+
+def _render_score_tabs(students, score_map, class_name, subject, session, term):
     tab1, tab2, tab3 = st.tabs(["Enter Scores", "Preview Scores", "Clear All Scores"])
-    
-    # Track active tab
+
     active_tab = st.session_state.get("enter_scores_active_tab", 0)
     ActivityTracker.watch_tab("enter_scores", active_tab)
 
     with tab1:
         st.session_state.enter_scores_active_tab = 0
-        _render_score_entry_tab(students, score_map, class_name, subject, term, session)
+        _render_score_entry_tab(students, score_map, class_name, subject, session, term)
 
     with tab2:
         st.session_state.enter_scores_active_tab = 1
@@ -298,213 +220,129 @@ def _render_score_tabs(students: List[tuple], score_map: Dict[str, tuple],
 
     with tab3:
         st.session_state.enter_scores_active_tab = 2
-        _render_clear_scores_tab(score_map, class_name, subject, term, session)
+        _render_clear_scores_tab(score_map, class_name, subject, session, term)
 
-def _validate_scores(df: pd.DataFrame) -> Dict[str, Any]:
-    """Validate score data before saving"""
+
+def _validate_scores(df: pd.DataFrame) -> Dict:
     errors = []
-    
     try:
         for idx, row in df.iterrows():
             student_name = row['Student']
-            test_score = float(row.get("Test (30%)", 0))
-            exam_score = float(row.get("Exam (70%)", 0))
-            
-            # Check test score range
-            if test_score < 0:
-                errors.append(f"❌ {idx+1} - {student_name}: Test score cannot be negative (got {test_score:.1f})")
-            elif test_score > 30:
-                errors.append(f"❌ {idx+1} - {student_name}: Test score exceeds maximum of 30 (got {test_score:.1f})")
-            
-            # Check exam score range
-            if exam_score < 0:
-                errors.append(f"❌ {idx+1} - {student_name}: Exam score cannot be negative (got {exam_score:.1f})")
-            elif exam_score > 70:
-                errors.append(f"❌ {idx+1} - {student_name}: Exam score exceeds maximum of 70 (got {exam_score:.1f})")
-        
-        return {
-            "valid": len(errors) == 0,
-            "errors": errors
-        }
+            ca = float(row.get("CA (30%)", 0))
+            exam = float(row.get("Exam (70%)", 0))
+            if ca < 0:
+                errors.append(f"❌ {idx+1} - {student_name}: CA score cannot be negative ({ca:.1f})")
+            elif ca > 30:
+                errors.append(f"❌ {idx+1} - {student_name}: CA score exceeds max of 30 ({ca:.1f})")
+            if exam < 0:
+                errors.append(f"❌ {idx+1} - {student_name}: Exam score cannot be negative ({exam:.1f})")
+            elif exam > 70:
+                errors.append(f"❌ {idx+1} - {student_name}: Exam score exceeds max of 70 ({exam:.1f})")
+        return {"valid": len(errors) == 0, "errors": errors}
     except Exception as e:
-        logger.error(f"Error validating scores: {str(e)}")
-        return {
-            "valid": False,
-            "errors": [f"❌ Validation error: {str(e)}"]
-        }
+        return {"valid": False, "errors": [f"❌ Validation error: {str(e)}"]}
 
-def _save_scores_to_database(df: pd.DataFrame, class_name: str, subject: str, term: str, session: str):
-    """Save scores to the database"""
+
+def _save_scores_to_database(df: pd.DataFrame, class_name: str, subject: str, session: str, term: str):
     try:
-        scores_to_save = []
-        
+        user_id = st.session_state.get('user_id')
         for _, row in df.iterrows():
             student = row["Student"]
-            test = float(row.get("Test (30%)", 0))
+            ca = float(row.get("CA (30%)", 0))
             exam = float(row.get("Exam (70%)", 0))
-            total = test + exam
+            total = ca + exam
             grade = assign_grade(total)
-            
-            scores_to_save.append({
-                "student": student,
-                "class": class_name,
-                "subject": subject,
-                "term": term,
-                "session": session,
-                "test": test,
-                "exam": exam,
-                "total": total,
-                "grade": grade
-            })
-        
-        # Save scores with position calculation
-        save_scores(scores_to_save, class_name, subject, term, session)
-        
-        # Success message
-        st.success(f"✅ All scores saved successfully for {subject} in {class_name} - {term} - {session}!")
-        logger.info(f"Scores saved for {subject} in {class_name} - {term} - {session} by user {st.session_state.user_id}")
-        
-        # Refresh the page to show updated data
+            # New schema: save_score(student_name, class_name, session, term, subject_name, ca_score, exam_score, grade, updated_by)
+            save_score(student, class_name, session, term, subject, ca, exam, grade, user_id)
+
+        st.success(f"✅ Scores saved for {subject} in {class_name} - {term} - {session}!")
+        logger.info(f"Scores saved for {subject} in {class_name} - {term} - {session}")
         st.rerun()
-        
     except Exception as e:
         logger.error(f"Error saving scores: {str(e)}")
         st.error("❌ Failed to save scores. Please try again.")
 
-def _render_score_preview_tab(students: List[tuple], score_map: Dict[str, tuple]):
-    """Render the score preview tab"""
-    st.subheader("Preview Scores")
 
+def _render_score_preview_tab(students, score_map):
+    st.subheader("Preview Scores")
     if not students:
-        st.info("No students available to preview.")
+        st.info("No students available.")
         return
 
-    # Build preview data - use dict to prevent duplicates
     preview_data = {}
     for idx, student in enumerate(students, 1):
-        student_name = student[1]
-        
-        # Skip if we've already processed this student
-        if student_name in preview_data:
+        sn = student['student_name'] if isinstance(student, dict) else student[1]
+        if sn in preview_data:
             continue
-            
-        existing = score_map.get(student_name)
-        
+
+        existing = score_map.get(sn)
         if existing:
-            test = int(existing[3]) if existing[3] is not None else 0
-            exam = int(existing[4]) if existing[4] is not None else 0
-            total = int(existing[5]) if existing[5] is not None else test + exam
-            grade = existing[6] if existing[6] else assign_grade(total)
-            position = format_ordinal(existing[7]) if existing[7] else "-"
+            ca = int(existing['ca_score'] if isinstance(existing, dict) else existing[3] or 0)
+            exam = int(existing['exam_score'] if isinstance(existing, dict) else existing[4] or 0)
+            total = int(existing['total_score'] if isinstance(existing, dict) else existing[5] or ca + exam)
+            grade = assign_grade(total)
         else:
-            test = exam = total = 0
+            ca = exam = total = 0
             grade = assign_grade(0)
-            position = "-"
-        
-        preview_data[student_name] = {
-            "S/N": str(idx),
-            "Student": student_name,
-            "Test": f"{test}",
-            "Exam": f"{exam}",
-            "Total": f"{total}",
-            "Grade": grade,
-            "Position": position
+
+        preview_data[sn] = {
+            "S/N": str(idx), "Student": sn,
+            "CA": str(ca), "Exam": str(exam), "Total": str(total), "Grade": grade
         }
 
-    # Convert to list for DataFrame
-    final_preview_data = []
-    for idx, (_, data) in enumerate(preview_data.items(), 1):
-        final_preview_data.append(data)
-
     st.dataframe(
-        pd.DataFrame(final_preview_data),
+        pd.DataFrame(list(preview_data.values())),
         column_config={
             "S/N": st.column_config.TextColumn("S/N", width="small"),
             "Student": st.column_config.TextColumn("Student", width="medium"),
-            "Test": st.column_config.TextColumn("Test", width="small"),
+            "CA": st.column_config.TextColumn("CA", width="small"),
             "Exam": st.column_config.TextColumn("Exam", width="small"),
             "Total": st.column_config.TextColumn("Total", width="small"),
             "Grade": st.column_config.TextColumn("Grade", width="small"),
-            "Position": st.column_config.TextColumn("Position", width="small")
         },
-        hide_index=True,
-        width="stretch",
-        height=35 * len(final_preview_data) + 38  # 35px per row + 38px header (approximate)
+        hide_index=True, width="stretch",
+        height=35 * len(preview_data) + 38
     )
 
-def _render_clear_scores_tab(score_map: Dict[str, tuple], class_name: str, 
-                           subject: str, term: str, session: str):
-    """Render the clear scores tab"""
+
+def _render_clear_scores_tab(score_map, class_name, subject, session, term):
     st.subheader("🗑️ Clear All Scores")
-    
-    st.warning("⚠️ **DANGER ZONE**: This action will permanently delete all scores for the selected subject in this class. This action cannot be undone.")
-    
+    st.warning("⚠️ **DANGER ZONE**: Permanently deletes all scores for this subject/term. Cannot be undone.")
+
     if score_map:
         st.info(f"📊 Found {len(score_map)} student scores to be cleared.")
-        
-        # Double confirmation for safety
         confirm_clear = st.checkbox("I understand this action cannot be undone")
-        # Track checkbox interaction
         ActivityTracker.watch_value("confirm_clear_scores", confirm_clear)
-        
-        confirm_text = st.text_input(
-            "Type 'DELETE' to confirm:",
-            placeholder="Type DELETE to confirm"
-        )
-        # Track confirmation text (only when not empty)
+
+        confirm_text = st.text_input("Type 'DELETE' to confirm:", placeholder="Type DELETE to confirm")
         if confirm_text:
             ActivityTracker.watch_value("confirm_delete_text", confirm_text)
-        
+
         is_confirmed = confirm_clear and confirm_text.strip().upper() == "DELETE"
-        
-        if st.button(
-            "🗑️ Clear All Scores", 
-            key="clear_all_scores", 
-            disabled=not is_confirmed,
-            type="secondary"
-        ):
-            # Track clear button click
+
+        if st.button("🗑️ Clear All Scores", key="clear_all_scores", disabled=not is_confirmed, type="secondary"):
             ActivityTracker.update()
-            
-            if _clear_all_scores_from_database(class_name, subject, term, session):
-                st.success(f"✅ All scores cleared successfully for {subject} in {class_name} - {term} - {session}!")
-                logger.info(f"Scores cleared for {subject} in {class_name} - {term} - {session} by user {st.session_state.user_id}")
+            try:
+                # New schema: delete_scores_for_term(class_name, session, term)
+                # This clears scores for the entire term; subject-specific clear not available in new schema
+                delete_scores_for_term(class_name, session, term)
+                st.success(f"✅ Scores cleared for {class_name} - {term} - {session}!")
                 st.rerun()
+            except Exception as e:
+                logger.error(f"Error clearing scores: {str(e)}")
+                st.error("❌ Failed to clear scores. Please try again.")
     else:
         st.info("No scores available to clear.")
 
-def _clear_all_scores_from_database(class_name: str, subject: str, term: str, session: str) -> bool:
-    """Clear all scores from the database"""
-    try:
-        return clear_all_scores(class_name, subject, term, session)
-    except Exception as e:
-        logger.error(f"Error clearing scores: {str(e)}")
-        st.error("❌ Failed to clear scores. Please try again.")
-        return False
-
 
 def resolve_device_mode(choice: str) -> bool:
-    """
-    Resolve device mode based on user choice
-    
-    Args:
-        choice: "Auto", "Desktop", or "Mobile"
-    
-    Returns:
-        bool: True for mobile, False for desktop
-    """
     if choice == "Mobile":
         return True
-    if choice == "Desktop":
-        return False
-    # default desktop mode
     return False
 
-def _render_score_entry_tab(students: List[tuple], score_map: Dict[str, tuple],
-                           class_name: str, subject: str, term: str, session: str):
-    """Smart rendering based on device type with manual toggle"""
-    
-    # View mode toggle in sidebar
+
+def _render_score_entry_tab(students, score_map, class_name, subject, session, term):
+    """Smart rendering based on device type"""
     with st.sidebar.expander("📱 View Mode"):
         device_mode = st.radio(
             "📱 View Mode",
@@ -513,141 +351,101 @@ def _render_score_entry_tab(students: List[tuple], score_map: Dict[str, tuple],
             horizontal=True,
             label_visibility="collapsed",
             width="stretch"
-            # help="Choose your preferred view mode"
         )
-        # Track mode selection
         ActivityTracker.watch_value("score_entry_view_mode", device_mode)
-    
-    # Resolve device mode
-    is_mobile = resolve_device_mode(device_mode)
-    
-    if is_mobile:
-        _render_mobile_score_entry(students, score_map, class_name, subject, term, session)
-    else:
-        _render_desktop_score_entry(students, score_map, class_name, subject, term, session)
 
-def _render_mobile_score_entry(students: List[tuple], score_map: Dict[str, tuple],
-                               class_name: str, subject: str, term: str, session: str):
-    """Mobile-optimized individual student entry with side-by-side inputs"""
-        
-    # Initialize current student index
+    is_mobile = resolve_device_mode(device_mode)
+
+    if is_mobile:
+        _render_mobile_score_entry(students, score_map, class_name, subject, session, term)
+    else:
+        _render_desktop_score_entry(students, score_map, class_name, subject, session, term)
+
+
+def _render_mobile_score_entry(students, score_map, class_name, subject, session, term):
+    """Mobile-optimized individual student entry"""
     if 'current_student_idx' not in st.session_state:
         st.session_state.current_student_idx = 0
-    
+
     total_students = len(students)
     current_idx = st.session_state.current_student_idx
-    
-    # Ensure index is within bounds
     if current_idx >= total_students:
         st.session_state.current_student_idx = 0
         current_idx = 0
-    
-    # Current student details
+
     student = students[current_idx]
-    student_name = student[1]
-    
+    student_name = student['student_name'] if isinstance(student, dict) else student[1]
+
     st.markdown(f"#### {student_name}")
 
-    # Navigation buttons
     col1, col2, col3 = st.columns([1, 2, 1])
-    
     with col1:
         if st.button("⬅️ Prev", disabled=current_idx == 0, width="stretch"):
             st.session_state.current_student_idx -= 1
             st.rerun()
-    
     with col2:
-        st.markdown(f"<h4 style='text-align: center;'>{current_idx + 1} of {total_students} students</h4>", 
-                   unsafe_allow_html=True)
-    
+        st.markdown(f"<h4 style='text-align:center;'>{current_idx + 1} of {total_students} students</h4>", unsafe_allow_html=True)
     with col3:
         if st.button("Next ➡️", disabled=current_idx >= total_students - 1, width="stretch"):
             st.session_state.current_student_idx += 1
             st.rerun()
-    
+
     st.markdown(" ")
-    
-    with st.container(key=f"individual_mobile_student_score{current_idx}", border=True):
+
+    with st.container(key=f"mobile_score_{current_idx}", border=True):
         st.markdown("##### Enter Scores")
-        
-        # Get existing scores for THIS student only
+
         existing = score_map.get(student_name)
-        current_test = float(existing[3]) if existing and existing[3] is not None else 0.0
-        current_exam = float(existing[4]) if existing and existing[4] is not None else 0.0
-        
-        # SIDE-BY-SIDE score inputs
+        current_ca = float(existing['ca_score'] if isinstance(existing, dict) else (existing[3] or 0)) if existing else 0.0
+        current_exam = float(existing['exam_score'] if isinstance(existing, dict) else (existing[4] or 0)) if existing else 0.0
+
         col1, col2, col3 = st.columns(3, vertical_alignment="bottom")
-        
         with col1:
-            test_score = st.number_input(
-                "Test Score",
-                min_value=0.0,
-                max_value=30.0,
-                value=current_test,
-                step=0.5,
-                key=f"mobile_test_{current_idx}_{student_name}",
-                help="Test (0-30) | Max: 30 marks"
+            ca_score = st.number_input(
+                "CA Score", min_value=0.0, max_value=30.0,
+                value=current_ca, step=0.5,
+                key=f"mobile_ca_{current_idx}_{student_name}",
+                help="CA (0-30)"
             )
-        
         with col2:
             exam_score = st.number_input(
-                "Exam Score",
-                min_value=0.0,
-                max_value=70.0,
-                value=current_exam,
-                step=0.5,
+                "Exam Score", min_value=0.0, max_value=70.0,
+                value=current_exam, step=0.5,
                 key=f"mobile_exam_{current_idx}_{student_name}",
-                help="Exam (0-70) | Max: 70 marks"
+                help="Exam (0-70)"
             )
-        
-        # Calculate total and grade
-        total = test_score + exam_score
+
+        total = ca_score + exam_score
         grade = assign_grade(total)
 
         with col3:
             if st.button("💾 Save", type="primary", width="stretch"):
-                success = _save_single_student_score(
-                    student_name, class_name, subject, term, session,
-                    test_score, exam_score, total, grade
-                )
-                
-                if success:
-                    st.success(f"✅ Saved {student_name}'s scores!")
-                    # Auto-advance to next student if not last
-                    # if current_idx < total_students - 1:
-                    #     st.session_state.current_student_idx += 1
-                    st.rerun()
-    
+                _save_single_student_score(student_name, class_name, subject, session, term, ca_score, exam_score, grade)
+                st.success(f"✅ Saved {student_name}'s scores!")
+                st.rerun()
+
         st.markdown(" ")
         inject_metric_css()
-    # with st.container(key="quick_score_preview", border=True):
-        st.markdown(f"##### Quick Score Preview")
-        # Display results
+        st.markdown("##### Quick Score Preview")
         col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("Test", f"{test_score:.1f}/30")
-        with col2:
-            st.metric("Exam", f"{exam_score:.1f}/70")
-        with col3:
-            st.metric("Total", f"{total:.1f}/100")
-        with col4:
-            st.metric("Grade", grade)
+        with col1: st.metric("CA", f"{ca_score:.1f}/30")
+        with col2: st.metric("Exam", f"{exam_score:.1f}/70")
+        with col3: st.metric("Total", f"{total:.1f}/100")
+        with col4: st.metric("Grade", grade)
 
         st.markdown(" ")
-
-    # Quick Jump functionality
-    # with st.container(key="quick_jump_to_student", border=True):
-        # Show list of students with save status
-        st.markdown(f"##### Quick Jump to Student")
+        st.markdown("##### Quick Jump to Student")
         col1_1, col2_2 = st.columns([3, 1], vertical_alignment="bottom")
         with col1_1:
             jump_options = []
             for i, stud in enumerate(students):
-                stud_name = stud[1]
-                has_scores = stud_name in score_map and score_map[stud_name][3] is not None
+                sn = stud['student_name'] if isinstance(stud, dict) else stud[1]
+                has_scores = sn in score_map and (
+                    score_map[sn]['ca_score'] if isinstance(score_map[sn], dict) else score_map[sn][3]
+                ) is not None
                 status = "✅" if has_scores else "⭕"
-                jump_options.append(f"{status} {i+1}. {stud_name}")
-            
+                jump_options.append(f"{status} {i+1}. {sn}")
+
             selected_jump = st.selectbox(
                 "Select student:",
                 range(total_students),
@@ -655,121 +453,81 @@ def _render_mobile_score_entry(students: List[tuple], score_map: Dict[str, tuple
                 key="mobile_jump_selector"
             )
         with col2_2:
-            if st.button("Jump to Student", width="stretch"):
+            if st.button("Jump", width="stretch"):
                 st.session_state.current_student_idx = selected_jump
                 st.rerun()
-    
-    # Show completion status
-    completed = sum(1 for s in students if s[1] in score_map and score_map[s[1]][3] is not None)
+
+    completed = sum(
+        1 for s in students
+        if (s['student_name'] if isinstance(s, dict) else s[1]) in score_map
+        and (score_map[(s['student_name'] if isinstance(s, dict) else s[1])].get('ca_score')
+             if isinstance(score_map.get(s['student_name'] if isinstance(s, dict) else s[1]), dict)
+             else None) is not None
+    )
     st.caption(f"📊 Completed: {completed}/{total_students} students")
 
-def _render_desktop_score_entry(students: List[tuple], score_map: Dict[str, tuple],
-                           class_name: str, subject: str, term: str, session: str):
-    """Render the score entry tab"""
+
+def _render_desktop_score_entry(students, score_map, class_name, subject, session, term):
     st.subheader("Enter Scores")
-    
     if not students:
-        st.warning("⚠️ No students available for score entry.")
+        st.warning("⚠️ No students available.")
         return
-    
-    # Display score limits
-    st.info("📊 **Score Limits:** Test (0-30) | Exam (0-70) | Total (0-100)")
-    
-    # Build editable data - use a dict to prevent duplicates
+
+    st.info("📊 **Score Limits:** CA (0-30) | Exam (0-70) | Total (0-100)")
+
     student_scores = {}
     for idx, student in enumerate(students, 1):
-        student_name = student[1]
-        # Skip if we've already processed this student
-        if student_name in student_scores:
+        sn = student['student_name'] if isinstance(student, dict) else student[1]
+        if sn in student_scores:
             continue
-            
-        existing = score_map.get(student_name)
-        test_score = float(existing[3]) if existing and existing[3] is not None else 0.0
-        exam_score = float(existing[4]) if existing and existing[4] is not None else 0.0
-        
-        student_scores[student_name] = {
-            "S/N": str(idx),
-            "Student": student_name,
-            "Test (30%)": test_score,
-            "Exam (70%)": exam_score,
-        }
+        existing = score_map.get(sn)
+        ca = float(existing['ca_score'] if isinstance(existing, dict) else (existing[3] or 0)) if existing else 0.0
+        exam = float(existing['exam_score'] if isinstance(existing, dict) else (existing[4] or 0)) if existing else 0.0
+        student_scores[sn] = {"S/N": str(idx), "Student": sn, "CA (30%)": ca, "Exam (70%)": exam}
 
-    # Convert to list for DataFrame with S/N
-    editable_rows = []
-    for idx, (_, data) in enumerate(student_scores.items(), 1):
-        editable_rows.append(data)
+    editable_rows = list(student_scores.values())
 
-    # Create editable DataFrame with validation
     try:
         editable_df = st.data_editor(
             pd.DataFrame(editable_rows),
             column_config={
-                "S/N": st.column_config.TextColumn(
-                    "S/N",
-                    disabled=True,
-                    width=20
-                ),
-                "Student": st.column_config.TextColumn(
-                    "Student", 
-                    disabled=True, 
-                    width=200
-                ),
-                "Test (30%)": st.column_config.NumberColumn(
-                    "Test (30%)",
-                    width="small",
-                    format="%d"
-                ),
-                "Exam (70%)": st.column_config.NumberColumn(
-                    "Exam (70%)",
-                    width="small",
-                    format="%d"
-                ),
+                "S/N": st.column_config.TextColumn("S/N", disabled=True, width=20),
+                "Student": st.column_config.TextColumn("Student", disabled=True, width=200),
+                "CA (30%)": st.column_config.NumberColumn("CA (30%)", width="small", format="%d"),
+                "Exam (70%)": st.column_config.NumberColumn("Exam (70%)", width="small", format="%d"),
             },
-            hide_index=True,
-            width="stretch",
-            key=f"score_editor_{class_name}_{subject}_{term}_{session}",
-            height=35 * len(editable_rows) + 38,  # 35px per row + 38px header (approximate)
-            on_change=ActivityTracker.update  # Track data editor interactions
+            hide_index=True, width="stretch",
+            key=f"score_editor_{class_name}_{subject}_{session}_{term}",
+            height=35 * len(editable_rows) + 38,
+            on_change=ActivityTracker.update
         )
 
-        # Validate scores before saving
-        validation_result = _validate_scores(editable_df)
-        if validation_result["valid"]:
+        validation = _validate_scores(editable_df)
+        if validation["valid"]:
             if st.button("💾 Save All Scores", key="save_scores", type="primary"):
-                # Track save button click
                 ActivityTracker.update()
-                _save_scores_to_database(editable_df, class_name, subject, term, session)
+                _save_scores_to_database(editable_df, class_name, subject, session, term)
         else:
-            # Display validation errors
-            for error in validation_result["errors"]:
+            for error in validation["errors"]:
                 st.error(error)
-            st.warning("⚠️ Please correct invalid scores before saving.")
+            st.warning("⚠️ Please correct errors before saving.")
 
     except Exception as e:
-        logger.error(f"Error in score entry interface: {str(e)}")
+        logger.error(f"Error in score entry: {str(e)}")
         st.error("❌ Error creating score entry interface.")
 
-def _save_single_student_score(student_name: str, class_name: str, subject: str, 
-                               term: str, session: str, test: float, exam: float, 
-                               total: float, grade: str) -> bool:
-    """
-    Save ONLY the current student's score without affecting others.
-    Uses your existing database functions with single-student update.
-    """
+
+def _save_single_student_score(student_name, class_name, subject, session, term, ca, exam, grade):
     try:
-        from database_school.scores import update_score
-        
-        # Use the existing update_score function from your database module
-        # This function already handles UPSERT (INSERT OR REPLACE)
-        update_score(student_name, subject, class_name, term, session, test, exam)
-        
-        logger.info(f"Saved score for {student_name} in {subject} - {class_name}")
+        user_id = st.session_state.get('user_id')
+        # New schema: save_score(student_name, class_name, session, term, subject_name, ca_score, exam_score, grade, updated_by)
+        save_score(student_name, class_name, session, term, subject, ca, exam, grade, user_id)
         return True
-        
     except Exception as e:
-        logger.error(f"Error saving single student score: {str(e)}")
-        st.error(f"❌ Failed to save score: {str(e)}")
+        logger.error(f"Error saving single score: {str(e)}")
+        st.error(f"❌ Failed to save: {str(e)}")
         return False
+
 
 if __name__ == "__main__":
     enter_scores()

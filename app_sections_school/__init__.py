@@ -4,7 +4,6 @@ App sections package
 Contains all the main functional sections of the application
 """
 
-# Import all sections for easy access
 from . import admin_panel
 from . import user_profile
 from . import manage_classes
@@ -13,7 +12,9 @@ from . import manage_subjects
 from . import enter_scores
 from . import view_broadsheet
 from . import manage_comments
+from . import manage_comment_templates
 from . import generate_reports
+from . import next_term_info
 from . import system_dashboard
 
 __all__ = [
@@ -25,6 +26,8 @@ __all__ = [
     'enter_scores',
     'view_broadsheet',
     'manage_comments',
+    'manage_comment_templates',
     'generate_reports',
-    'system_dashboard'
+    'next_term_info',
+    'system_dashboard',
 ]

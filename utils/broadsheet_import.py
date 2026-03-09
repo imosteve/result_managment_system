@@ -5,8 +5,8 @@
 import pandas as pd
 import streamlit as st
 from database_school import (
-    get_students_by_class, get_subjects_by_class,
-    save_scores
+    get_enrolled_students, get_subjects_by_class,
+    save_scores_bulk
 )
 from main_utils import assign_grade
 
@@ -133,43 +133,54 @@ def import_broadsheet_scores(parsed_data, class_name, term, session, user_id, ro
         tuple: (success, message)
     """
     try:
-        # Validate students and subjects exist
-        existing_students = get_students_by_class(class_name, term, session, user_id, role)
-        existing_subjects = get_subjects_by_class(class_name, term, session, user_id, role)
-        
-        student_names = {s[1] for s in existing_students}
-        subject_names = {s[1] for s in existing_subjects}
-        
+        # Validate students and subjects exist in new schema
+        existing_students = get_enrolled_students(class_name, session)
+        existing_subjects = get_subjects_by_class(class_name)
+
+        student_names = {s["student_name"] for s in existing_students}
+        subject_names = {s["subject_name"] if isinstance(s, dict) else s[1] for s in existing_subjects}
+
         # Check for missing students or subjects
         missing_students = set()
         missing_subjects = set()
-        
+
         for entry in parsed_data:
             if entry['student'] not in student_names:
                 missing_students.add(entry['student'])
             if entry['subject'] not in subject_names:
                 missing_subjects.add(entry['subject'])
-        
+
         if missing_students:
             return False, f"Students not found in database: {', '.join(list(missing_students)[:5])}"
-        
+
         if missing_subjects:
             return False, f"Subjects not found in database: {', '.join(list(missing_subjects)[:5])}"
-        
-        # Group scores by subject for batch processing
-        scores_by_subject = {}
-        for entry in parsed_data:
-            subject = entry['subject']
-            if subject not in scores_by_subject:
-                scores_by_subject[subject] = []
-            scores_by_subject[subject].append(entry)
-        
-        # Save scores for each subject
-        for subject, scores in scores_by_subject.items():
-            save_scores(scores, class_name, subject, term, session)
-        
-        return True, f"Successfully imported scores for {len(scores_by_subject)} subjects"
-    
+
+        # Build the list expected by save_scores_bulk
+        scores_payload = [
+            {
+                "student_name": entry["student"],
+                "class_name":   class_name,
+                "session":      session,
+                "term":         term,
+                "subject_name": entry["subject"],
+                "ca_score":     entry["test"],
+                "exam_score":   entry["exam"],
+            }
+            for entry in parsed_data
+        ]
+
+        result = save_scores_bulk(scores_payload, updated_by=str(user_id))
+
+        if result["failed"]:
+            return False, (
+                f"Import partially failed — saved {result['saved']}, "
+                f"failed {result['failed']}. Errors: {'; '.join(result['errors'][:3])}"
+            )
+
+        subjects_count = len({e["subject"] for e in parsed_data})
+        return True, f"Successfully imported scores for {subjects_count} subject(s) ({result['saved']} entries)"
+
     except Exception as e:
         return False, f"Error importing scores: {str(e)}"
 

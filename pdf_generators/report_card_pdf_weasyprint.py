@@ -12,8 +12,8 @@ from main_utils import (
     assign_grade, format_ordinal
 )
 from database_school import (
-    get_all_classes, get_students_by_class, get_student_scores, 
-    get_class_average, get_student_grand_totals, get_comment, get_subjects_by_class,
+    get_enrolled_students, get_scores_for_student,
+    get_student_grand_totals, get_comment, get_subjects_by_class,
     get_psychomotor_rating, get_grade_distribution, get_next_term_begin_date, get_next_term_info
 )
 from config import APP_CONFIG
@@ -50,55 +50,51 @@ def generate_report_card(student_name, class_name, term, session, is_secondary_c
     user_id = st.session_state.user_id
     role = st.session_state.role
 
-    # Fetch student data with role-based restrictions
-    students = get_students_by_class(class_name, term, session, user_id, role)
-    student_data = next((s for s in students if s[1] == student_name), None)
+    # Fetch enrolled students for class size and student gender
+    students = get_enrolled_students(class_name, session)
+    student_data = next((s for s in students if s["student_name"] == student_name), None)
     if not student_data:
         return None
-    gender = student_data[2]
+    gender = student_data.get("gender", "")
     class_size = len(students)
 
-    # Fetch student scores with role-based restrictions
-    student_scores = get_student_scores(student_name, class_name, term, session, user_id, role)
-    
-    # Get all subjects for the class
-    all_subjects = get_subjects_by_class(class_name, term, session, user_id, role)
+    # Fetch student scores (dicts) and subjects
+    student_scores = get_scores_for_student(student_name, class_name, session, term)
+    all_subjects = get_subjects_by_class(class_name)
     if not all_subjects:
         return None
 
-    # Calculate student average and totals (only from actual scores, filtering None values)
+    # Calculate totals and averages
     if student_scores:
-        # Filter out None values
-        valid_totals = [score[5] for score in student_scores if score[5] is not None]
-        valid_tests = [int(score[3]) for score in student_scores if score[3] is not None]
-        valid_exams = [int(score[4]) for score in student_scores if score[4] is not None]
-        
+        valid_totals = [s["total_score"] for s in student_scores if s["total_score"] is not None]
+        valid_tests  = [int(s["ca_score"])   for s in student_scores if s["ca_score"]   is not None]
+        valid_exams  = [int(s["exam_score"]) for s in student_scores if s["exam_score"] is not None]
+
         total_score = sum(valid_totals) if valid_totals else 0
-        total_test = sum(valid_tests) if valid_tests else 0
-        total_exam = sum(valid_exams) if valid_exams else 0
+        total_test  = sum(valid_tests)  if valid_tests  else 0
+        total_exam  = sum(valid_exams)  if valid_exams  else 0
         grand_total = int(total_test + total_exam)
-        avg = total_score / len(valid_totals) if valid_totals else 0
+        avg   = total_score / len(valid_totals) if valid_totals else 0
         grade = assign_grade(avg)
     else:
         total_score = total_test = total_exam = grand_total = 0
         avg = 0
         grade = "-"
 
-    # Calculate class average
-    class_average = get_class_average(class_name, term, session, user_id, role)
+    # Class average derived from grand totals
+    grand_totals = get_student_grand_totals(class_name, session, term)
+    all_avgs = [float(gt["average"]) for gt in grand_totals if gt.get("average") is not None]
+    class_average = round(sum(all_avgs) / len(all_avgs), 1) if all_avgs else 0.0
 
-    # Get position based on grand total comparison
-    grand_totals = get_student_grand_totals(class_name, term, session, user_id, role)
     position_data = next((gt for gt in grand_totals if gt['student_name'] == student_name), None)
-    # Get position or grade distribution based on class
+
     is_sss2_or_sss3 = bool(re.match(r"SSS [23].*$", class_name))
     if is_sss2_or_sss3:
-        # For SSS2 and SSS3, get grade distribution instead of position
-        grade_distribution = get_grade_distribution(student_name, class_name, term, session, user_id, role)
-        position = ""  # Not used for SSS2/SSS3
+        grade_distribution = get_grade_distribution(student_name, class_name, session, term)
+        position = ""
     else:
         grade_distribution = ""
-        position = format_ordinal(position_data['position']) if position_data else "-"   
+        position = format_ordinal(position_data['position']) if position_data else "-"
 
     current_date = datetime.now().strftime("%d %b %Y")
     
@@ -140,20 +136,21 @@ def generate_report_card(student_name, class_name, term, session, is_secondary_c
     }
 
     # Create score dictionary for quick lookup
-    score_dict = {score[2]: score for score in student_scores}
+    score_dict = {s["subject_name"]: s for s in student_scores}
 
     # Prepare data for template with all subjects
     subjects_data = []
     for subject in all_subjects:
-        subject_name = subject[1]
+        subject_name = subject["subject_name"] if isinstance(subject, dict) else subject[1]
         if subject_name in score_dict:
             score = score_dict[subject_name]
+            subj_grade = assign_grade(score["total_score"] or 0)
             subjects_data.append({
                 'subject': subject_name,
-                'test': int(score[3]) if score[3] is not None else "-",
-                'exam': int(score[4]) if score[4] is not None else "-",
-                'total': int(score[5]) if score[5] is not None else "-",
-                'grade': score[6] if score[6] else "-",
+                'test':  int(score["ca_score"])    if score["ca_score"]    is not None else "-",
+                'exam':  int(score["exam_score"])  if score["exam_score"]  is not None else "-",
+                'total': int(score["total_score"]) if score["total_score"] is not None else "-",
+                'grade': subj_grade,
                 'position': format_ordinal(position_data['position']) if position_data else "-"
             })
         else:

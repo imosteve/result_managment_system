@@ -1,6 +1,6 @@
 # database/subjects.py
 
-"""Subject management operations"""
+"""Subject management operations — new schema (subjects are per-class only, no term/session)"""
 
 import sqlite3
 import logging
@@ -9,151 +9,116 @@ from .connection import get_connection
 logger = logging.getLogger(__name__)
 
 
-def get_subjects_by_class(class_name, term, session, user_id=None, role=None):
+def get_subjects_by_class(class_name: str) -> list:
     """
-    Get all subjects for a class in specific term and session with role-based restrictions
-    
-    Args:
-        class_name: Class name
-        term: Term
-        session: Session
-        user_id: User ID (optional, for filtering)
-        role: User role (optional, for filtering)
-    
+    Get all subjects for a class.
+    Subjects are session/term-independent in the new schema.
+
     Returns:
-        list: List of subject records
+        list of dicts: {id, class_name, subject_name}
     """
     conn = get_connection()
+    conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
-    
-    if role in ["superadmin", "admin"]:
-        cursor.execute("""
-            SELECT id, name 
-            FROM subjects 
-            WHERE class_name = ? AND term = ? AND session = ?
-            ORDER BY name
-        """, (class_name, term, session))
-    elif user_id:
-        # Teachers see subjects in their assigned classes
-        cursor.execute("""
-            SELECT DISTINCT s.id, s.name 
-            FROM subjects s
-            JOIN teacher_assignments ta ON s.class_name = ta.class_name 
-                AND s.term = ta.term AND s.session = ta.session
-            WHERE s.class_name = ? AND s.term = ? AND s.session = ? 
-                AND ta.user_id = ?
-            ORDER BY s.name
-        """, (class_name, term, session, user_id))
-    else:
-        conn.close()
-        return []
-    
-    subjects = cursor.fetchall()
+    cursor.execute("""
+        SELECT id, class_name, subject_name
+        FROM   subjects
+        WHERE  class_name = ?
+        ORDER  BY subject_name
+    """, (class_name,))
+    rows = cursor.fetchall()
     conn.close()
-    return subjects
+    return [dict(r) for r in rows]
 
 
-def create_subject(subject_name, class_name, term, session):
+def create_subject(subject_name: str, class_name: str) -> bool:
     """
-    Create a new subject for a class in specific term and session
-    
-    Args:
-        subject_name: Subject name
-        class_name: Class name
-        term: Term
-        session: Session
-    
+    Create a new subject for a class.
+
     Returns:
-        bool: True if created successfully, False if already exists
+        True if created, False if already exists.
     """
     conn = get_connection()
     cursor = conn.cursor()
     try:
         cursor.execute("""
-            INSERT INTO subjects (name, class_name, term, session) 
-            VALUES (?, ?, ?, ?)
-        """, (subject_name, class_name, term, session))
+            INSERT INTO subjects (subject_name, class_name)
+            VALUES (?, ?)
+        """, (subject_name.strip(), class_name))
         conn.commit()
-        logger.info(f"Subject '{subject_name}' created for {class_name} - {term} - {session}")
+        logger.info(f"Subject '{subject_name}' created for class '{class_name}'")
         return True
     except sqlite3.IntegrityError:
-        logger.warning(f"Subject '{subject_name}' already exists for {class_name} - {term} - {session}")
+        logger.warning(f"Subject '{subject_name}' already exists for class '{class_name}'")
         return False
     finally:
         conn.close()
 
 
-def update_subject(subject_id, new_subject_name, new_class_name, new_term, new_session):
+def update_subject(subject_id: int, new_subject_name: str, class_name: str) -> bool:
     """
-    Update an existing subject entry
-    
-    Args:
-        subject_id: Subject ID to update
-        new_subject_name: New subject name
-        new_class_name: New class name
-        new_term: New term
-        new_session: New session
-    
+    Update an existing subject's name.
+
     Returns:
-        bool: True if updated successfully, False otherwise
+        True if updated, False on conflict or error.
     """
     conn = get_connection()
     cursor = conn.cursor()
     try:
         cursor.execute("""
             UPDATE subjects
-            SET name = ?, class_name = ?, term = ?, session = ?
-            WHERE id = ?
-        """, (new_subject_name, new_class_name, new_term, new_session, subject_id))
+            SET    subject_name = ?, class_name = ?
+            WHERE  id = ?
+        """, (new_subject_name.strip(), class_name, subject_id))
         conn.commit()
-        logger.info(f"Subject ID {subject_id} updated")
+        logger.info(f"Subject ID {subject_id} updated to '{new_subject_name}'")
         return True
     except sqlite3.IntegrityError:
-        logger.warning(f"Failed to update subject - may already exist")
+        logger.warning(f"Failed to update subject ID {subject_id} — name may already exist")
         return False
     finally:
         conn.close()
 
 
-def delete_subject(subject_id):
+def delete_subject(subject_id: int) -> bool:
     """
-    Delete a subject and all associated scores (CASCADE)
-    
-    Args:
-        subject_id: Subject ID to delete
-    """
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM subjects WHERE id = ?", (subject_id,))
-    conn.commit()
-    conn.close()
-    logger.info(f"Subject ID {subject_id} deleted")
+    Delete a subject by ID.
 
-
-def clear_all_subjects(class_name, term, session):
-    """
-    Delete all subjects for a specific class, term, and session
-    
-    Args:
-        class_name: Class name
-        term: Term
-        session: Session
-    
     Returns:
-        bool: True if successful, False otherwise
+        True if a row was deleted, False otherwise.
     """
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute("""
-            DELETE FROM subjects 
-            WHERE class_name = ? AND term = ? AND session = ?
-        """, (class_name, term, session))
+        cursor.execute("DELETE FROM subjects WHERE id = ?", (subject_id,))
         conn.commit()
-        logger.info(f"All subjects cleared for {class_name} - {term} - {session}")
+        deleted = cursor.rowcount > 0
+        if deleted:
+            logger.info(f"Subject ID {subject_id} deleted")
+        return deleted
+    except Exception as e:
+        logger.error(f"Error deleting subject ID {subject_id}: {e}")
+        return False
+    finally:
+        conn.close()
+
+
+def clear_all_subjects(class_name: str) -> bool:
+    """
+    Delete ALL subjects for a class.
+
+    Returns:
+        True if successful, False on error.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM subjects WHERE class_name = ?", (class_name,))
+        conn.commit()
+        logger.warning(f"All subjects cleared for class '{class_name}'")
         return True
     except sqlite3.Error as e:
-        logger.error(f"Error clearing subjects: {e}")
+        logger.error(f"Error clearing subjects for '{class_name}': {e}")
         return False
     finally:
         conn.close()

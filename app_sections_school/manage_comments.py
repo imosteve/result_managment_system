@@ -4,12 +4,13 @@ import streamlit as st
 import pandas as pd
 import re
 from database_school import (
-    get_all_classes, get_students_by_class, create_comment, get_comment, 
+    get_active_session, get_active_term_name, get_classes_for_session,
+    get_enrolled_students, create_comment, get_comment,
     delete_comment, create_psychomotor_rating, get_psychomotor_rating,
     delete_psychomotor_rating, get_all_comment_templates, get_student_average,
     get_head_teacher_comment_by_average
 )
-from main_utils import render_page_header, inject_login_css, render_persistent_class_selector
+from main_utils import render_page_header, inject_login_css
 from auth.activity_tracker import ActivityTracker
 
 # Psychomotor categories with their display names
@@ -49,35 +50,32 @@ def manage_comments():
     # Page header
     render_page_header("Manage Comments & Psychomotor Ratings")
     
-    # Class Selection
-    classes = get_all_classes(user_id, role)
+    # Active session/term — teachers never pick these manually
+    session = get_active_session()
+    if not session:
+        st.warning("⚠️ No active session configured. Ask an admin to set the active session.")
+        return
+
+    term = get_active_term_name()
+    if not term:
+        st.warning("⚠️ No active term configured. Ask an admin to set the active term.")
+        return
+
+    classes = get_classes_for_session(session)
     if not classes:
         st.warning("⚠️ No classes available. Add a class in the Manage Classes section.")
         return
 
-    selected_class_data = render_persistent_class_selector(
-        classes, 
-        widget_key="manage_comments_class"
-    )
-    
-    # Track class selector interaction
-    if selected_class_data:
-        ActivityTracker.watch_value(
-            "manage_comments_class_selector",
-            f"{selected_class_data['class_name']}_{selected_class_data['term']}_{selected_class_data['session']}"
-        )
-
-    if not selected_class_data:
-        st.warning("⚠️ No class selected.")
+    class_names = [c['class_name'] for c in classes]
+    class_name = st.selectbox("Select Class", class_names, key="manage_comments_class")
+    if not class_name:
         return
 
-    class_name = selected_class_data['class_name']
-    term = selected_class_data['term']
-    session = selected_class_data['session']
+    ActivityTracker.watch_value("manage_comments_class_selector", f"{class_name}_{session}_{term}")
 
-    students = get_students_by_class(class_name, term, session, user_id, role)
+    students = get_enrolled_students(class_name, session)
     if not students:
-        st.warning(f"⚠️ No students found for {class_name} - {term} - {session}.")
+        st.warning(f"⚠️ No students enrolled for {class_name} - {session}.")
         return
 
     is_senior_class = bool(re.match(r"SSS [123].*$", class_name))
@@ -159,11 +157,11 @@ def render_view_delete_tab(students, class_name, term, session, is_secondary_cla
     # Display existing comments
     comments_data = []
     for idx, s in enumerate(students, 1):
-        comment = get_comment(s[1], class_name, term, session)
-        psychomotor = get_psychomotor_rating(s[1], class_name, term, session)
+        comment = get_comment(s['student_name'], class_name, term, session)
+        psychomotor = get_psychomotor_rating(s['student_name'], class_name, term, session)
         
         # Get student average for display
-        avg = get_student_average(s[1], class_name, term, session, user_id, role)
+        avg = get_student_average(s['student_name'], class_name, session, term)
         
         if comment or psychomotor:
             ht_comment_display = comment['head_teacher_comment'] if comment and comment['head_teacher_comment'] else "-"
@@ -171,7 +169,7 @@ def render_view_delete_tab(students, class_name, term, session, is_secondary_cla
             
             comments_data.append({
                 "S/N": str(idx),
-                "Student": s[1],
+                "Student": s['student_name'],
                 "Average": f"{avg:.2f}" if avg > 0 else "-",
                 "Class Teacher Comment": comment['class_teacher_comment'] if comment and comment['class_teacher_comment'] else "-",
                 "Head Teacher Comment": ht_comment_display + (" (Custom)" if is_custom else " (Auto)") if ht_comment_display != "-" else "-",
@@ -204,10 +202,10 @@ def render_view_delete_tab(students, class_name, term, session, is_secondary_cla
         # Get students with comments or psychomotor ratings
         students_with_data = []
         for s in students:
-            comment = get_comment(s[1], class_name, term, session)
-            psychomotor = get_psychomotor_rating(s[1], class_name, term, session)
+            comment = get_comment(s['student_name'], class_name, term, session)
+            psychomotor = get_psychomotor_rating(s['student_name'], class_name, term, session)
             if comment or psychomotor:
-                students_with_data.append(s[1])
+                students_with_data.append(s['student_name'])
         
         if students_with_data:
             student_to_delete = st.selectbox(
@@ -247,7 +245,7 @@ def render_psychomotor_comments_tab(role, students, class_name, term, session, i
     """Render the Psychomotor Rating & Add Single Comment tab"""
     
     # Student selection
-    student_names = [s[1] for s in students]
+    student_names = [s['student_name'] for s in students]
     selected_student = st.selectbox("Select Student", student_names, key="psycho_comment_student")
     
     # Track student selection
@@ -330,7 +328,7 @@ def render_psychomotor_comments_tab(role, students, class_name, term, session, i
             ActivityTracker.update()
             success_count = 0
             for student in students:
-                if create_psychomotor_rating(student[1], class_name, term, session, ratings):
+                if create_psychomotor_rating(student['student_name'], class_name, term, session, ratings):
                     success_count += 1
             st.success(f"✅ Applied rating to {success_count}/{len(students)} students")
             st.rerun()
@@ -411,10 +409,10 @@ def render_psychomotor_comments_tab(role, students, class_name, term, session, i
                 ActivityTracker.update()
                 success_count = 0
                 for student in students:
-                    existing = get_comment(student[1], class_name, term, session)
+                    existing = get_comment(student['student_name'], class_name, term, session)
                     ht_existing = existing['head_teacher_comment'] if existing else ""
                     ht_custom_existing = existing.get('head_teacher_comment_custom', 0) if existing else 0
-                    if create_comment(student[1], class_name, term, session, ct_comment, ht_existing, ht_custom_existing):
+                    if create_comment(student['student_name'], class_name, term, session, ct_comment, ht_existing, ht_custom_existing):
                         success_count += 1
                 st.success(f"✅ Applied to {success_count}/{len(students)} students")
                 st.rerun()
@@ -426,7 +424,7 @@ def render_psychomotor_comments_tab(role, students, class_name, term, session, i
             st.markdown(f"##### {"Principal Comment" if is_secondary_class else "Head Teacher Comment" if is_primary_class else ""}")
             
             # Get student average for auto-comment
-            student_avg = get_student_average(selected_student, class_name, term, session, user_id, role)
+            student_avg = get_student_average(selected_student, class_name, session, term)
             auto_comment = get_head_teacher_comment_by_average(student_avg) if student_avg > 0 else None
             
             # Show student average and auto comment
@@ -513,9 +511,9 @@ def render_psychomotor_comments_tab(role, students, class_name, term, session, i
                         ActivityTracker.update()
                         success_count = 0
                         for student in students:
-                            existing = get_comment(student[1], class_name, term, session)
+                            existing = get_comment(student['student_name'], class_name, term, session)
                             ct_existing = existing['class_teacher_comment'] if existing else ""
-                            if create_comment(student[1], class_name, term, session, ct_existing, ht_comment_custom, 1):
+                            if create_comment(student['student_name'], class_name, term, session, ct_existing, ht_comment_custom, 1):
                                 success_count += 1
                         st.success(f"✅ Applied custom comment to {success_count}/{len(students)} students")
                         st.rerun()
@@ -539,7 +537,7 @@ def render_batch_add_ct_tab(students, class_name, term, session):
         # First student in the pair
         with col1:
             student = students[i]
-            student_name = student[1]
+            student_name = student['student_name']
             existing_comment = get_comment(student_name, class_name, term, session)
             existing_ct = existing_comment['class_teacher_comment'] or "" if existing_comment else ""
             
@@ -594,7 +592,7 @@ def render_batch_add_ct_tab(students, class_name, term, session):
         with col2:
             if i + 1 < len(students):
                 student = students[i + 1]
-                student_name = student[1]
+                student_name = student['student_name']
                 existing_comment = get_comment(student_name, class_name, term, session)
                 existing_ct = existing_comment['class_teacher_comment'] or "" if existing_comment else ""
                 
@@ -691,8 +689,8 @@ def render_batch_add_ht_tab(students, class_name, term, session, is_secondary_cl
         students_without_scores = []
         
         for student in students:
-            student_name = student[1]
-            avg = get_student_average(student_name, class_name, term, session, user_id, role)
+            student_name = student['student_name']
+            avg = get_student_average(student_name, class_name, session, term)
             
             if avg > 0:
                 auto_comment = get_head_teacher_comment_by_average(avg)
@@ -739,8 +737,8 @@ def render_batch_add_ht_tab(students, class_name, term, session, is_secondary_cl
             
             with st.spinner("Applying auto comments..."):
                 for student in students:
-                    student_name = student[1]
-                    avg = get_student_average(student_name, class_name, term, session, user_id, role)
+                    student_name = student['student_name']
+                    avg = get_student_average(student_name, class_name, session, term)
                     
                     if avg > 0:
                         auto_comment = get_head_teacher_comment_by_average(avg)
@@ -783,7 +781,7 @@ def render_batch_add_ht_tab(students, class_name, term, session, is_secondary_cl
             # First student in the pair
             with col1:
                 student = students[i]
-                student_name = student[1]
+                student_name = student['student_name']
                 existing_comment = get_comment(student_name, class_name, term, session)
                 existing_ht = existing_comment['head_teacher_comment'] or "" if existing_comment else ""
                 
@@ -797,7 +795,7 @@ def render_batch_add_ht_tab(students, class_name, term, session, is_secondary_cl
                     st.markdown(f"#### {student_name}")
                     
                     # Show student average
-                    avg = get_student_average(student_name, class_name, term, session, user_id, role)
+                    avg = get_student_average(student_name, class_name, session, term)
                     if avg > 0:
                         st.caption(f"Average: {avg:.2f}")
                     
@@ -835,7 +833,7 @@ def render_batch_add_ht_tab(students, class_name, term, session, is_secondary_cl
             with col2:
                 if i + 1 < len(students):
                     student = students[i + 1]
-                    student_name = student[1]
+                    student_name = student['student_name']
                     existing_comment = get_comment(student_name, class_name, term, session)
                     existing_ht = existing_comment['head_teacher_comment'] or "" if existing_comment else ""
                     
@@ -849,7 +847,7 @@ def render_batch_add_ht_tab(students, class_name, term, session, is_secondary_cl
                         st.markdown(f"#### {student_name}")
                         
                         # Show student average
-                        avg = get_student_average(student_name, class_name, term, session, user_id, role)
+                        avg = get_student_average(student_name, class_name, session, term)
                         if avg > 0:
                             st.caption(f"Average: {avg:.2f}")
                         
@@ -920,7 +918,7 @@ def render_batch_delete_tab(students, class_name, term, session, is_secondary_cl
         with st.container(border=True):
             st.markdown("#### Clear All Comments")
             
-            comments_exist = any(get_comment(s[1], class_name, term, session) for s in students)
+            comments_exist = any(get_comment(s['student_name'], class_name, term, session) for s in students)
             
             if comments_exist:
                 st.error("This will delete all class teacher and head teacher comments for this class.")
@@ -941,7 +939,7 @@ def render_batch_delete_tab(students, class_name, term, session, is_secondary_cl
                     ActivityTracker.update()
                     deleted_count = 0
                     for student in students:
-                        if delete_comment(student[1], class_name, term, session):
+                        if delete_comment(student['student_name'], class_name, term, session):
                             deleted_count += 1
                     st.success(f"✅ Deleted comments for {deleted_count} student(s).")
                     st.rerun()
@@ -953,7 +951,7 @@ def render_batch_delete_tab(students, class_name, term, session, is_secondary_cl
         with st.container(border=True):
             st.markdown("#### Clear All Psychomotor Ratings")
             
-            ratings_exist = any(get_psychomotor_rating(s[1], class_name, term, session) for s in students)
+            ratings_exist = any(get_psychomotor_rating(s['student_name'], class_name, term, session) for s in students)
             
             if ratings_exist:
                 st.error("This will delete all psychomotor ratings for this class.")
@@ -974,7 +972,7 @@ def render_batch_delete_tab(students, class_name, term, session, is_secondary_cl
                     ActivityTracker.update()
                     deleted_count = 0
                     for student in students:
-                        if delete_psychomotor_rating(student[1], class_name, term, session):
+                        if delete_psychomotor_rating(student['student_name'], class_name, term, session):
                             deleted_count += 1
                     st.success(f"✅ Deleted psychomotor ratings for {deleted_count} student(s).")
                     st.rerun()

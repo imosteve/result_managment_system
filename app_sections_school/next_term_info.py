@@ -5,13 +5,13 @@ from datetime import date
 import json
 
 from database_school import (
-    get_all_classes,
+    get_all_classes, get_active_session, get_active_term_name,
     get_next_term_info,
     create_or_update_next_term_info,
     delete_next_term_info,
     get_all_next_term_info
 )
-from main_utils import render_page_header, inject_login_css, render_persistent_next_term_selector
+from main_utils import render_page_header, inject_login_css
 
 
 def calculate_next_term(current_term, current_session):
@@ -50,13 +50,17 @@ def next_term_info():
     inject_login_css("templates/tabs_styles.css")
     render_page_header("Next Term Information")
 
-    classes = get_all_classes(user_id, st.session_state.get('role'))
+    classes = get_all_classes()
     if not classes:
         st.warning("⚠️ No classes available. Please create a class first.")
         return
 
-    # Extract unique class names
+    # Extract unique class names (no term/session — classes are permanent)
     all_class_names = sorted({c["class_name"] for c in classes})
+
+    # Use active session/term to determine current context
+    current_session = get_active_session()
+    current_term = get_active_term_name()
 
     tab1, tab2 = st.tabs(["Manage Information", "All Configurations"])
 
@@ -64,17 +68,10 @@ def next_term_info():
     # Tab 1: Configure
     # ---------------------------
     with tab1:
-        # Selector at top
-        selected_class_data = render_persistent_next_term_selector(classes, widget_key="nt_class_selector")
-        
-        if not selected_class_data:
-            st.info("Please select a term and session to continue")
+        if not current_session or not current_term:
+            st.warning("⚠️ No active session/term configured. Ask an admin to set academic settings.")
             return
-        
-        # Get current term and session from the first class (they should all be the same)
-        current_term = selected_class_data['term']
-        current_session = selected_class_data['session']
-        
+
         # Calculate next term intelligently
         next_term, next_session = calculate_next_term(current_term, current_session)
 

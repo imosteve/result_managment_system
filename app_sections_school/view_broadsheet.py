@@ -4,11 +4,10 @@ import streamlit as st
 import pandas as pd
 import re
 import os
-from database_school import get_all_classes, get_students_by_class, get_subjects_by_class, get_student_scores, get_student_grand_totals, get_grade_distribution
+from database_school import get_active_session, get_active_term_name, get_classes_for_session, get_enrolled_students, get_subjects_by_class, get_scores_for_subject, get_student_grand_totals, get_grade_distribution
 from main_utils import (
     assign_grade, create_metric_5col_broadsheet, 
-    format_ordinal, render_page_header, inject_login_css, 
-    render_persistent_class_selector
+    format_ordinal, render_page_header, inject_login_css
 )
 from pdf_generators.broadsheet_pdf_reportlab import (
     generate_blank_broadsheet_pdf,
@@ -51,63 +50,80 @@ def generate_broadsheet():
     # Subheader
     render_page_header("View Broadsheet Data")
 
-    classes = get_all_classes(user_id, role)
+    session = get_active_session()
+    if not session:
+        st.warning("⚠️ No active session configured. Ask an admin to set it.")
+        return
+    term = get_active_term_name()
+    if not term:
+        st.warning("⚠️ No active term configured. Ask an admin to set it.")
+        return
+
+    classes = get_classes_for_session(session)
     if not classes:
-        st.warning("⚠️ Please create at least one class first.")
+        st.warning("⚠️ No classes found for the active session.")
         if role in ["class_teacher", "subject_teacher"]:
-            st.info("You may need to select a class assignment in the 'Change Assignment' section.")
+            st.info("You may need to check your class assignment.")
         return
 
-    # Select class
-    selected_class_data = render_persistent_class_selector(
-        classes, 
-        widget_key="view_broadsheet_class"
-    )
-
-    if not selected_class_data:
-        st.warning("⚠️ No class selected.")
+    class_names = [c['class_name'] for c in classes]
+    class_name = st.selectbox("Select Class", class_names, key="view_broadsheet_class")
+    if not class_name:
         return
-
-    class_name = selected_class_data['class_name']
-    term = selected_class_data['term']
-    session = selected_class_data['session']
     
     # Check if this is SSS2 or SSS3
     is_sss2_or_sss3 = bool(re.match(r"SSS [23].*$", class_name))
     
-    students = get_students_by_class(class_name, term, session, user_id, "admin")
+    students = get_enrolled_students(class_name, session)
     if not students:
-        st.warning(f"⚠️ No students found for {class_name} - {term} - {session}.")
+        st.warning(f"⚠️ No students found for {class_name}.")
         return
 
-    subjects = get_subjects_by_class(class_name, term, session, user_id, "admin")
+    subjects = get_subjects_by_class(class_name)
     if not subjects:
-        st.warning(f"⚠️ No subjects found for {class_name} - {term} - {session}.")
+        st.warning(f"⚠️ No subjects found for {class_name}.")
         return
 
     broadsheet_data = []
-    grand_totals = get_student_grand_totals(class_name, term, session, user_id, "admin")
+    grand_totals = get_student_grand_totals(class_name, session, term)
+
+    # Preload all scores per subject for efficient lookup
+    scores_by_subject = {}
+    for subject in subjects:
+        subj_name = subject["subject_name"] if isinstance(subject, dict) else subject[1]
+        subj_score_list = get_scores_for_subject(class_name, session, term, subj_name)
+        scores_by_subject[subj_name] = {
+            (s["student_name"] if isinstance(s, dict) else s[1]): s
+            for s in subj_score_list
+        }
 
     for student in students:
-        student_name = student[1]
-        scores = get_student_scores(student_name, class_name, term, session, user_id, "admin")
-        
-        # Create dictionaries for test, exam, and total scores
+        student_name = student["student_name"]
+        # scores_by_subject is preloaded below; look up per subject
         test_scores = {}
         exam_scores = {}
         total_scores = {}
-        
-        for score in scores:
-            subject_name = score[2]
-            test_scores[subject_name] = str(int(score[3])) if score[3] is not None else "-"
-            exam_scores[subject_name] = str(int(score[4])) if score[4] is not None else "-"
-            total_scores[subject_name] = str(int(score[5])) if score[5] is not None else "-"
+        for subject in subjects:
+            subj_name = subject["subject_name"] if isinstance(subject, dict) else subject[1]
+            subj_scores = scores_by_subject.get(subj_name, {})
+            student_score = subj_scores.get(student_name)
+            if student_score:
+                ca = student_score.get("ca_score") if isinstance(student_score, dict) else student_score[3]
+                exam = student_score.get("exam_score") if isinstance(student_score, dict) else student_score[4]
+                total = student_score.get("total_score") if isinstance(student_score, dict) else student_score[5]
+                test_scores[subj_name] = str(int(ca)) if ca is not None else "-"
+                exam_scores[subj_name] = str(int(exam)) if exam is not None else "-"
+                total_scores[subj_name] = str(int(total)) if total is not None else "-"
+            else:
+                test_scores[subj_name] = "-"
+                exam_scores[subj_name] = "-"
+                total_scores[subj_name] = "-"
         
         row = {"Student": student_name}
         
         # Add Test, Exam, and Total columns for each subject
         for subject in subjects:
-            subject_name = subject[1]
+            subject_name = subject["subject_name"] if isinstance(subject, dict) else subject[1]
             row[f"{subject_name} (Test)"] = test_scores.get(subject_name, "-")
             row[f"{subject_name} (Exam)"] = exam_scores.get(subject_name, "-")
             row[f"{subject_name} (Total)"] = total_scores.get(subject_name, "-")
@@ -129,7 +145,7 @@ def generate_broadsheet():
         
         if is_sss2_or_sss3:
             # For SSS2 and SSS3, get grade distribution
-            grade_distribution = get_grade_distribution(student_name, class_name, term, session, user_id, "admin")
+            grade_distribution = get_grade_distribution(student_name, class_name, session, term)
             row["Grade"] = grade_distribution if grade_distribution else "-"
             row["_position"] = position_data['position'] if position_data else 999  # Hidden field for sorting
         else:
@@ -164,7 +180,7 @@ def generate_broadsheet():
     )
 
     # Create columns with expanded metrics
-    create_metric_5col_broadsheet(subjects, students, class_average, broadsheet_data, class_name, term, session, user_id, "admin")
+    create_metric_5col_broadsheet(subjects, students, class_average, broadsheet_data, class_name, term, session)
 
     # Add sorting filter
     st.markdown("---")

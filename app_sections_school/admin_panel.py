@@ -5,16 +5,21 @@ import math
 import time
 import pandas as pd
 from database_school import (
-    get_all_classes, get_subjects_by_class,
+    get_all_classes, get_subjects_by_class, get_classes_for_session,
+    get_active_session, get_active_term_name,
+    get_all_sessions, create_session, delete_session, set_active_term,
     create_user, get_all_users, delete_user, assign_teacher, get_user_assignments,
     delete_assignment, get_database_stats, update_user, update_assignment, get_user_role,
     batch_assign_subject_teacher, get_classes_summary
 )
 from .system_dashboard import get_activity_statistics
+from database_master import get_school_by_code
 from main_utils import inject_login_css, render_page_header, inject_metric_css
 from utils.paginators import streamlit_paginator
 from auth.activity_tracker import ActivityTracker
 from security_manager import SecurityManager
+
+_active_session = get_active_session()
 
 def admin_panel():
     """Admin panel for user management and assignments"""
@@ -76,6 +81,7 @@ def admin_panel():
         "View/Edit Assignment",
         "Assign Class Teacher",
         "Assign Subject Teacher",
+        "Academic Settings",
         "Analytics & Reports",
     ])
 
@@ -83,11 +89,17 @@ def admin_panel():
     active_tab = st.session_state.get("admin_panel_active_tab", 0)
     ActivityTracker.watch_tab("admin_panel", active_tab)
 
+    # Active session for classes (no term needed — subjects are per-class)
+    _active_session = get_active_session()
+
     def get_fresh_classes():
-        return get_all_classes(user_id, admin_role)
-    
-    def get_fresh_subjects(class_name, term, session):
-        return get_subjects_by_class(class_name, term, session, user_id, admin_role)
+        if _active_session:
+            return get_classes_for_session(_active_session)
+        return get_all_classes()
+
+    def get_fresh_subjects(class_name, term=None, session=None):
+        # New schema: subjects are per-class only, no term/session
+        return get_subjects_by_class(class_name)
 
     # View/Delete User Tab
     with tabs[0]:
@@ -103,7 +115,7 @@ def admin_panel():
     with tabs[2]:
         st.session_state.admin_panel_active_tab = 2
         render_assignments_tab(user_id, admin_role, get_fresh_classes, get_fresh_subjects)
-        
+
     # Assign Class Teacher Tab
     with tabs[3]:
         st.session_state.admin_panel_active_tab = 3
@@ -114,9 +126,14 @@ def admin_panel():
         st.session_state.admin_panel_active_tab = 4
         render_assign_subject_teacher_tab(get_fresh_classes, get_fresh_subjects)
 
-    # Analytics & Reports
+    # Academic Settings Tab
     with tabs[5]:
         st.session_state.admin_panel_active_tab = 5
+        render_academic_settings_tab()
+
+    # Analytics & Reports
+    with tabs[6]:
+        st.session_state.admin_panel_active_tab = 6
         render_analytics_tab(stats)
 
 
@@ -275,16 +292,41 @@ def render_view_delete_user_tab(user_id, admin_role):
 
 def render_add_user_tab(admin_role):
     """Render Add New User tab"""
+    # ── Resolve school email domain from master DB ────────────────────────────
+    school_code = st.session_state.get("school_code", "")
+    school_info = get_school_by_code(school_code) if school_code else None
+    email_domain = school_info.get("email_domain", "").strip() if school_info else ""
+
     with st.form("add_user_form"):
         st.subheader("Add New User")
         form_key = f"add_user_form_{st.session_state.get('form_submit_count', 0)}"
-        
-        col1, col2, col3 = st.columns(3)
+
+        col1, col2 = st.columns(2)
         with col1:
             username = st.text_input("Username", key=f"username_{form_key}")
         with col2:
-            password = st.text_input("Password", type="password", key=f"password_{form_key}")
+            # ── Email input: autofill domain if known ─────────────────────────
+            if email_domain:
+                st.markdown(f"**Email** &nbsp; *(`username@{email_domain}`)*")
+                email_local = st.text_input(
+                    "Email local part",
+                    placeholder=f"e.g. john.doe",
+                    key=f"email_local_{form_key}",
+                    label_visibility="collapsed"
+                )
+                email = f"{email_local.strip()}@{email_domain}" if email_local.strip() else ""
+                st.caption(f"📧 Full email: `{email}`" if email else "📧 Enter the part before @")
+            else:
+                email = st.text_input(
+                    "Email",
+                    placeholder="e.g. john.doe@school.edu",
+                    key=f"email_{form_key}"
+                )
+
+        col3, col4 = st.columns(2)
         with col3:
+            password = st.text_input("Password", type="password", key=f"password_{form_key}")
+        with col4:
             if admin_role == "superadmin":
                 user_type = st.selectbox("User Type", ["", "Teacher", "Admin", "Superadmin"], key=f"role_{form_key}")
             else:
@@ -292,24 +334,48 @@ def render_add_user_tab(admin_role):
 
         submitted = st.form_submit_button("Add User")
         ActivityTracker.watch_form(submitted)
-        
+
         if submitted:
-            if username and password and user_type:
+            # ── Validation ────────────────────────────────────────────────────
+            errors = []
+
+            if not username.strip():
+                errors.append("Username is required.")
+            if not password:
+                errors.append("Password is required.")
+            if not user_type:
+                errors.append("User Type is required.")
+
+            # Email format check
+            email_clean = email.strip()
+            if not email_clean:
+                errors.append("Email is required.")
+            elif "@" not in email_clean or email_clean.startswith("@") or email_clean.endswith("@"):
+                errors.append("Enter a valid email address.")
+            else:
+                local, _, domain_part = email_clean.partition("@")
+                if not local or not domain_part or "." not in domain_part:
+                    errors.append("Enter a valid email address (e.g. name@school.edu).")
+                elif email_domain and domain_part.lower() != email_domain.lower():
+                    errors.append(f"Email domain must be @{email_domain} (got @{domain_part}).")
+
+            if errors:
+                for e in errors:
+                    st.error(f"⚠️ {e}")
+            else:
                 role_map = {
                     "Teacher":    "teacher",
                     "Admin":      "admin",
                     "Superadmin": "superadmin",
                 }
                 role = role_map.get(user_type)
-                
-                if create_user(username, password, role):
+
+                if create_user(username.strip(), password, email_clean, role):
                     st.session_state.success_message = f"✅ User {username} added successfully as {user_type}."
                     st.session_state.form_submit_count = st.session_state.get('form_submit_count', 0) + 1
                     st.rerun()
                 else:
-                    st.error(f"❌ Failed to add user. Username may already exist.")
-            else:
-                st.error("⚠️ Please fill in all fields.")
+                    st.error("❌ Failed to add user. Username or email may already exist.")
 
 
 def render_assignments_tab(user_id, admin_role, get_fresh_classes, get_fresh_subjects):
@@ -334,9 +400,8 @@ def render_assignments_tab(user_id, admin_role, get_fresh_classes, get_fresh_sub
                 "user_id": u[0],
                 "Username": u[1],
                 "Role": role_display,
-                "Class": f"{a['class_name']} - {a['term']} - {a['session']}",
+                "Class": a['class_name'],
                 "class_name": a['class_name'],
-                "term": a['term'],
                 "session": a['session'],
                 "Subject": a['subject_name'] or "-",
                 "subject_name": a['subject_name'],
@@ -374,8 +439,8 @@ def render_assignments_tab(user_id, admin_role, get_fresh_classes, get_fresh_sub
                     
                     col1, col2 = st.columns(2, vertical_alignment='bottom')
                     with col1:
-                        class_options = [f"{cls['class_name']} - {cls['term']} - {cls['session']}" for cls in classes]
-                        current_class = f"{selected_assignment['class_name']} - {selected_assignment['term']} - {selected_assignment['session']}"
+                        class_options = [cls['class_name'] for cls in classes]
+                        current_class = selected_assignment['class_name']
                         current_index = class_options.index(current_class) if current_class in class_options else 0
                         
                         new_class = st.selectbox("New Class", class_options, index=current_index, key="edit_assignment_class")
@@ -386,7 +451,7 @@ def render_assignments_tab(user_id, admin_role, get_fresh_classes, get_fresh_sub
                     
                     with col2:
                         if selected_assignment['subject_name']:
-                            subjects = get_fresh_subjects(new_class_name, new_term, new_session)
+                            subjects = get_fresh_subjects(new_class_name)
                             subject_options = [s[1] for s in subjects]
                             current_subject_index = subject_options.index(selected_assignment['subject_name']) if selected_assignment['subject_name'] in subject_options else 0
                             new_subject = st.selectbox("New Subject", subject_options, index=current_subject_index, key="edit_assignment_subject")
@@ -397,7 +462,7 @@ def render_assignments_tab(user_id, admin_role, get_fresh_classes, get_fresh_sub
                     if st.button("💾 Update Assignment", key="update_assignment_button", type="primary"):
                         ActivityTracker.update()
                         
-                        update_success = update_assignment(selected_assignment['id'], new_class_name, new_term, new_session, new_subject)
+                        update_success = update_assignment(selected_assignment['id'], new_class_name, new_subject)
                         if update_success:
                             st.success("✅ Assignment updated successfully")
                             time.sleep(1)
@@ -491,16 +556,16 @@ def render_assign_class_teacher_tab(get_fresh_classes):
                 submitted = st.form_submit_button("Assign", disabled=True)
             else:
                 with col2:
-                    class_options = [f"{cls['class_name']} - {cls['term']} - {cls['session']}" for cls in classes]
+                    class_options = [cls['class_name'] for cls in classes]
                     selected_class = st.selectbox("Select Class", class_options, key="class_teacher_class_select")
                 selected_index = class_options.index(selected_class)
                 class_data = classes[selected_index]
-                class_name, term, session = class_data['class_name'], class_data['term'], class_data['session']
+                class_name = class_data['class_name']
                 submitted = st.form_submit_button("Assign Class Teacher")
                 ActivityTracker.watch_form(submitted)
                 
                 if submitted:
-                    if assign_teacher(selected_user_id, class_name, term, session, None, 'class_teacher'):
+                    if assign_teacher(selected_user_id, class_name, _active_session or '', None, 'class_teacher'):
                         st.success(f"✅ Class teacher assigned: {next(u[1] for u in teacher_users if u[0] == selected_user_id)}.")
                         st.rerun()
                     else:
@@ -535,7 +600,7 @@ def render_assign_subject_teacher_tab(get_fresh_classes, get_fresh_subjects):
             st.warning("⚠️ No classes available. Add a class in the Manage Classes section.")
         else:
             with col2:
-                class_options = [f"{cls['class_name']} - {cls['term']} - {cls['session']}" for cls in classes]
+                class_options = [cls['class_name'] for cls in classes]
                 selected_class = st.selectbox("Select Class", class_options, key="subject_teacher_class_select")
                 ActivityTracker.watch_value("subject_teacher_class_select", selected_class)
             
@@ -544,9 +609,9 @@ def render_assign_subject_teacher_tab(get_fresh_classes, get_fresh_subjects):
             
             selected_index = class_options.index(selected_class)
             class_data = classes[selected_index]
-            class_name, term, session = class_data['class_name'], class_data['term'], class_data['session']
+            class_name = class_data['class_name']
             
-            subjects = get_fresh_subjects(class_name, term, session)
+            subjects = get_fresh_subjects(class_name)
             
             if not subjects:
                 st.warning("⚠️ No subjects available for this class. Add subjects in the Manage Subjects section.")
@@ -579,7 +644,7 @@ def render_assign_subject_teacher_tab(get_fresh_classes, get_fresh_subjects):
                             ActivityTracker.update()
                         
                         if submitted_single and subject_name:
-                            if assign_teacher(selected_user_id, class_name, term, session, subject_name, 'subject_teacher'):
+                            if assign_teacher(selected_user_id, class_name, _active_session or '', subject_name, 'subject_teacher'):
                                 st.success(f"✅ Subject teacher assigned: {next(u[1] for u in teacher_users if u[0] == selected_user_id)} to {subject_name}.")
                                 time.sleep(1)
                                 st.rerun()
@@ -587,8 +652,8 @@ def render_assign_subject_teacher_tab(get_fresh_classes, get_fresh_subjects):
                                 st.error("❌ Failed to assign subject teacher. Assignment may already exist.")
                         
                         if submitted_all:
-                            subject_names = [s[1] for s in subjects]
-                            success_count, failed_subjects = batch_assign_subject_teacher(selected_user_id, class_name, term, session, subject_names)
+                            subject_names = [s['subject_name'] if isinstance(s, dict) else s[1] for s in subjects]
+                            success_count, failed_subjects = batch_assign_subject_teacher(selected_user_id, class_name, _active_session or '', subject_names)
                             
                             if success_count == len(subjects):
                                 st.success(f"✅ All {success_count} subjects assigned successfully to {next(u[1] for u in teacher_users if u[0] == selected_user_id)}!")
@@ -612,7 +677,7 @@ def render_assign_subject_teacher_tab(get_fresh_classes, get_fresh_subjects):
                         ActivityTracker.watch_form(submitted)
                         
                         if submitted and subject_name:
-                            if assign_teacher(selected_user_id, class_name, term, session, subject_name, 'subject_teacher'):
+                            if assign_teacher(selected_user_id, class_name, _active_session or '', subject_name, 'subject_teacher'):
                                 st.success(f"✅ Subject teacher assigned: {next(u[1] for u in teacher_users if u[0] == selected_user_id)} to {subject_name}.")
                                 time.sleep(1)
                                 st.rerun()
@@ -631,12 +696,11 @@ def render_analytics_tab(stats):
     if class_summary:
         class_data = [
             {
-                "Class": row[0],
-                "Term": row[1],
-                "Session": row[2],
-                "Students": row[3],
-                "Subjects": row[4],
-                "Scores": row[5]
+                "Class":    row["class_name"],
+                "Session":  row["session"] or "-",
+                "Students": row["student_count"],
+                "Subjects": row["subject_count"],
+                "Scores":   row["score_count"]
             }
             for row in class_summary
         ]
@@ -661,5 +725,156 @@ def render_analytics_tab(stats):
         st.metric("Assignments", stats['assignments'])
 
 
-if __name__ == "__main__":
+
+
+def render_academic_settings_tab():
+    """Render Academic Settings tab — manage sessions and active term"""
+    st.subheader("Academic Settings")
+    st.info(
+        "Configure the active session and term. All teachers will automatically see the "
+        "active term when entering scores, comments, and reports."
+    )
+
+    performed_by = st.session_state.get('user_id')
+
+    if 'show_delete_session_confirm' not in st.session_state:
+        st.session_state.show_delete_session_confirm = False
+    if 'session_to_delete_name' not in st.session_state:
+        st.session_state.session_to_delete_name = None
+
+    # ── Current active settings ───────────────────────────────────────────────
+    active_session = get_active_session()
+    active_term = get_active_term_name()
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("Active Session", active_session or "Not set")
+    with col2:
+        st.metric("Active Term", active_term or "Not set")
+
+    st.markdown("---")
+
+    # ── Set active term ───────────────────────────────────────────────────────
+    st.markdown("#### Set Active Session & Term")
+
+    all_sessions = get_all_sessions()
+    session_names = [s['session'] if isinstance(s, dict) else s[0] for s in all_sessions]
+
+    if not session_names:
+        st.warning("⚠️ No sessions available. Create a session below first.")
+    else:
+        with st.form("set_active_term_form"):
+            col1, col2 = st.columns(2)
+            with col1:
+                sel_session = st.selectbox("Session", session_names, key="set_term_session")
+            with col2:
+                sel_term = st.selectbox("Term", ["1st Term", "2nd Term", "3rd Term"], key="set_term_term")
+            submitted = st.form_submit_button("✅ Set as Active Term", type="primary")
+            ActivityTracker.watch_form(submitted)
+            if submitted:
+                term_map = {"1st Term": "First", "2nd Term": "Second", "3rd Term": "Third"}
+                internal_term = term_map[sel_term]
+                if set_active_term(sel_session, internal_term, performed_by):
+                    st.success(f"✅ Active term set to {sel_term} — {sel_session}.")
+                    st.rerun()
+                else:
+                    st.error("❌ Failed to set active term.")
+
+    st.markdown("---")
+
+    # ── Session management ────────────────────────────────────────────────────
+    col_create, col_delete = st.columns(2)
+
+    with col_create:
+        st.markdown("#### Create Session")
+        with st.form("create_session_form"):
+            new_session = st.text_input(
+                "Session Name",
+                placeholder="e.g. 2025/2026"
+            )
+            submitted_create = st.form_submit_button("➕ Create Session")
+            ActivityTracker.watch_form(submitted_create)
+            if submitted_create:
+                if not new_session.strip():
+                    st.error("❌ Please enter a session name.")
+                else:
+                    parts = new_session.strip().split('/')
+                    if (len(parts) != 2
+                            or not all(p.isdigit() and len(p) == 4 for p in parts)):
+                        st.error("❌ Session must be in format YYYY/YYYY (e.g. 2025/2026).")
+                    elif new_session.strip() in session_names:
+                        st.error(f"❌ Session '{new_session.strip()}' already exists.")
+                    else:
+                        if create_session(new_session.strip()):
+                            st.success(f"✅ Session '{new_session.strip()}' created.")
+                            st.rerun()
+                        else:
+                            st.error("❌ Failed to create session.")
+
+    with col_delete:
+        st.markdown("#### Delete Session")
+        if not session_names:
+            st.info("No sessions to delete.")
+        else:
+            with st.form("delete_session_form"):
+                session_to_del = st.selectbox(
+                    "Select Session to Delete",
+                    session_names,
+                    key="del_session_select",
+                    help="Deleting a session removes all associated class-session enrollments and scores"
+                )
+                submitted_delete = st.form_submit_button("🗑️ Delete Session", type="primary")
+                ActivityTracker.watch_form(submitted_delete)
+                if submitted_delete:
+                    st.session_state.session_to_delete_name = session_to_del
+                    st.session_state.show_delete_session_confirm = True
+
+    if st.session_state.show_delete_session_confirm and st.session_state.session_to_delete_name:
+        sname = st.session_state.session_to_delete_name
+
+        @st.dialog("Confirm Session Deletion")
+        def confirm_delete_session():
+            st.markdown("### Are you sure you want to delete this session?")
+            st.error(f"**Session:** {sname}")
+            st.markdown("---")
+            st.warning("⚠️ **This action cannot be undone!**")
+            st.warning("• All class enrollments for this session will be deleted")
+            st.warning("• All student scores and results will be permanently lost")
+            st.warning("• This session cannot be the currently active session")
+
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("🚫 Cancel", key="cancel_delete_session", type="secondary", width='stretch'):
+                    st.session_state.show_delete_session_confirm = False
+                    st.session_state.session_to_delete_name = None
+                    st.rerun()
+            with col2:
+                if st.button("❌ Delete Session", key="confirm_delete_session_btn", type="primary", width='stretch'):
+                    ActivityTracker.update()
+                    success, reason = delete_session(sname, str(performed_by))
+                    st.session_state.show_delete_session_confirm = False
+                    st.session_state.session_to_delete_name = None
+                    if success:
+                        st.success(f"✅ Session '{sname}' deleted successfully.")
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error(f"❌ {reason}")
+
+        confirm_delete_session()
+
+    st.markdown("---")
+    st.markdown("#### All Sessions")
+    if all_sessions:
+        for s in all_sessions:
+            sname = s['session'] if isinstance(s, dict) else s[0]
+            is_active = (sname == active_session)
+            badge = "✅ **Active**" if is_active else ""
+            st.markdown(f"- {sname} {badge}")
+    else:
+        st.info("No sessions configured.")
+
+
+
+if __name__ == '__main__':
     admin_panel()

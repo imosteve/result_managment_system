@@ -10,11 +10,13 @@ from email.mime.base import MIMEBase
 from email import encoders
 from main_utils import (
     assign_grade, create_metric_5col_report, format_ordinal, 
-    render_page_header, inject_login_css, render_persistent_class_selector
+    render_page_header, inject_login_css
 )
 from database_school import (
-    get_all_classes, get_students_by_class, get_student_scores, 
-    get_class_average, get_student_grand_totals, get_grade_distribution
+    get_active_session, get_active_term_name, get_classes_for_session,
+    get_enrolled_students, get_scores_for_subject, get_subjects_by_class,
+    get_student_average, get_student_grand_totals, get_grade_distribution,
+    is_configured
 )
 from auth.activity_tracker import ActivityTracker
 from config import APP_CONFIG
@@ -147,27 +149,23 @@ def generate_tab():
     user_id = st.session_state.user_id
     role = st.session_state.role
 
-    classes = get_all_classes(user_id, role)
+    session = get_active_session()
+    if not session:
+        st.warning("⚠️ No active session configured. Ask an admin to set it.")
+        return
+    term = get_active_term_name()
+    if not term:
+        st.warning("⚠️ No active term configured. Ask an admin to set it.")
+        return
+
+    classes = get_classes_for_session(session)
     if not classes:
-        st.warning("⚠️ No classes found.")
+        st.warning("⚠️ No classes found for the active session.")
         return
 
-    selected_class_data = render_persistent_class_selector(
-        classes, 
-        widget_key="generate_reports_class"
-    )
-
-    if not selected_class_data:
-        st.warning("⚠️ No class selected.")
-        return
-    
-    # Track class selection
-    class_identifier = f"{selected_class_data['class_name']}_{selected_class_data['term']}_{selected_class_data['session']}"
-    ActivityTracker.watch_value("generate_reports_class", class_identifier)
-
-    class_name = selected_class_data['class_name']
-    term = selected_class_data['term']
-    session = selected_class_data['session']
+    class_names = [c['class_name'] for c in classes]
+    class_name = st.selectbox("Select Class", class_names, key="generate_reports_class")
+    ActivityTracker.watch_value("generate_reports_class", f"{class_name}_{session}_{term}")
 
     is_senior_class = bool(re.match(r"SSS [123].*$", class_name))
     is_junior_class = bool(re.match(r"JSS [123].*$", class_name))
@@ -178,7 +176,7 @@ def generate_tab():
     is_pri_class = bool(re.match(r"PRIMARY [123456].*$", class_name))
     is_primary_class = is_kg_class or is_nursery_class or is_pri_class
 
-    students = get_students_by_class(class_name, term, session, user_id, role)
+    students = get_enrolled_students(class_name, session)
     if not students:
         st.warning(f"⚠️ No students found for {class_name} - {term} - {session}.")
         return
@@ -194,31 +192,26 @@ def generate_tab():
         unsafe_allow_html=True
     )
 
-    student_names = [s[1] for s in students]
+    student_names = [s["student_name"] for s in students]
     selected_student = st.selectbox("Select Student", student_names)
     
     # Track student selection
     ActivityTracker.watch_value("generate_reports_student", selected_student)
 
     # Calculate summary metrics for selected student
-    student_data = next((s for s in students if s[1] == selected_student), None)
-    gender = student_data[2] if student_data else "-"
+    student_data = next((s for s in students if s["student_name"] == selected_student), None)
+    gender = student_data.get("gender", "-") if student_data else "-"
     no_in_class = len(students)
-    student_scores = get_student_scores(selected_student, class_name, term, session, user_id, role)
-    
-    # Filter out None values when calculating totals
-    valid_scores = [score[5] for score in student_scores if score[5] is not None] if student_scores else []
-    total_score = sum(valid_scores) if valid_scores else 0
-    student_average = round(total_score / len(valid_scores), 2) if valid_scores else 0
-    
-    class_average = get_class_average(class_name, term, session, user_id, role)
-    grand_totals = get_student_grand_totals(class_name, term, session, user_id, role)
+    # New schema: use get_student_average directly
+    student_average = get_student_average(selected_student, class_name, session, term) or 0
+    class_average = 0  # Computed from grand totals below
+    grand_totals = get_student_grand_totals(class_name, session, term)
     position_data = next((gt for gt in grand_totals if gt['student_name'] == selected_student), None)
     
     is_sss2_or_sss3 = bool(re.match(r"SSS [23].*$", class_name))
     if is_sss2_or_sss3:
         # For SSS2 and SSS3, get grade distribution instead of position
-        grade_distribution = get_grade_distribution(selected_student, class_name, term, session, user_id, role)
+        grade_distribution = get_grade_distribution(selected_student, class_name, session, term)
         position = ""  # Not used for SSS2/SSS3
     else:
         grade_distribution = ""
@@ -272,7 +265,7 @@ def generate_tab():
         status_text = st.empty()
         
         for i, student in enumerate(students):
-            student_name = student[1]
+            student_name = student["student_name"]
             status_text.text(f"Generating report for {student_name}...")
             
             pdf_path = generate_report_card(student_name, class_name, term, session, is_secondary_class, is_primary_class)
@@ -317,26 +310,23 @@ def email_tab():
     user_id = st.session_state.user_id
     role = st.session_state.role
 
-    classes = get_all_classes(user_id, role)
+    session = get_active_session()
+    if not session:
+        st.warning("⚠️ No active session configured.")
+        return
+    term = get_active_term_name()
+    if not term:
+        st.warning("⚠️ No active term configured.")
+        return
+
+    classes = get_classes_for_session(session)
     if not classes:
         st.warning("⚠️ No classes found.")
         return
 
-    selected_class_data = render_persistent_class_selector(
-        classes, 
-        widget_key="email_reports_class")
-
-    if not selected_class_data:
-        st.warning("⚠️ No class selected.")
-        return
-    
-    # Track class selection
-    class_identifier = f"{selected_class_data['class_name']}_{selected_class_data['term']}_{selected_class_data['session']}"
-    ActivityTracker.watch_value("email_reports_class", class_identifier)
-
-    class_name = selected_class_data['class_name']
-    term = selected_class_data['term']
-    session = selected_class_data['session']
+    class_names = [c['class_name'] for c in classes]
+    class_name = st.selectbox("Select Class", class_names, key="email_reports_class")
+    ActivityTracker.watch_value("email_reports_class", f"{class_name}_{session}_{term}")
 
     import re
     is_senior_class = bool(re.match(r"SSS [123].*$", class_name))
@@ -348,7 +338,7 @@ def email_tab():
     is_pri_class = bool(re.match(r"PRIMARY [123456].*$", class_name))
     is_primary_class = is_kg_class or is_nursery_class or is_pri_class
 
-    students = get_students_by_class(class_name, term, session, user_id, role)
+    students = get_enrolled_students(class_name, session)
     if not students:
         st.warning("⚠️ No students found for this class.")
         return
@@ -364,39 +354,39 @@ def email_tab():
         unsafe_allow_html=True
     )
 
-    students_eligible = [s for s in students if s[3] and s[4] == 'YES']
-    students_without_email = [s for s in students if not s[3]]
-    students_unpaid_fees = [s for s in students if s[3] and s[4] != 'YES']
+    students_eligible = [s for s in students if s.get("email") and s.get("school_fees_paid") == "YES"]
+    students_without_email = [s for s in students if not s.get("email")]
+    students_unpaid_fees = [s for s in students if s.get("email") and s.get("school_fees_paid") != "YES"]
 
     if students_without_email:
-        st.warning(f"⚠️ {len(students_without_email)} student(s) do not have email addresses: {', '.join([s[1] for s in students_without_email])}")
+        st.warning(f"⚠️ {len(students_without_email)} student(s) do not have email addresses: {', '.join([s["student_name"] for s in students_without_email])}")
 
     if students_unpaid_fees:
-        st.info(f"ℹ️ {len(students_unpaid_fees)} student(s) have email but haven't paid school fees (cannot receive reports via email): {', '.join([s[1] for s in students_unpaid_fees])}")
+        st.info(f"ℹ️ {len(students_unpaid_fees)} student(s) have email but haven't paid school fees (cannot receive reports via email): {', '.join([s["student_name"] for s in students_unpaid_fees])}")
 
     if not students_eligible:
         st.warning(f"⚠️ No students are eligible to receive reports via email. Students must have email and paid fees.")
         return
 
-    st.success(f"📧 {len(students_eligible)} student(s) are eligible to receive report cards via email: {', '.join([s[1] for s in students_eligible])}")
+    st.success(f"📧 {len(students_eligible)} student(s) are eligible to receive report cards via email: {', '.join([s["student_name"] for s in students_eligible])}")
 
     # Individual Email
     st.markdown("### Email Report Card")
-    student_names_eligible = [s[1] for s in students_eligible]
+    student_names_eligible = [s["student_name"] for s in students_eligible]
     selected_student = st.selectbox("Select Student", student_names_eligible, key="email_student")
     
     # Track student selection
     ActivityTracker.watch_value("email_reports_student", selected_student)
     
-    student_data = next((s for s in students_eligible if s[1] == selected_student), None)
+    student_data = next((s for s in students_eligible if s["student_name"] == selected_student), None)
     if student_data:
-        st.write(f"📧 Email: {student_data[3]}")
+        st.write(f"📧 Email: {student_data.get('email', '')}")
 
     if st.button("Send"):
         # Track send button
         ActivityTracker.update()
         
-        if not student_data or not student_data[3]:
+        if not student_data or not student_data.get("email"):
             st.error("❌ Student email not found.")
             return
             
@@ -430,8 +420,8 @@ def email_tab():
         status_text = st.empty()
         
         for i, student in enumerate(students_eligible):
-            student_name = student[1]
-            student_email = student[3]
+            student_name = student["student_name"]
+            student_email = student.get("email", "")
             
             status_text.text(f"Processing {student_name} ({i+1}/{len(students_eligible)})...")
             

@@ -1,74 +1,88 @@
 # database/__init__.py
-
 """
-Database package - Modular database operations for School Management System
+School database public API — single import point for all modules.
+
+Usage:
+    from database import (
+        create_tables,
+        get_active_term, set_active_term,
+        get_all_sessions, create_session,
+        get_all_classes, create_class, open_class_for_session,
+        get_enrolled_students, enroll_student,
+        save_score, get_scores_for_class,
+        ...
+    )
 """
 
-from .connection import get_connection, get_db_connection
-from .schema import create_tables, create_performance_indexes
+from .schema import create_tables, _create_indexes as create_performance_indexes
 
-# Import all functions from modules
-from .users import (
-    create_user,
-    get_user_by_username,
-    get_user_by_email,
-    get_user_role,
-    delete_user,
-    get_all_users,
-    update_user,
-    get_user_assignments,
-    assign_teacher,
-    batch_assign_subject_teacher,
-    delete_assignment,
-    update_assignment,
+# ── Academic context ─────────────────────────────────────────────────────────
+from .academic_settings import (
+    get_active_term,
+    get_active_session,
+    get_active_term_name,
+    set_active_term,
+    is_configured,
+    get_all_sessions,
+    create_session,
+    delete_session,
 )
 
+# ── Classes ──────────────────────────────────────────────────────────────────
 from .classes import (
-    get_all_classes,
     create_class,
+    get_all_classes,
+    get_class,
     update_class,
     delete_class,
-    clear_all_classes,
+    open_class_for_session,
+    get_class_session_id,
+    get_classes_for_session,
+    get_classes_for_teacher,
+    close_class_for_session,
 )
 
+# ── Students & enrollment ─────────────────────────────────────────────────────
 from .students import (
-    get_students_by_class,
     create_student,
-    create_students_batch,
+    get_all_students,
+    student_exists,
     update_student,
     delete_student,
-    delete_all_students,
-    get_students_with_paid_fees,
+    enroll_student,
+    bulk_enroll_students,
+    unenroll_student,
+    get_enrolled_students,
+    get_enrollment_id,
+    get_students_not_enrolled_in,
+    import_students_from_class,
 )
 
-from .subjects import (
-    get_subjects_by_class,
-    create_subject,
-    update_subject,
-    delete_subject,
-    clear_all_subjects,
-)
-
+# ── Scores ───────────────────────────────────────────────────────────────────
 from .scores import (
-    get_scores_by_class_subject,
-    get_all_scores_by_class,
-    get_student_scores,
-    save_scores,
-    update_score,
+    save_score,
+    save_scores_bulk,
     recalculate_positions,
-    get_class_average,
+    get_scores_for_class,
+    get_scores_for_student,
+    get_scores_for_subject,
+    get_student_all_terms,
     get_student_grand_totals,
-    clear_all_scores,
-    get_grade_distribution,
     get_student_average,
+    has_scores_for_term,
+    get_grade_distribution,
+    delete_score,
+    delete_scores_for_term,
 )
 
+# ── Comments ─────────────────────────────────────────────────────────────────
 from .comments import (
     create_comment,
     get_comment,
     delete_comment,
 )
 
+# ── Psychomotor ratings ───────────────────────────────────────────────────────
 from .psychomotor import (
     create_psychomotor_rating,
     get_psychomotor_rating,
@@ -76,21 +90,23 @@ from .psychomotor import (
     get_all_psychomotor_ratings,
 )
 
+# ── Subjects ─────────────────────────────────────────────────────────────────
+from .subjects import (
+    create_subject,
+    get_subjects_by_class,
+    update_subject,
+    delete_subject,
+    clear_all_subjects,
+)
+
+# ── Student subject selections ────────────────────────────────────────────────
 from .student_subjects import (
     get_student_selected_subjects,
     save_student_subject_selections,
     get_all_student_subject_selections,
 )
 
-from .comment_templates import (
-    add_comment_template,
-    get_all_comment_templates,
-    delete_comment_template,
-    update_comment_template,
-    get_head_teacher_comment_by_average, 
-    check_range_overlap,
-)
-
+# ── Next term info ────────────────────────────────────────────────────────────
 from .next_term_data import (
     create_or_update_next_term_info,
     get_next_term_info,
@@ -99,117 +115,41 @@ from .next_term_data import (
     get_next_term_begin_date,
 )
 
+# ── Comment templates ─────────────────────────────────────────────────────────
+from .comment_templates import (
+    add_comment_template,
+    get_all_comment_templates,
+    get_head_teacher_comment_by_average,
+    delete_comment_template,
+    update_comment_template,
+    check_range_overlap,
+)
+
+# ── Users & teacher assignments ───────────────────────────────────────────────
+from .users import (
+    create_user,
+    get_all_users,
+    update_user,
+    delete_user,
+    get_user_role,
+    get_user_assignments,
+    assign_teacher,
+    batch_assign_subject_teacher,
+    delete_assignment,
+    update_assignment,
+)
+
+# ── Utils ─────────────────────────────────────────────────────────────────────
 from .utils import (
     get_database_stats,
     get_classes_summary,
     backup_database,
     restore_database,
     database_health_check,
-    validate_student_data,
-    validate_score_data,
-    migrate_old_database,
-    migrate_add_school_fees_column,
 )
 
-__all__ = [
-    # Connection
-    'get_connection',
-    'get_db_connection',
-    
-    # Schema
-    'create_tables',
-    'create_performance_indexes',
-    
-    # Users
-    'create_user',
-    'get_user_by_username',
-    'get_user_by_email',
-    'get_user_role',
-    'delete_user',
-    'get_all_users',
-    'update_user',
-    
-    # Teacher Assignments
-    'get_user_assignments',
-    'assign_teacher',
-    'delete_assignment',
-    'update_assignment',
-    
-    # Classes
-    'get_all_classes',
-    'create_class',
-    'update_class',
-    'delete_class',
-    'clear_all_classes',
-    
-    # Students
-    'get_students_by_class',
-    'create_student',
-    'create_students_batch',
-    'update_student',
-    'delete_student',
-    'delete_all_students',
-    'get_students_with_paid_fees',
-    
-    # Subjects
-    'get_subjects_by_class',
-    'create_subject',
-    'update_subject',
-    'delete_subject',
-    'clear_all_subjects',
-    
-    # Scores
-    'get_scores_by_class_subject',
-    'get_all_scores_by_class',
-    'get_student_scores',
-    'save_scores',
-    'update_score',
-    'recalculate_positions',
-    'get_class_average',
-    'get_student_grand_totals',
-    'clear_all_scores',
-    'get_grade_distribution',
-    'get_student_average',
-    
-    # Comments
-    'create_comment',
-    'get_comment',
-    'delete_comment',
-    
-    # Psychomotor
-    'create_psychomotor_rating',
-    'get_psychomotor_rating',
-    'delete_psychomotor_rating',
-    'get_all_psychomotor_ratings',
-    
-    # Student Subjects
-    'get_student_selected_subjects',
-    'save_student_subject_selections',
-    'get_all_student_subject_selections',
-    
-    # Comment Templates
-    'add_comment_template',
-    'get_all_comment_templates',
-    'delete_comment_template',
-    'update_comment_template',
-    'get_head_teacher_comment_by_average',
-    'check_range_overlap',
-    
-    # Next Term Info
-    'create_or_update_next_term_info',
-    'get_next_term_info',
-    'get_all_next_term_info',
-    'delete_next_term_info',
-    'get_next_term_begin_date',
-    
-    # Utils
-    'get_database_stats',
-    'get_classes_summary',
-    'backup_database',
-    'restore_database',
-    'database_health_check',
-    'validate_student_data',
-    'validate_score_data',
-    'migrate_old_database',
-    'migrate_add_school_fees_column',
-]
+# ── Connection (re-exported for callers that need a raw connection) ────────────
+from .connection import (
+    get_connection,
+    get_db_connection,
+)

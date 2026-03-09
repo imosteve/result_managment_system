@@ -34,6 +34,7 @@ def system_dashboard():
     user_id = st.session_state.get('user_id', None)
     admin_role = get_user_role(user_id)
     
+    # ── CHANGE: get_user_role() now reads directly from users.role ──
     if admin_role != "superadmin":
         st.error("⚠️ Access denied. Superadmin access only.")
         st.switch_page("main.py")
@@ -42,7 +43,6 @@ def system_dashboard():
     # Page configuration
     st.set_page_config(page_title="System Dashboard", layout="wide")
     
-    # Tab-based interface for different operations
     inject_login_css("templates/tabs_styles.css")
 
     render_page_header("🔧 System Dashboard")
@@ -199,8 +199,6 @@ def render_system_health_tab():
 
 def render_database_management_tab():
     """Render database management tab"""
-    # st.subheader("💾 Database Management")
-    
     # Backup Section
     st.markdown("#### 📦 Database Backup", 
                 help="Create a backup of the current database. Backups are stored in the backups directory."
@@ -222,10 +220,9 @@ def render_database_management_tab():
     with download:
         st.markdown("<br>", unsafe_allow_html=True)
         school_code = st.session_state.school_code
-        session_path = st.session_state.get("school_db_path")
         
         # Read the actual file as bytes
-        with open(session_path, "rb") as f:
+        with open(DB_PATH, "rb") as f:
             db_data = f.read()
 
         st.download_button(
@@ -252,7 +249,6 @@ def render_database_management_tab():
                 "Age": backup['age']
             })
         
-        # streamlit_paginator(backup_data, table_name="backups")
         if len(backup_data) > 0:
             st.dataframe(
                 backup_data, 
@@ -384,20 +380,16 @@ def render_database_management_tab():
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        # Rebuild database file to reclaim unused space and improve performance.
         st.markdown("**Vacuum Database**", help="Rebuild the database file to reclaim unused space and improve performance. This can help reduce file size and optimize query speed.")
-        # st.info("Rebuild database file to improve performance.")
         if st.button("🧹 Vacuum Database", width=200):
             vacuum_database()
     
     with col2:
         st.markdown("**Analyze Database**", help="Update database statistics for better query optimization.")
-        # st.info("Update database statistics for better query optimization.")
         if st.button("📊 Analyze Database", width=200):
             analyze_database()
     
     with col3:
-        # Create indexes
         st.markdown("**Performance Indexes**", help="Create or update indexes on key columns to improve query performance. This can speed up data retrieval but may take time on large datasets.")
         if st.button("🔍 Create/Update PI", width=200):
             create_indexes()
@@ -411,18 +403,19 @@ def render_analytics_tab(stats):
     st.markdown("#### 👥 User Distribution")
     
     users = get_all_users()
+    # ── CHANGE: count by the three new role values ──
     user_roles = {'Superadmin': 0, 'Admin': 0, 'Teacher': 0}
     
     for user in users:
-        role = user[3] if user[3] else 'Teacher'
+        role = user[3] if user[3] else 'teacher'
         if role == 'superadmin':
             user_roles['Superadmin'] += 1
         elif role == 'admin':
             user_roles['Admin'] += 1
         else:
+            # catches 'teacher' and any unexpected legacy values
             user_roles['Teacher'] += 1
     
-    # Inject custom CSS for metric styling
     inject_metric_css()
 
     col1, col2, col3 = st.columns(3)
@@ -553,7 +546,6 @@ def render_system_settings_tab():
     
     st.markdown("#### 🎨 Application Settings")
     
-    # Display current settings
     col1, col2 = st.columns(2)
     school_name = st.session_state.school_name
     with col1:
@@ -596,7 +588,6 @@ def check_file_system_health():
             if not os.path.exists(directory):
                 missing_dirs.append(directory)
             else:
-                # Check if writable
                 test_file = os.path.join(directory, '.test_write')
                 try:
                     with open(test_file, 'w') as f:
@@ -643,13 +634,11 @@ def get_database_info():
             size = os.path.getsize(db_path)
             size_mb = size / (1024 * 1024)
             
-            # Get table count
             conn = get_connection()
             cursor = conn.cursor()
             cursor.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'")
             table_count = cursor.fetchone()[0]
             
-            # Get total records
             stats = get_database_stats()
             total_records = sum([
                 stats['classes'], stats['students'], 
@@ -659,7 +648,6 @@ def get_database_info():
             
             conn.close()
             
-            # Get last backup
             backups = list_database_backups()
             last_backup = backups[0]['created'] if backups else 'Never'
             
@@ -735,7 +723,6 @@ def list_database_backups():
                     'age': f"{age.days} days ago" if age.days > 0 else "Today"
                 })
         
-        # Sort by creation time (newest first)
         backups.sort(key=lambda x: x['created'], reverse=True)
         return backups
     except Exception as e:
@@ -753,11 +740,9 @@ def restore_database_from_backup(backup_name):
             return
         
         with st.spinner("Restoring database..."):
-            # Create backup of current database first
             current_backup = f"pre_restore_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
             backup_database(os.path.join(DB_CONFIG['backup_dir'], current_backup))
             
-            # Restore from selected backup
             shutil.copy2(backup_path, DB_CONFIG['schools_dir'])
             
             time.sleep(1)
@@ -780,7 +765,6 @@ def delete_backup_file(backup_name):
             os.remove(backup_path)
             st.success(f"✅ Backup deleted: {backup_name}")
             time.sleep(1)
-            # st.rerun()
         else:
             st.error("❌ Backup file not found")
     except Exception as e:
@@ -835,47 +819,83 @@ def create_indexes():
 
 
 def get_activity_statistics():
-    """Get activity statistics"""
+    """
+    Get activity statistics.
+
+    Updated for new schema:
+      - classes no longer has (name, term, session) — permanent class definitions only
+      - students no longer carries class_name/term/session — enrollment lives in
+        class_session_students → class_sessions
+      - subjects no longer has term/session — keyed on (class_name, subject_name) only
+      - scores retains denormalised (enrollment_id, subject_name, term) columns
+    """
     try:
         conn = get_connection()
         cursor = conn.cursor()
-        
-        # Active classes (with at least one student)
+
+        # Active class-sessions: class_sessions that have at least one enrolled student
         cursor.execute("""
-            SELECT COUNT(DISTINCT c.name || c.term || c.session)
-            FROM classes c
-            JOIN students s ON c.name = s.class_name 
-                AND c.term = s.term AND c.session = s.session
+            SELECT COUNT(DISTINCT cs.id)
+            FROM   class_sessions cs
+            JOIN   class_session_students css ON css.class_session_id = cs.id
         """)
         active_classes = cursor.fetchone()[0]
-        
-        # Active students (with at least one score)
+
+        # Active students: unique enrolled students who have at least one score
         cursor.execute("""
-            SELECT COUNT(DISTINCT student_name || class_name || term || session)
-            FROM scores
+            SELECT COUNT(DISTINCT enrollment_id)
+            FROM   scores
         """)
         active_students = cursor.fetchone()[0]
-        
-        # Score completion percentage
+
+        # Score completion: compare expected vs actual score rows for the active
+        # session/term. Falls back to all-time totals if academic_settings not set.
         cursor.execute("""
-            SELECT 
-                COUNT(DISTINCT s.name || sub.name) as expected,
-                COUNT(DISTINCT sc.student_name || sc.subject_name) as actual
-            FROM students s
-            CROSS JOIN subjects sub ON s.class_name = sub.class_name 
-                AND s.term = sub.term AND s.session = sub.session
-            LEFT JOIN scores sc ON s.name = sc.student_name 
-                AND sub.name = sc.subject_name
-                AND s.class_name = sc.class_name
-                AND s.term = sc.term 
-                AND s.session = sc.session
+            SELECT current_session, current_term
+            FROM   academic_settings
+            WHERE  id = 1
         """)
-        result = cursor.fetchone()
-        expected, actual = result[0], result[1]
+        settings_row = cursor.fetchone()
+
+        if settings_row and settings_row[0]:
+            current_session, current_term = settings_row
+
+            # Expected = one score per (enrolled student × subject) in active session
+            cursor.execute("""
+                SELECT COUNT(*)
+                FROM   class_session_students css
+                JOIN   class_sessions cs  ON cs.id  = css.class_session_id
+                JOIN   subjects       sub ON sub.class_name = cs.class_name
+                WHERE  cs.session = ?
+            """, (current_session,))
+            expected = cursor.fetchone()[0]
+
+            # Actual = score rows recorded for the active session + term
+            cursor.execute("""
+                SELECT COUNT(*)
+                FROM   scores sc
+                JOIN   class_session_students css ON css.id = sc.enrollment_id
+                JOIN   class_sessions         cs  ON cs.id  = css.class_session_id
+                WHERE  cs.session = ? AND sc.term = ?
+            """, (current_session, current_term))
+            actual = cursor.fetchone()[0]
+        else:
+            # No active session configured — count across everything
+            cursor.execute("""
+                SELECT COUNT(*)
+                FROM   class_session_students css
+                JOIN   class_sessions cs  ON cs.id  = css.class_session_id
+                JOIN   subjects       sub ON sub.class_name = cs.class_name
+            """)
+            expected = cursor.fetchone()[0]
+
+            cursor.execute("SELECT COUNT(*) FROM scores")
+            actual = cursor.fetchone()[0]
+
         score_completion = int((actual / expected * 100) if expected > 0 else 0)
-        
+
         conn.close()
-        
+
         return {
             'active_classes': active_classes,
             'active_students': active_students,
@@ -920,13 +940,12 @@ def run_integrity_check():
 
 
 def clean_orphaned_records():
-    """Clean orphaned records (should be automatic with CASCADE)"""
+    """Clean orphaned records"""
     try:
         with st.spinner("Checking for orphaned records..."):
             conn = get_connection()
             cursor = conn.cursor()
             
-            # This is mostly informational since CASCADE should handle it
             cursor.execute("PRAGMA foreign_key_check")
             violations = cursor.fetchall()
             
@@ -1007,10 +1026,8 @@ def read_recent_logs(level="ALL", limit=100):
         with open(log_file, 'r', encoding='utf-8') as f:
             lines = f.readlines()
         
-        # Get last 'limit' lines
         recent_lines = lines[-limit:]
         
-        # Filter by level
         if level != "ALL":
             recent_lines = [line for line in recent_lines if level in line]
         

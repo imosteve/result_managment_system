@@ -61,31 +61,37 @@ def get_database_stats():
 
 def get_classes_summary():
     """
-    Get summary of all classes with counts
+    Get summary of all classes with counts.
+    Uses new schema: classes → class_sessions → class_session_students / scores / subjects
     
     Returns:
-        list: List of class summaries with student, subject, and score counts
+        list: List of dicts with class_name, session, student_count, subject_count, score_count
     """
     conn = get_connection()
+    conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT 
-            c.name as class_name,
-            c.term,
-            c.session,
-            COUNT(DISTINCT s.id) as student_count,
-            COUNT(DISTINCT sub.id) as subject_count,
-            COUNT(DISTINCT sc.id) as score_count
+        SELECT
+            c.class_name,
+            cs.session,
+            COUNT(DISTINCT css.id)  AS student_count,
+            COUNT(DISTINCT sub.id)  AS subject_count,
+            COUNT(DISTINCT sc.id)   AS score_count
         FROM classes c
-        LEFT JOIN students s ON c.name = s.class_name AND c.term = s.term AND c.session = s.session
-        LEFT JOIN subjects sub ON c.name = sub.class_name AND c.term = sub.term AND c.session = sub.session
-        LEFT JOIN scores sc ON c.name = sc.class_name AND c.term = sc.term AND c.session = sc.session
-        GROUP BY c.name, c.term, c.session
-        ORDER BY c.session DESC, c.term, c.name
+        LEFT JOIN class_sessions cs
+               ON cs.class_name = c.class_name
+        LEFT JOIN class_session_students css
+               ON css.class_session_id = cs.id
+        LEFT JOIN subjects sub
+               ON sub.class_name = c.class_name
+        LEFT JOIN scores sc
+               ON sc.enrollment_id = css.id
+        GROUP BY c.class_name, cs.session
+        ORDER BY cs.session DESC, c.class_name
     """)
-    results = cursor.fetchall()
+    rows = cursor.fetchall()
     conn.close()
-    return results
+    return [dict(r) for r in rows]
 
 
 def backup_database(backup_path):

@@ -1,479 +1,471 @@
-# database/scores.py
+# database_school/scores.py - UPDATED
+"""
+Score management — per-term, per-enrollment score entry and retrieval.
 
-"""Score management operations"""
+KEY BEHAVIOURS
+══════════════
+• Scores are keyed by UNIQUE(enrollment_id, subject_name, term).
+• Switching to a new term creates NEW rows. Old term rows are untouched.
+• save_score() uses ON CONFLICT ... DO UPDATE — calling it twice for the
+  same student/subject/term is safe (no duplicates).
+• grade and position are stored alongside scores (same as old schema).
+  Use recalculate_positions() after a full subject's scores are saved.
+• total_score is a GENERATED column (ca_score + exam_score) — never
+  insert it directly.
+"""
 
 import sqlite3
 import logging
 from .connection import get_connection
-from main_utils import assign_grade
+from .students import get_enrollment_id
 
 logger = logging.getLogger(__name__)
 
 
-def get_scores_by_class_subject(class_name, subject_name, term, session, user_id=None, role=None):
+# ═════════════════════════════════════════════════════════════════
+# Write
+# ═════════════════════════════════════════════════════════════════
+
+def save_score(student_name: str, class_name: str, session: str,
+               term: str, subject_name: str,
+               ca_score: float, exam_score: float,
+               grade: str = None, updated_by: str = "") -> bool:
     """
-    Get all scores for a specific class and subject with role-based restrictions
-    
+    Insert or update a score for one student/subject/term.
+
     Args:
-        class_name: Class name
-        subject_name: Subject name
-        term: Term
-        session: Session
-        user_id: User ID (optional, for filtering)
-        role: User role (optional, for filtering)
-    
-    Returns:
-        list: List of score records
+        student_name, class_name, session: identify the enrollment
+        term:         "First", "Second", or "Third"
+        subject_name: subject being scored
+        ca_score:     continuous assessment score
+        exam_score:   examination score
+        grade:        optional grade string (e.g. "A", "B"). Can be
+                      computed and passed in, or set later via
+                      recalculate_positions().
+        updated_by:   username saving the score
+
+    Returns True on success, False if enrollment not found or DB error.
+    NOTE: total_score is auto-computed by the DB (ca_score + exam_score).
+          Do NOT pass it as an argument.
     """
+    enrollment_id = get_enrollment_id(student_name, class_name, session)
+    if enrollment_id is None:
+        logger.error(
+            f"save_score: no enrollment for '{student_name}' "
+            f"in '{class_name}' / '{session}'"
+        )
+        return False
+
     conn = get_connection()
     cursor = conn.cursor()
-    
-    if role in ["superadmin", "admin"]:
+    try:
         cursor.execute("""
-            SELECT id, student_name, subject_name, test_score, exam_score, 
-                   total_score, grade, position
-            FROM scores 
-            WHERE class_name = ? AND subject_name = ? AND term = ? AND session = ?
-            ORDER BY total_score DESC
-        """, (class_name, subject_name, term, session))
-    elif user_id:
-        cursor.execute("""
-            SELECT s.id, s.student_name, s.subject_name, s.test_score, s.exam_score, 
-                   s.total_score, s.grade, s.position
-            FROM scores s
-            JOIN teacher_assignments ta ON s.class_name = ta.class_name 
-                AND s.term = ta.term AND s.session = ta.session
-            WHERE s.class_name = ? AND s.subject_name = ? 
-                AND s.term = ? AND s.session = ? 
-                AND ta.user_id = ?
-                AND (ta.assignment_type = 'class_teacher' 
-                     OR (ta.assignment_type = 'subject_teacher' AND ta.subject_name = ?))
-            ORDER BY s.total_score DESC
-        """, (class_name, subject_name, term, session, user_id, subject_name))
-    else:
-        conn.close()
-        return []
-    
-    scores = cursor.fetchall()
-    conn.close()
-    return scores
-
-
-def get_all_scores_by_class(class_name, term, session, user_id=None, role=None):
-    """
-    Get all scores for a class with role-based restrictions
-    
-    Args:
-        class_name: Class name
-        term: Term
-        session: Session
-        user_id: User ID (optional, for filtering)
-        role: User role (optional, for filtering)
-    
-    Returns:
-        list: List of score records
-    """
-    conn = get_connection()
-    cursor = conn.cursor()
-    
-    if role in ["superadmin", "admin"]:
-        cursor.execute("""
-            SELECT id, student_name, subject_name, test_score, exam_score, 
-                   total_score, grade, position
-            FROM scores 
-            WHERE class_name = ? AND term = ? AND session = ?
-            ORDER BY student_name, subject_name
-        """, (class_name, term, session))
-    elif user_id:
-        cursor.execute("""
-            SELECT DISTINCT s.id, s.student_name, s.subject_name, s.test_score, s.exam_score, 
-                   s.total_score, s.grade, s.position
-            FROM scores s
-            JOIN teacher_assignments ta ON s.class_name = ta.class_name 
-                AND s.term = ta.term AND s.session = ta.session
-            WHERE s.class_name = ? AND s.term = ? AND s.session = ? 
-                AND ta.user_id = ?
-                AND (ta.assignment_type = 'class_teacher' 
-                     OR (ta.assignment_type = 'subject_teacher' AND ta.subject_name = s.subject_name))
-            ORDER BY s.student_name, s.subject_name
-        """, (class_name, term, session, user_id))
-    else:
-        conn.close()
-        return []
-    
-    scores = cursor.fetchall()
-    conn.close()
-    return scores
-
-
-def get_student_scores(student_name, class_name, term, session, user_id=None, role=None):
-    """
-    Get all scores for a specific student with role-based restrictions
-    
-    Args:
-        student_name: Student name
-        class_name: Class name
-        term: Term
-        session: Session
-        user_id: User ID (optional, for filtering)
-        role: User role (optional, for filtering)
-    
-    Returns:
-        list: List of score records
-    """
-    conn = get_connection()
-    cursor = conn.cursor()
-    
-    if role in ["superadmin", "admin"]:
-        cursor.execute("""
-            SELECT id, student_name, subject_name, test_score, exam_score, 
-                   total_score, grade, position
-            FROM scores 
-            WHERE student_name = ? AND class_name = ? AND term = ? AND session = ?
-            ORDER BY subject_name
-        """, (student_name, class_name, term, session))
-    elif user_id:
-        cursor.execute("""
-            SELECT DISTINCT s.id, s.student_name, s.subject_name, s.test_score, s.exam_score, 
-                   s.total_score, s.grade, s.position
-            FROM scores s
-            JOIN teacher_assignments ta ON s.class_name = ta.class_name 
-                AND s.term = ta.term AND s.session = ta.session
-            WHERE s.student_name = ? AND s.class_name = ? 
-                AND s.term = ? AND s.session = ? 
-                AND ta.user_id = ?
-                AND (ta.assignment_type = 'class_teacher' 
-                     OR (ta.assignment_type = 'subject_teacher' AND ta.subject_name = s.subject_name))
-            ORDER BY s.subject_name
-        """, (student_name, class_name, term, session, user_id))
-    else:
-        conn.close()
-        return []
-    
-    scores = cursor.fetchall()
-    conn.close()
-    return scores
-
-
-def save_scores(scores_data, class_name, subject_name, term, session):
-    """
-    Save multiple scores with position calculation
-    
-    Args:
-        scores_data: List of score dictionaries
-        class_name: Class name
-        subject_name: Subject name
-        term: Term
-        session: Session
-    """
-    conn = get_connection()
-    cursor = conn.cursor()
-    
-    # Sort scores in descending order
-    sorted_scores = sorted(scores_data, key=lambda x: x['total'], reverse=True)
-    
-    # Calculate positions
-    for i, score in enumerate(sorted_scores):
-        if i > 0 and score['total'] == sorted_scores[i-1]['total']:
-            score['position'] = sorted_scores[i-1]['position']
-        else:
-            score['position'] = i + 1
-    
-    # Delete existing scores
-    cursor.execute("""
-        DELETE FROM scores 
-        WHERE class_name = ? AND subject_name = ? AND term = ? AND session = ?
-    """, (class_name, subject_name, term, session))
-    
-    # Insert new scores
-    for score in sorted_scores:
-        cursor.execute("""
-            INSERT INTO scores (
-                student_name, subject_name, class_name, term, session,
-                test_score, exam_score, total_score, grade, position
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO scores
+                (enrollment_id, student_name, class_name, session,
+                 term, subject_name, ca_score, exam_score,
+                 grade, updated_at, updated_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
+            ON CONFLICT(enrollment_id, subject_name, term) DO UPDATE SET
+                ca_score   = excluded.ca_score,
+                exam_score = excluded.exam_score,
+                grade      = excluded.grade,
+                updated_at = excluded.updated_at,
+                updated_by = excluded.updated_by
         """, (
-            score['student'], score['subject'], score['class'], score['term'], score['session'],
-            score['test'], score['exam'], score['total'], 
-            score['grade'], score['position']
+            enrollment_id, student_name, class_name, session,
+            term, subject_name, ca_score, exam_score,
+            grade, updated_by
         ))
-    
-    conn.commit()
-    conn.close()
-    logger.info(f"Saved {len(sorted_scores)} scores for {subject_name} in {class_name}")
-
-
-def update_score(student_name, subject_name, class_name, term, session, test_score, exam_score):
-    """
-    Update individual score
-    
-    Args:
-        student_name: Student name
-        subject_name: Subject name
-        class_name: Class name
-        term: Term
-        session: Session
-        test_score: Test score (0-30)
-        exam_score: Exam score (0-70)
-    """
-    conn = get_connection()
-    cursor = conn.cursor()
-    
-    total_score = test_score + exam_score
-    grade = assign_grade(total_score)
-    
-    cursor.execute("""
-        INSERT OR REPLACE INTO scores (
-            student_name, subject_name, class_name, term, session,
-            test_score, exam_score, total_score, grade, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-    """, (student_name, subject_name, class_name, term, session, 
-          test_score, exam_score, total_score, grade))
-    
-    conn.commit()
-    recalculate_positions(class_name, subject_name, term, session)
-    conn.close()
-    logger.info(f"Score updated for {student_name} in {subject_name}")
-
-
-def recalculate_positions(class_name, subject_name, term, session):
-    """
-    Recalculate positions for a subject in a class for specific term and session
-    
-    Args:
-        class_name: Class name
-        subject_name: Subject name
-        term: Term
-        session: Session
-    """
-    conn = get_connection()
-    cursor = conn.cursor()
-    
-    cursor.execute("""
-        SELECT id, total_score 
-        FROM scores 
-        WHERE class_name = ? AND subject_name = ? AND term = ? AND session = ?
-        ORDER BY total_score DESC
-    """, (class_name, subject_name, term, session))
-    
-    scores = cursor.fetchall()
-    
-    for i, (score_id, total_score) in enumerate(scores):
-        if i > 0 and total_score == scores[i-1][1]:
-            cursor.execute("SELECT position FROM scores WHERE id = ?", (scores[i-1][0],))
-            position = cursor.fetchone()[0]
-        else:
-            position = i + 1
-        
-        cursor.execute("UPDATE scores SET position = ? WHERE id = ?", (position, score_id))
-    
-    conn.commit()
-    conn.close()
-
-
-def get_class_average(class_name, term, session, user_id, role):
-    """
-    Calculate class average based on individual student averages
-    
-    Args:
-        class_name: Class name
-        term: Term
-        session: Session
-        user_id: User ID
-        role: User role
-    
-    Returns:
-        float: Class average score
-    """
-    from .students import get_students_by_class
-    
-    conn = get_connection()
-    
-    try:
-        students = get_students_by_class(class_name, term, session, user_id, role)
-        if not students:
-            return 0
-        
-        student_averages = []
-        for student in students:
-            student_name = student[1]
-            scores = get_student_scores(student_name, class_name, term, session, user_id, role)
-            
-            if scores:
-                total_score = sum(score[5] for score in scores)
-                student_avg = total_score / len(scores)
-                student_averages.append(student_avg)
-        
-        if student_averages:
-            class_average = sum(student_averages) / len(student_averages)
-            return round(class_average, 2)
-        return 0
-        
-    except Exception as e:
-        logger.error(f"Error calculating class average: {str(e)}")
-        return 0
-    finally:
-        conn.close()
-
-
-def get_student_grand_totals(class_name, term, session, user_id=None, role=None):
-    """
-    Get grand totals and ranks for all students in a class
-    
-    Args:
-        class_name: Class name
-        term: Term
-        session: Session
-        user_id: User ID (optional, for filtering)
-        role: User role (optional, for filtering)
-    
-    Returns:
-        list: List of dictionaries with student_name, grand_total, position
-    """
-    conn = get_connection()
-    cursor = conn.cursor()
-    try:
-        if role in ["superadmin", "admin"]:
-            cursor.execute("""
-                SELECT student_name, SUM(total_score) as grand_total
-                FROM scores
-                WHERE class_name = ? AND term = ? AND session = ?
-                GROUP BY student_name
-                ORDER BY grand_total DESC
-            """, (class_name, term, session))
-        elif user_id:
-            cursor.execute("""
-                SELECT s.student_name, SUM(s.total_score) as grand_total
-                FROM scores s
-                JOIN teacher_assignments ta ON s.class_name = ta.class_name 
-                    AND s.term = ta.term AND s.session = ta.session
-                WHERE s.class_name = ? AND s.term = ? AND s.session = ? 
-                    AND ta.user_id = ?
-                    AND (ta.assignment_type = 'class_teacher' 
-                         OR (ta.assignment_type = 'subject_teacher' AND ta.subject_name = s.subject_name))
-                GROUP BY s.student_name
-                ORDER BY grand_total DESC
-            """, (class_name, term, session, user_id))
-        else:
-            conn.close()
-            return []
-        
-        student_totals = cursor.fetchall()
-
-        result = []
-        current_rank = 1
-        previous_total = None
-        for i, (student_name, grand_total) in enumerate(student_totals):
-            if grand_total != previous_total:
-                current_rank = i + 1
-            result.append({
-                'student_name': student_name,
-                'grand_total': grand_total,
-                'position': current_rank
-            })
-            previous_total = grand_total
-
-        conn.close()
-        return result
-    except sqlite3.Error as e:
-        logger.error(f"Error fetching grand totals: {e}")
-        conn.close()
-        return []
-
-
-def clear_all_scores(class_name, subject_name, term, session):
-    """
-    Delete all scores for a specific class, subject, term, and session
-    
-    Args:
-        class_name: Class name
-        subject_name: Subject name
-        term: Term
-        session: Session
-    
-    Returns:
-        bool: True if successful, False otherwise
-    """
-    conn = get_connection()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("""
-            DELETE FROM scores 
-            WHERE class_name = ? AND subject_name = ? AND term = ? AND session = ?
-        """, (class_name, subject_name, term, session))
         conn.commit()
-        logger.info(f"All scores cleared for {subject_name} in {class_name}")
         return True
-    except sqlite3.Error as e:
-        logger.error(f"Error clearing scores: {e}")
+    except Exception as e:
+        logger.error(f"Error saving score: {e}")
         return False
     finally:
         conn.close()
 
 
-def get_grade_distribution(student_name, class_name, term, session, user_id=None, role=None):
+def save_scores_bulk(scores: list, updated_by: str = "") -> dict:
     """
-    Get grade distribution for a student (for SSS2 and SSS3)
-    Returns a string like "3As, 4Bs, 2Cs" or empty string if no grades
-    
-    Args:
-        student_name: Student name
-        class_name: Class name
-        term: Term
-        session: Session
-        user_id: User ID (optional, for filtering)
-        role: User role (optional, for filtering)
-    
+    Save multiple scores in a single transaction.
+
+    Each item in scores must be a dict with keys:
+        student_name, class_name, session, term,
+        subject_name, ca_score, exam_score
+    Optional key: grade
+
+    Returns dict: {saved: int, failed: int, errors: [str]}
+    """
+    result = {"saved": 0, "failed": 0, "errors": []}
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        for s in scores:
+            enrollment_id = get_enrollment_id(
+                s["student_name"], s["class_name"], s["session"]
+            )
+            if not enrollment_id:
+                result["failed"] += 1
+                result["errors"].append(
+                    f"No enrollment: {s['student_name']} / {s['class_name']} / {s['session']}"
+                )
+                continue
+            try:
+                cursor.execute("""
+                    INSERT INTO scores
+                        (enrollment_id, student_name, class_name, session,
+                         term, subject_name, ca_score, exam_score,
+                         grade, updated_at, updated_by)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
+                    ON CONFLICT(enrollment_id, subject_name, term) DO UPDATE SET
+                        ca_score   = excluded.ca_score,
+                        exam_score = excluded.exam_score,
+                        grade      = excluded.grade,
+                        updated_at = excluded.updated_at,
+                        updated_by = excluded.updated_by
+                """, (
+                    enrollment_id, s["student_name"], s["class_name"],
+                    s["session"], s["term"], s["subject_name"],
+                    s.get("ca_score", 0), s.get("exam_score", 0),
+                    s.get("grade"), updated_by
+                ))
+                result["saved"] += 1
+            except Exception as e:
+                result["failed"] += 1
+                result["errors"].append(str(e))
+        conn.commit()
+    except Exception as e:
+        logger.error(f"Bulk save error: {e}")
+        result["errors"].append(str(e))
+    finally:
+        conn.close()
+    return result
+
+
+def recalculate_positions(class_name: str, session: str,
+                           term: str, subject_name: str) -> bool:
+    """
+    Recalculate position rankings for all students in a subject/term.
+    Call this after saving a full set of scores for a subject.
+    Handles ties (tied students share the same position).
+
+    Returns True on success.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            SELECT id, total_score
+            FROM   scores
+            WHERE  class_name = ? AND session = ?
+              AND  term = ? AND subject_name = ?
+            ORDER  BY total_score DESC
+        """, (class_name, session, term, subject_name))
+        rows = cursor.fetchall()
+
+        for i, (score_id, total_score) in enumerate(rows):
+            if i > 0 and total_score == rows[i - 1][1]:
+                # Tied — inherit previous position
+                cursor.execute(
+                    "SELECT position FROM scores WHERE id = ?", (rows[i - 1][0],)
+                )
+                position = cursor.fetchone()[0]
+            else:
+                position = i + 1
+            cursor.execute(
+                "UPDATE scores SET position = ? WHERE id = ?",
+                (position, score_id)
+            )
+        conn.commit()
+        return True
+    except Exception as e:
+        logger.error(f"Error recalculating positions: {e}")
+        return False
+    finally:
+        conn.close()
+
+
+# ═════════════════════════════════════════════════════════════════
+# Read
+# ═════════════════════════════════════════════════════════════════
+
+def get_scores_for_class(class_name: str, session: str, term: str) -> list:
+    """
+    All scores for a class in a given session and term.
+    Primary query for broadsheet / score entry views.
+
+    Returns list of dicts:
+        {student_name, subject_name, ca_score, exam_score,
+         total_score, grade, position, enrollment_id}
+    """
+    conn = get_connection()
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT student_name, subject_name,
+               ca_score, exam_score, total_score,
+               grade, position, enrollment_id
+        FROM   scores
+        WHERE  class_name = ? AND session = ? AND term = ?
+        ORDER  BY student_name, subject_name
+    """, (class_name, session, term))
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_scores_for_student(student_name: str, class_name: str,
+                            session: str, term: str) -> list:
+    """
+    All subject scores for one student in a given term.
+
+    Returns list of dicts:
+        {subject_name, ca_score, exam_score, total_score, grade, position}
+    """
+    conn = get_connection()
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT subject_name, ca_score, exam_score,
+               total_score, grade, position
+        FROM   scores
+        WHERE  student_name = ? AND class_name = ?
+          AND  session = ? AND term = ?
+        ORDER  BY subject_name
+    """, (student_name, class_name, session, term))
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_scores_for_subject(class_name: str, session: str,
+                            term: str, subject_name: str) -> list:
+    """
+    Scores for a specific subject across all enrolled students.
+    Students with no score yet are included with 0s (LEFT JOIN).
+    Used by subject teachers entering scores.
+
+    Returns list of dicts:
+        {student_name, ca_score, exam_score, total_score,
+         grade, position, enrollment_id}
+    """
+    conn = get_connection()
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT
+            css.student_name,
+            COALESCE(sc.ca_score,    0) AS ca_score,
+            COALESCE(sc.exam_score,  0) AS exam_score,
+            COALESCE(sc.total_score, 0) AS total_score,
+            sc.grade,
+            sc.position,
+            css.id AS enrollment_id
+        FROM  class_session_students css
+        JOIN  class_sessions cs ON cs.id = css.class_session_id
+        LEFT JOIN scores sc
+               ON sc.enrollment_id = css.id
+              AND sc.subject_name  = ?
+              AND sc.term          = ?
+        WHERE cs.class_name = ? AND cs.session = ?
+        ORDER BY css.student_name
+    """, (subject_name, term, class_name, session))
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_student_all_terms(student_name: str, class_name: str,
+                           session: str) -> dict:
+    """
+    All scores across all three terms for a student in one session.
+    Used for cumulative / annual report cards.
+
+    Returns dict:
+        {
+            "First":  {subject_name: {ca_score, exam_score, total_score, grade}, ...},
+            "Second": {...},
+            "Third":  {...}
+        }
+    """
+    conn = get_connection()
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT term, subject_name, ca_score, exam_score, total_score, grade
+        FROM   scores
+        WHERE  student_name = ? AND class_name = ? AND session = ?
+        ORDER  BY term, subject_name
+    """, (student_name, class_name, session))
+    rows = cursor.fetchall()
+    conn.close()
+
+    result = {"First": {}, "Second": {}, "Third": {}}
+    for r in rows:
+        result[r["term"]][r["subject_name"]] = {
+            "ca_score":    r["ca_score"],
+            "exam_score":  r["exam_score"],
+            "total_score": r["total_score"],
+            "grade":       r["grade"],
+        }
+    return result
+
+def get_grade_distribution(student_name: str, class_name: str,
+                            session: str, term: str) -> str:
+    """
+    Return a grade-distribution summary string for a student in one term.
+    Used by the broadsheet and report-card views for SSS2/SSS3 students
+    where a position rank is not shown.
+
+    Grades are derived from total_score using the standard bands:
+        A1  ≥ 75  |  B2  70–74  |  B3  65–69  |  C4  60–64
+        C5  55–59 |  C6  50–54  |  D7  45–49  |  E8  40–44  |  F9  < 40
+
     Returns:
-        str: Grade distribution string (e.g., "3A, 4B, 2C")
+        A compact string such as "A1×3, B2×2, C4×1", or "" if no scores.
     """
-    scores = get_student_scores(student_name, class_name, term, session, user_id, role)
-    
+    scores = get_scores_for_student(student_name, class_name, session, term)
     if not scores:
         return ""
-    
-    # Count grades
-    grade_counts = {}
-    for score in scores:
-        grade = score[6]  # grade is at index 6
-        if grade and grade.strip():
-            grade_counts[grade] = grade_counts.get(grade, 0) + 1
-    
-    # Format as "3A, 4B, 2C" in grade order
-    grade_order = ['A', 'B', 'C', 'D', 'E', 'F']
-    parts = []
-    for grade in grade_order:
-        if grade in grade_counts:
-            count = grade_counts[grade]
-            parts.append(f"{count}{grade}")
-    
-    return ", ".join(parts) if parts else ""
+
+    grade_order = ["A1", "B2", "B3", "C4", "C5", "C6", "D7", "E8", "F9"]
+    counts: dict[str, int] = {}
+
+    for row in scores:
+        total = row.get("total_score") or 0
+        if total >= 75:
+            grade = "A1"
+        elif total >= 70:
+            grade = "B2"
+        elif total >= 65:
+            grade = "B3"
+        elif total >= 60:
+            grade = "C4"
+        elif total >= 55:
+            grade = "C5"
+        elif total >= 50:
+            grade = "C6"
+        elif total >= 45:
+            grade = "D7"
+        elif total >= 40:
+            grade = "E8"
+        else:
+            grade = "F9"
+        counts[grade] = counts.get(grade, 0) + 1
+
+    parts = [f"{g}×{counts[g]}" for g in grade_order if g in counts]
+    return ", ".join(parts)
 
 
-def get_student_average(student_name, class_name, term, session, user_id=None, role=None):
+def get_student_grand_totals(class_name: str, session: str, term: str) -> list:
     """
-    Get the average score for a specific student
-    
-    Args:
-        student_name: Student name
-        class_name: Class name
-        term: Term
-        session: Session
-        user_id: User ID (optional, for filtering)
-        role: User role (optional, for filtering)
-    
-    Returns:
-        float: Student's average score, 0 if no scores found
+    Grand totals and overall ranks for all students in a class/term.
+    Used by broadsheet and report cards for position-in-class.
+
+    Returns list of dicts:
+        {student_name, grand_total, position}
     """
-    scores = get_student_scores(student_name, class_name, term, session, user_id, role)
-    
-    if not scores:
+    conn = get_connection()
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT student_name, SUM(total_score) AS grand_total
+        FROM   scores
+        WHERE  class_name = ? AND session = ? AND term = ?
+        GROUP  BY student_name
+        ORDER  BY grand_total DESC
+    """, (class_name, session, term))
+    rows = cursor.fetchall()
+    conn.close()
+
+    result = []
+    current_rank = 1
+    previous_total = None
+    for i, r in enumerate(rows):
+        if r["grand_total"] != previous_total:
+            current_rank = i + 1
+        result.append({
+            "student_name": r["student_name"],
+            "grand_total":  r["grand_total"],
+            "position":     current_rank,
+        })
+        previous_total = r["grand_total"]
+    return result
+
+
+def has_scores_for_term(class_name: str, session: str, term: str) -> bool:
+    """Return True if any scores exist for this class/session/term."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT 1 FROM scores
+        WHERE class_name = ? AND session = ? AND term = ?
+        LIMIT 1
+    """, (class_name, session, term))
+    result = cursor.fetchone() is not None
+    conn.close()
+    return result
+
+
+def get_student_average(student_name: str, class_name: str,
+                         session: str, term: str) -> float:
+    """Return a student's average total_score across all subjects in a term."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT AVG(total_score) FROM scores
+        WHERE student_name = ? AND class_name = ?
+          AND session = ? AND term = ?
+    """, (student_name, class_name, session, term))
+    row = cursor.fetchone()
+    conn.close()
+    return round(row[0], 2) if row and row[0] is not None else 0.0
+
+
+# ═════════════════════════════════════════════════════════════════
+# Delete
+# ═════════════════════════════════════════════════════════════════
+
+def delete_score(student_name: str, class_name: str, session: str,
+                 term: str, subject_name: str) -> bool:
+    """Delete a single score row."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            DELETE FROM scores
+            WHERE student_name = ? AND class_name = ?
+              AND session = ? AND term = ? AND subject_name = ?
+        """, (student_name, class_name, session, term, subject_name))
+        conn.commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        logger.error(f"Error deleting score: {e}")
+        return False
+    finally:
+        conn.close()
+
+
+def delete_scores_for_term(class_name: str, session: str, term: str) -> int:
+    """
+    Delete ALL scores for a class in a specific term.
+    Returns row count deleted. Admin-only operation.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            DELETE FROM scores
+            WHERE class_name = ? AND session = ? AND term = ?
+        """, (class_name, session, term))
+        conn.commit()
+        deleted = cursor.rowcount
+        logger.warning(
+            f"Deleted {deleted} scores for '{class_name}' / '{session}' / '{term}'"
+        )
+        return deleted
+    except Exception as e:
+        logger.error(f"Error deleting term scores: {e}")
         return 0
-    
-    # Filter out None values
-    valid_totals = [score[5] for score in scores if score[5] is not None]
-    
-    if not valid_totals:
-        return 0
-    
-    return sum(valid_totals) / len(valid_totals)
+    finally:
+        conn.close()

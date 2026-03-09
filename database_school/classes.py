@@ -1,6 +1,11 @@
 # database/classes.py
+"""
+Class management — session-independent class definitions and
+per-session enrollment (class_sessions).
 
-"""Class management operations"""
+NOTE: class_teacher assignment is handled via teacher_assignments,
+NOT a column on the classes table.
+"""
 
 import sqlite3
 import logging
@@ -9,180 +14,250 @@ from .connection import get_connection
 logger = logging.getLogger(__name__)
 
 
-def get_all_classes(user_id=None, role=None):
-    """
-    Get all classes with restrictions for non-admins
-    
-    Args:
-        user_id: User ID (optional, for filtering)
-        role: User role (optional, for filtering)
-    
-    Returns:
-        list: List of class dictionaries with class_name, term, session
-    """
-    conn = get_connection()
-    cursor = conn.cursor()
-    
-    # Admins see all classes
-    if role in ["superadmin", "admin"]:
-        cursor.execute("""
-            SELECT name, term, session 
-            FROM classes 
-            ORDER BY session DESC, term, name
-        """)
-    elif role == "class_teacher" and user_id:
-        # Class teachers see only their class teacher assignments
-        cursor.execute("""
-            SELECT DISTINCT c.name, c.term, c.session
-            FROM classes c
-            JOIN teacher_assignments ta ON c.name = ta.class_name 
-                AND c.term = ta.term AND c.session = ta.session
-            WHERE ta.user_id = ? AND ta.assignment_type = 'class_teacher'
-            ORDER BY c.session DESC, c.term, c.name
-        """, (user_id,))
-    elif role == "subject_teacher" and user_id:
-        # Subject teachers see only their subject teacher assignments
-        cursor.execute("""
-            SELECT DISTINCT c.name, c.term, c.session
-            FROM classes c
-            JOIN teacher_assignments ta ON c.name = ta.class_name 
-                AND c.term = ta.term AND c.session = ta.session
-            WHERE ta.user_id = ? AND ta.assignment_type = 'subject_teacher'
-            ORDER BY c.session DESC, c.term, c.name
-        """, (user_id,))
-    else:
-        conn.close()
-        return []
-        
-    rows = cursor.fetchall()
-    classes = [
-        {"class_name": row[0], "term": row[1], "session": row[2]}
-        for row in rows
-    ]
-    conn.close()
-    return classes
+# ═════════════════════════════════════════════════════════════════
+# Permanent class registry
+# ═════════════════════════════════════════════════════════════════
 
-
-def create_class(class_name, term, session):
+def create_class(class_name: str, description: str = None) -> bool:
     """
-    Create a new class
-    
-    Args:
-        class_name: Name of the class
-        term: Term (e.g., '1st Term', '2nd Term', '3rd Term')
-        session: Session (e.g., '2024/2025')
-    
-    Returns:
-        bool: True if created successfully, False if already exists
+    Add a new permanent class definition.
+    class_teacher is NOT stored here — use teacher_assignments.
+
+    Returns True on success, False if name already exists.
     """
     conn = get_connection()
     cursor = conn.cursor()
     try:
         cursor.execute(
-            "INSERT INTO classes (name, term, session) VALUES (?, ?, ?)",
-            (class_name, term, session)
+            "INSERT INTO classes (class_name, description) VALUES (?, ?)",
+            (class_name.strip(), description)
         )
         conn.commit()
-        logger.info(f"Class '{class_name}' created for {term} - {session}")
+        logger.info(f"Class '{class_name}' created")
         return True
     except sqlite3.IntegrityError:
-        logger.warning(f"Class '{class_name}' already exists for {term} - {session}")
+        logger.warning(f"Class '{class_name}' already exists")
+        return False
+    except Exception as e:
+        logger.error(f"Error creating class: {e}")
         return False
     finally:
         conn.close()
 
 
-def update_class(original_class_name, original_term, original_session, 
-                 new_class_name, new_term, new_session):
+def get_all_classes() -> list:
     """
-    Update an existing class entry
-    
-    This function handles the update in a transaction with proper ordering
-    to avoid foreign key constraint violations.
-    
-    Args:
-        original_class_name: Original class name
-        original_term: Original term
-        original_session: Original session
-        new_class_name: New class name
-        new_term: New term
-        new_session: New session
-    
-    Returns:
-        bool: True if updated successfully, False otherwise
+    Return all permanent class definitions ordered by name.
+    Returns list of dicts: {id, class_name, description, created_at}
+    """
+    conn = get_connection()
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT id, class_name, description, created_at
+        FROM   classes
+        ORDER  BY class_name
+    """)
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_class(class_name: str) -> dict | None:
+    """Return a single class definition or None."""
+    conn = get_connection()
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id, class_name, description, created_at FROM classes WHERE class_name = ?",
+        (class_name,)
+    )
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def update_class(class_name: str, new_name: str = None,
+                 description: str = None) -> bool:
+    """
+    Update a class definition.
+    Renaming cascades to class_sessions, subjects, class_session_students
+    via ON UPDATE CASCADE.
     """
     conn = get_connection()
     cursor = conn.cursor()
-    
     try:
-        # Start transaction
-        cursor.execute("BEGIN TRANSACTION")
-        
-        # Temporarily disable foreign key constraints
-        cursor.execute("PRAGMA foreign_keys = OFF")
-        
-        # Update the class
-        cursor.execute("""
-            UPDATE classes
-            SET name = ?, term = ?, session = ?
-            WHERE name = ? AND term = ? AND session = ?
-        """, (new_class_name, new_term, new_session, 
-              original_class_name, original_term, original_session))
-        
-        # Re-enable foreign key constraints
-        cursor.execute("PRAGMA foreign_keys = ON")
-        
-        # Commit transaction
+        if new_name and new_name.strip() != class_name:
+            cursor.execute(
+                "UPDATE classes SET class_name = ? WHERE class_name = ?",
+                (new_name.strip(), class_name)
+            )
+            class_name = new_name.strip()
+        if description is not None:
+            cursor.execute(
+                "UPDATE classes SET description = ? WHERE class_name = ?",
+                (description, class_name)
+            )
         conn.commit()
-        logger.info(f"Class updated from '{original_class_name}-{original_term}-{original_session}' to '{new_class_name}-{new_term}-{new_session}'")
         return True
-        
-    except sqlite3.Error as e:
-        # Rollback on error
-        conn.rollback()
-        cursor.execute("PRAGMA foreign_keys = ON")  # Re-enable even on error
-        logger.error(f"Error updating class: {str(e)}")
+    except sqlite3.IntegrityError:
+        logger.warning(f"Rename failed — '{new_name}' already exists")
+        return False
+    except Exception as e:
+        logger.error(f"Error updating class: {e}")
         return False
     finally:
         conn.close()
 
 
-def delete_class(class_name, term, session):
+def delete_class(class_name: str) -> tuple:
     """
-    Delete a class and all associated data (CASCADE)
-    
-    Args:
-        class_name: Class name to delete
-        term: Term
-        session: Session
+    Delete a class. Refuses with a user-facing reason if session
+    enrollments exist.
+    Returns (True, "") or (False, reason_string).
     """
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "SELECT COUNT(*) FROM class_sessions WHERE class_name = ?",
+            (class_name,)
+        )
+        if cursor.fetchone()[0] > 0:
+            return (
+                False,
+                f"Cannot delete '{class_name}': it has active session "
+                "enrollments. Remove those first."
+            )
+        cursor.execute("DELETE FROM classes WHERE class_name = ?", (class_name,))
+        conn.commit()
+        return True, ""
+    except Exception as e:
+        logger.error(f"Error deleting class: {e}")
+        return False, str(e)
+    finally:
+        conn.close()
+
+
+# ═════════════════════════════════════════════════════════════════
+# Session enrollment (class_sessions)
+# ═════════════════════════════════════════════════════════════════
+
+def open_class_for_session(class_name: str, session: str) -> bool:
+    """
+    Open a class for an academic session (creates class_sessions row).
+    Idempotent — safe to call even if already open (INSERT OR IGNORE).
+    Both class_name and session must exist in their parent tables.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            INSERT OR IGNORE INTO class_sessions (class_name, session)
+            VALUES (?, ?)
+        """, (class_name, session))
+        conn.commit()
+        logger.info(f"'{class_name}' opened for session '{session}'")
+        return True
+    except sqlite3.IntegrityError as e:
+        logger.error(f"open_class_for_session FK error: {e}")
+        return False
+    except Exception as e:
+        logger.error(f"Error opening class for session: {e}")
+        return False
+    finally:
+        conn.close()
+
+
+def get_class_session_id(class_name: str, session: str) -> int | None:
+    """Return class_sessions.id for (class_name, session), or None."""
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
-        "DELETE FROM classes WHERE name = ? AND term = ? AND session = ?", 
-        (class_name, term, session)
+        "SELECT id FROM class_sessions WHERE class_name = ? AND session = ?",
+        (class_name, session)
     )
-    conn.commit()
+    row = cursor.fetchone()
     conn.close()
-    logger.info(f"Class '{class_name}' deleted for {term} - {session}")
+    return row[0] if row else None
 
 
-def clear_all_classes():
+def get_classes_for_session(session: str) -> list:
     """
-    Delete all classes and associated data (students, subjects, scores) via CASCADE
-    
-    Returns:
-        bool: True if successful, False otherwise
+    Return all classes open in a session, with enrollment counts.
+    Returns list of dicts:
+        {class_session_id, class_name, session, is_active,
+         description, student_count}
     """
+    conn = get_connection()
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT
+            cs.id           AS class_session_id,
+            cs.class_name,
+            cs.session,
+            cs.is_active,
+            c.description,
+            COUNT(css.id)   AS student_count
+        FROM  class_sessions cs
+        JOIN  classes c ON c.class_name = cs.class_name
+        LEFT JOIN class_session_students css ON css.class_session_id = cs.id
+        WHERE cs.session = ?
+        GROUP BY cs.id
+        ORDER BY cs.class_name
+    """, (session,))
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_classes_for_teacher(teacher_username: str, session: str) -> list:
+    """
+    Return classes assigned to a teacher via teacher_assignments.
+    (class_teacher is NOT a column on the classes table.)
+    Returns list of dicts:
+        {class_session_id, class_name, session, is_active,
+         student_count, assignment_type}
+    """
+    conn = get_connection()
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT
+            cs.id                   AS class_session_id,
+            cs.class_name,
+            cs.session,
+            cs.is_active,
+            COUNT(DISTINCT css.id)  AS student_count,
+            ta.assignment_type
+        FROM  teacher_assignments ta
+        JOIN  users u              ON u.id  = ta.user_id
+        JOIN  class_sessions cs    ON cs.id = ta.class_session_id
+        LEFT JOIN class_session_students css ON css.class_session_id = cs.id
+        WHERE u.username = ?
+          AND ta.session  = ?
+        GROUP BY cs.id, ta.assignment_type
+        ORDER BY cs.class_name
+    """, (teacher_username, session))
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def close_class_for_session(class_name: str, session: str) -> bool:
+    """Soft-close a class_session (data preserved, is_active → 0)."""
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute("DELETE FROM classes")
+        cursor.execute("""
+            UPDATE class_sessions SET is_active = 0
+            WHERE class_name = ? AND session = ?
+        """, (class_name, session))
         conn.commit()
-        logger.info("All classes cleared successfully")
-        return True
-    except sqlite3.Error as e:
-        logger.error(f"Error clearing classes: {e}")
+        return cursor.rowcount > 0
+    except Exception as e:
+        logger.error(f"Error closing class session: {e}")
         return False
     finally:
         conn.close()

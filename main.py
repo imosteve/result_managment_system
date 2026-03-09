@@ -1,5 +1,6 @@
 # main.py  — FINAL VERSION
 import streamlit as st
+import os
 import logging
 import traceback
 from datetime import datetime
@@ -57,7 +58,12 @@ def handle_navigation(app, options: dict, role: str):
     school_code = st.session_state.get("school_code", "platform")
     if not school_code:
         school_code = "platform"
+
     logo_path = f"static/logos/{school_code}_logo.png"
+
+    if not os.path.exists(logo_path):
+        logo_path = "static/logos/platform_logo.png"
+
     st.logo(logo_path, size="large")
 
     for page in option_keys:

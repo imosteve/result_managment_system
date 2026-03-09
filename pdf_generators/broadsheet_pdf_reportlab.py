@@ -16,10 +16,10 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
 from database_school import (
-    get_students_by_class, 
-    get_subjects_by_class, 
-    get_student_scores, 
-    get_student_grand_totals, 
+    get_enrolled_students,
+    get_subjects_by_class,
+    get_scores_for_student,
+    get_student_grand_totals,
     get_grade_distribution
 )
 from main_utils import format_ordinal
@@ -547,8 +547,9 @@ def prepare_student_data_empty(students, is_sss2_or_sss3):
     """Prepare empty student data for blank template"""
     students_data = []
     for student in students:
+        student_name = student["student_name"] if isinstance(student, dict) else student[1]
         student_dict = {
-            'name': student[1],
+            'name': student_name,
             'scores': {},
             'grand_total': '',
             'average': '',
@@ -606,7 +607,7 @@ def prepare_student_data_with_scores(broadsheet_data, subject_names, is_sss2_or_
 def generate_blank_broadsheet_pdf(class_name, term, session, students, subjects, is_sss2_or_sss3):
     """Generate blank broadsheet template PDF using ReportLab"""
     students_data = prepare_student_data_empty(students, is_sss2_or_sss3)
-    subject_names = [subject[1] for subject in subjects]
+    subject_names = [s["subject_name"] if isinstance(s, dict) else s[1] for s in subjects]
     
     pdf_buffer = io.BytesIO()
     page_size = get_page_size(len(subjects), len(students))
@@ -647,7 +648,7 @@ def generate_blank_broadsheet_pdf(class_name, term, session, students, subjects,
 def generate_broadsheet_with_scores_pdf(class_name, term, session, broadsheet_data, 
                                         subjects, class_average, is_sss2_or_sss3):
     """Generate broadsheet with scores PDF using ReportLab"""
-    subject_names = [subject[1] for subject in subjects]
+    subject_names = [s["subject_name"] if isinstance(s, dict) else s[1] for s in subjects]
     students_data = prepare_student_data_with_scores(broadsheet_data, subject_names, is_sss2_or_sss3)
     
     pdf_buffer = io.BytesIO()
@@ -710,58 +711,58 @@ def generate_broadsheet_with_scores_pdf(class_name, term, session, broadsheet_da
 def build_class_broadsheet_data(class_name, term, session, user_id, role, sort_by="Position"):
     """Build broadsheet data for a single class"""
     is_sss2_or_sss3 = bool(re.match(r"SSS [23].*$", class_name))
-    
-    students = get_students_by_class(class_name, term, session, user_id, role)
-    subjects = get_subjects_by_class(class_name, term, session, user_id, role)
-    
+
+    students = get_enrolled_students(class_name, session)
+    subjects = get_subjects_by_class(class_name)
+
     if not students or not subjects:
         return None
-    
+
     broadsheet_data = []
-    grand_totals = get_student_grand_totals(class_name, term, session, user_id, role)
-    
+    grand_totals = get_student_grand_totals(class_name, session, term)
+
     for student in students:
-        student_name = student[1]
-        scores = get_student_scores(student_name, class_name, term, session, user_id, role)
-        
+        student_name = student["student_name"]
+        scores = get_scores_for_student(student_name, class_name, session, term)
+
         test_scores = {}
         exam_scores = {}
         total_scores = {}
-        
+
         for score in scores:
-            subject_name = score[2]
-            test_scores[subject_name] = str(int(score[3])) if score[3] is not None else "-"
-            exam_scores[subject_name] = str(int(score[4])) if score[4] is not None else "-"
-            total_scores[subject_name] = str(int(score[5])) if score[5] is not None else "-"
-        
+            subject_name = score["subject_name"]
+            test_scores[subject_name] = str(int(score["ca_score"])) if score["ca_score"] is not None else "-"
+            exam_scores[subject_name] = str(int(score["exam_score"])) if score["exam_score"] is not None else "-"
+            total_scores[subject_name] = str(int(score["total_score"])) if score["total_score"] is not None else "-"
+
         row = {"Student": student_name}
-        
+
         for subject in subjects:
-            subject_name = subject[1]
+            subject_name = subject["subject_name"] if isinstance(subject, dict) else subject[1]
             row[f"{subject_name} (Test)"] = test_scores.get(subject_name, "-")
             row[f"{subject_name} (Exam)"] = exam_scores.get(subject_name, "-")
             row[f"{subject_name} (Total)"] = total_scores.get(subject_name, "-")
-        
+
         numeric_totals = [int(v) for v in total_scores.values() if v != "-"]
         grand_total = str(sum(numeric_totals)) if numeric_totals else "-"
         row["Grand Total"] = grand_total
-        
+
         if grand_total != "-" and numeric_totals:
             avg = round(int(grand_total) / len(numeric_totals), 1)
             row["Average"] = str(avg)
         else:
             row["Average"] = "-"
-        
+
         position_data = next((gt for gt in grand_totals if gt['student_name'] == student_name), None)
-        
+
         if is_sss2_or_sss3:
-            grade_distribution = get_grade_distribution(student_name, class_name, term, session, user_id, role)
+            grade_distribution = get_grade_distribution(student_name, class_name, session, term)
             row["Grade"] = grade_distribution if grade_distribution else "-"
             row["_position"] = position_data['position'] if position_data else 999
         else:
             row["Position"] = format_ordinal(position_data['position']) if position_data else "-"
             row["_position"] = position_data['position'] if position_data else 999
-        
+
         broadsheet_data.append(row)
     
     if sort_by == "Name (A-Z)":
@@ -780,32 +781,37 @@ def build_class_broadsheet_data(class_name, term, session, user_id, role, sort_b
     return broadsheet_data, subjects, class_average, is_sss2_or_sss3
 
 
-def generate_all_classes_broadsheet_pdf(classes, user_id, role, sort_by="Position"):
+def generate_all_classes_broadsheet_pdf(classes, user_id, role, sort_by="Position", term=None, session=None):
     """Generate broadsheet PDF for all classes in a single document"""
+    # term and session come from academic_settings (no longer stored on class dicts)
+    from database_school import get_active_session, get_active_term_name
+    if not session:
+        session = get_active_session()
+    if not term:
+        term = get_active_term_name()
+
     merger = PdfMerger()
-    
+
     for class_data in classes:
         class_name = class_data['class_name']
-        term = class_data['term']
-        session = class_data['session']
-        
+
         result = build_class_broadsheet_data(class_name, term, session, user_id, role, sort_by)
-        
+
         if result is None:
             continue
-        
+
         broadsheet_data, subjects, class_average, is_sss2_or_sss3 = result
-        
+
         class_pdf, _ = generate_broadsheet_with_scores_pdf(
-            class_name, term, session, broadsheet_data, subjects, 
+            class_name, term, session, broadsheet_data, subjects,
             class_average, is_sss2_or_sss3
         )
-        
+
         merger.append(class_pdf)
-    
+
     output_buffer = io.BytesIO()
     merger.write(output_buffer)
     merger.close()
     output_buffer.seek(0)
-    
+
     return output_buffer

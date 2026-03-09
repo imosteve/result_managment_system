@@ -191,84 +191,80 @@ def update_user(
 
 def get_user_assignments(user_id):
     """
-    Get all assignments for a user (both class and subject teacher assignments)
-    
-    Args:
-        user_id: User ID
-    
+    Get all assignments for a user (both class and subject teacher assignments).
+
     Returns:
-        list: List of assignment records
+        list of dicts: {id, class_name, session, subject_name, assignment_type}
     """
     try:
         conn = get_connection()
+        conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT id, class_name, term, session, subject_name, assignment_type
+            SELECT id, class_name, session, subject_name, assignment_type
             FROM teacher_assignments
             WHERE user_id = ?
-            ORDER BY session DESC, term, class_name, subject_name
+            ORDER BY session DESC, class_name, subject_name
         """, (user_id,))
-        assignments = cursor.fetchall()
+        rows = cursor.fetchall()
         conn.close()
-        
-        logger.info(f"Retrieved {len(assignments)} assignments for user {user_id}")
-        return assignments
+        logger.info(f"Retrieved {len(rows)} assignments for user {user_id}")
+        return [dict(r) for r in rows]
     except Exception as e:
         logger.error(f"Error getting assignments for user {user_id}: {str(e)}")
         return []
 
 
-def assign_teacher(user_id, class_name, term, session, subject_name=None, assignment_type='class_teacher'):
+def assign_teacher(user_id, class_name, session, subject_name=None, assignment_type='class_teacher'):
     """
-    Assign a user as class teacher or subject teacher with proper duplicate checking
-    
+    Assign a user as class teacher or subject teacher.
+    term is no longer a column on teacher_assignments — assignments cover all terms in a session.
+
     Args:
-        user_id: User ID to assign
-        class_name: Class name
-        term: Term
-        session: Session
-        subject_name: Subject name (required for subject_teacher)
+        user_id:         User ID to assign
+        class_name:      Class name
+        session:         Session (e.g. "2024/2025")
+        subject_name:    Subject name (required for subject_teacher)
         assignment_type: 'class_teacher' or 'subject_teacher'
-    
+
     Returns:
         bool: True if assigned successfully, False otherwise
     """
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        # Validate assignment_type
         if assignment_type == 'subject_teacher' and not subject_name:
             logger.error("Subject teacher assignment requires a subject name")
             return False
-        
+
         if assignment_type == 'class_teacher':
-            subject_name = None  # Class teachers don't have subject_name
-        
-        # Check if this user already has this exact assignment
+            subject_name = None
+
+        # Duplicate check
         if assignment_type == 'class_teacher':
             cursor.execute("""
                 SELECT id FROM teacher_assignments
-                WHERE user_id = ? AND class_name = ? AND term = ? AND session = ? 
-                AND assignment_type = 'class_teacher'
-            """, (user_id, class_name, term, session))
+                WHERE user_id = ? AND class_name = ? AND session = ?
+                  AND assignment_type = 'class_teacher'
+            """, (user_id, class_name, session))
         else:
             cursor.execute("""
                 SELECT id FROM teacher_assignments
-                WHERE user_id = ? AND class_name = ? AND term = ? AND session = ? 
-                AND subject_name = ? AND assignment_type = 'subject_teacher'
-            """, (user_id, class_name, term, session, subject_name))
-        
+                WHERE user_id = ? AND class_name = ? AND session = ?
+                  AND subject_name = ? AND assignment_type = 'subject_teacher'
+            """, (user_id, class_name, session, subject_name))
+
         if cursor.fetchone():
-            logger.warning(f"This assignment already exists for user {user_id}")
+            logger.warning(f"Assignment already exists for user {user_id}")
             return False
-        
-        # Insert the assignment
+
         cursor.execute("""
-            INSERT INTO teacher_assignments (user_id, class_name, term, session, subject_name, assignment_type)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (user_id, class_name, term, session, subject_name, assignment_type))
+            INSERT INTO teacher_assignments
+                (user_id, class_name, session, subject_name, assignment_type)
+            VALUES (?, ?, ?, ?, ?)
+        """, (user_id, class_name, session, subject_name, assignment_type))
         conn.commit()
-        logger.info(f"Successfully assigned user {user_id} as {assignment_type} for {class_name}-{term}-{session}")
+        logger.info(f"Assigned user {user_id} as {assignment_type} for {class_name}-{session}")
         return True
     except sqlite3.IntegrityError as e:
         logger.warning(f"Assignment already exists for user {user_id}: {str(e)}")
@@ -277,29 +273,22 @@ def assign_teacher(user_id, class_name, term, session, subject_name=None, assign
         conn.close()
 
 
-def batch_assign_subject_teacher(user_id, class_name, term, session, subject_names):
+def batch_assign_subject_teacher(user_id, class_name, session, subject_names):
     """
-    Batch assign a user as subject teacher for multiple subjects at once
-    
-    Args:
-        user_id: User ID to assign
-        class_name: Class name
-        term: Term
-        session: Session
-        subject_names: List of subject names
-    
+    Batch assign a user as subject teacher for multiple subjects.
+
     Returns:
         tuple: (success_count, failed_subjects)
     """
     success_count = 0
     failed_subjects = []
-    
+
     for subject_name in subject_names:
-        if assign_teacher(user_id, class_name, term, session, subject_name, 'subject_teacher'):
+        if assign_teacher(user_id, class_name, session, subject_name, 'subject_teacher'):
             success_count += 1
         else:
             failed_subjects.append(subject_name)
-    
+
     logger.info(f"Batch assignment: {success_count}/{len(subject_names)} subjects assigned successfully")
     return success_count, failed_subjects
 
@@ -318,17 +307,11 @@ def delete_assignment(assignment_id):
     conn.close()
 
 
-def update_assignment(assignment_id, new_class_name, new_term, new_session, new_subject_name=None):
+def update_assignment(assignment_id, new_class_name, new_subject_name=None):
     """
-    Update a teacher assignment
-    
-    Args:
-        assignment_id: Assignment ID to update
-        new_class_name: New class name
-        new_term: New term
-        new_session: New session
-        new_subject_name: New subject name (optional)
-    
+    Update a teacher assignment's class and subject.
+    term is no longer stored on assignments.
+
     Returns:
         bool: True if updated successfully, False otherwise
     """
@@ -337,14 +320,14 @@ def update_assignment(assignment_id, new_class_name, new_term, new_session, new_
     try:
         cursor.execute("""
             UPDATE teacher_assignments
-            SET class_name = ?, term = ?, session = ?, subject_name = ?
+            SET class_name = ?, subject_name = ?
             WHERE id = ?
-        """, (new_class_name, new_term, new_session, new_subject_name, assignment_id))
+        """, (new_class_name, new_subject_name, assignment_id))
         conn.commit()
         logger.info(f"Assignment {assignment_id} updated successfully")
         return True
     except sqlite3.IntegrityError:
-        logger.warning(f"Failed to update assignment - may already exist")
+        logger.warning(f"Failed to update assignment {assignment_id} — may already exist")
         return False
     finally:
         conn.close()
