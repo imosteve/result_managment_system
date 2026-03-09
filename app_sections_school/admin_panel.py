@@ -120,12 +120,12 @@ def admin_panel():
     # Assign Class Teacher Tab
     with tabs[3]:
         st.session_state.admin_panel_active_tab = 3
-        render_assign_class_teacher_tab(get_fresh_classes)
+        render_assign_class_teacher_tab(get_fresh_classes, _active_session)
 
     # Assign Subject Teacher Tab
     with tabs[4]:
         st.session_state.admin_panel_active_tab = 4
-        render_assign_subject_teacher_tab(get_fresh_classes, get_fresh_subjects)
+        render_assign_subject_teacher_tab(get_fresh_classes, get_fresh_subjects, _active_session)
 
     # Academic Settings Tab
     with tabs[5]:
@@ -157,6 +157,7 @@ def render_view_delete_user_tab(user_id, admin_role):
                 
             user_data.append({
                 "Username": username,
+                "Email": u["email"] or "-",
                 "Role": role.title(),
                 "Password": password
             })
@@ -172,6 +173,8 @@ def render_view_delete_user_tab(user_id, admin_role):
             st.session_state.user_to_delete_info = None
         
         if len(user_data) > 0:
+            
+            st.divider()
             # Edit User Section
             with st.expander("✏️ Edit User", expanded=False):
                 st.info("Update username and password for existing users")
@@ -195,10 +198,12 @@ def render_view_delete_user_tab(user_id, admin_role):
                     role_display = selected_user["role"].title() if selected_user["role"] else "Teacher"
                     st.info(f"Editing: **{selected_user["username"]}** (Role: {role_display})")
                     
-                    col1, col2 = st.columns(2)
+                    col1, col2, col3 = st.columns(3)
                     with col1:
                         new_username = st.text_input("New Username", value=selected_user["username"], key="new_username")
                     with col2:
+                        new_email = st.text_input("New Email", value=selected_user["email"] or "", placeholder="user@example.com", key="new_email")
+                    with col3:
                         new_password = st.text_input("New Password", type="password", placeholder="Leave blank to keep current", key="new_password")
                     
                     if st.button("💾 Update User", key="update_user_button", type="primary"):
@@ -207,13 +212,20 @@ def render_view_delete_user_tab(user_id, admin_role):
                         if not new_username.strip():
                             st.error("Username cannot be empty")
                         else:
-                            update_success = update_user(user_id_to_edit, new_username.strip(), new_password if new_password else None)
+                            update_success = update_user(
+                                user_id_to_edit,
+                                new_username.strip(),
+                                new_password if new_password else None,
+                                new_email.strip() if new_email.strip() else None
+                            )
                             if update_success:
                                 st.success(f"✅ User updated successfully")
                                 time.sleep(1)
                                 st.rerun()
                             else:
-                                st.error("❌ Failed to update user. Username may already exist.")
+                                st.error("❌ Failed to update user. Username or email may already exist.")
+            
+            st.divider()
             
             # Delete user section
             with st.expander("🗑️ Delete User", expanded=False):
@@ -302,7 +314,7 @@ def render_add_user_tab(admin_role):
         st.subheader("Add New User")
         form_key = f"add_user_form_{st.session_state.get('form_submit_count', 0)}"
 
-        col1, col2 = st.columns(2)
+        col1, col2 = st.columns(2, vertical_alignment='bottom')
         with col1:
             username = st.text_input("Username", key=f"username_{form_key}")
         with col2:
@@ -313,10 +325,11 @@ def render_add_user_tab(admin_role):
                     "Email local part",
                     placeholder=f"e.g. john.doe",
                     key=f"email_local_{form_key}",
-                    label_visibility="collapsed"
+                    label_visibility="collapsed",
+                    help=f"Enter the part before @. The domain @{email_domain} will be added automatically."
                 )
                 email = f"{email_local.strip()}@{email_domain}" if email_local.strip() else ""
-                st.caption(f"📧 Full email: `{email}`" if email else "📧 Enter the part before @")
+                # st.caption(f"📧 Full email: `{email}`" if email else "📧 Enter the part before @")
             else:
                 email = st.text_input(
                     "Email",
@@ -399,7 +412,7 @@ def render_assignments_tab(user_id, admin_role, get_fresh_classes, get_fresh_sub
                 "id": a['id'],
                 "S/N": str(sn_counter),
                 "user_id": u["id"],
-                "Username": u["username"],
+                "Username": u["username"].title(),
                 "Role": role_display,
                 "Class": a['class_name'],
                 "class_name": a['class_name'],
@@ -532,7 +545,7 @@ def render_assignments_tab(user_id, admin_role, get_fresh_classes, get_fresh_sub
         st.info("No assignments found.")
 
 
-def render_assign_class_teacher_tab(get_fresh_classes):
+def render_assign_class_teacher_tab(get_fresh_classes, active_session):
     """Render Assign Class Teacher tab"""
     with st.form("assign_class_teacher_form"):
         st.subheader("Assign Class Teacher")
@@ -566,14 +579,14 @@ def render_assign_class_teacher_tab(get_fresh_classes):
                 ActivityTracker.watch_form(submitted)
                 
                 if submitted:
-                    if assign_teacher(selected_user_id, class_name, _active_session or '', None, 'class_teacher'):
+                    if assign_teacher(selected_user_id, class_name, active_session or '', None, 'class_teacher'):
                         st.success(f"✅ Class teacher assigned: {next(u["username"] for u in teacher_users if u["id"] == selected_user_id)}.")
                         st.rerun()
                     else:
                         st.error("❌ Failed to assign class teacher. Assignment may already exist.")
 
 
-def render_assign_subject_teacher_tab(get_fresh_classes, get_fresh_subjects):
+def render_assign_subject_teacher_tab(get_fresh_classes, get_fresh_subjects, active_session):
     """Render Assign Subject Teacher tab"""
     st.subheader("Assign Subject Teacher")
     
@@ -645,7 +658,7 @@ def render_assign_subject_teacher_tab(get_fresh_classes, get_fresh_subjects):
                             ActivityTracker.update()
                         
                         if submitted_single and subject_name:
-                            if assign_teacher(selected_user_id, class_name, _active_session or '', subject_name, 'subject_teacher'):
+                            if assign_teacher(selected_user_id, class_name, active_session or '', subject_name, 'subject_teacher'):
                                 st.success(f"✅ Subject teacher assigned: {next(u["username"] for u in teacher_users if u["id"] == selected_user_id)} to {subject_name}.")
                                 time.sleep(1)
                                 st.rerun()
@@ -654,7 +667,7 @@ def render_assign_subject_teacher_tab(get_fresh_classes, get_fresh_subjects):
                         
                         if submitted_all:
                             subject_names = [s['subject_name'] if isinstance(s, dict) else s[1] for s in subjects]
-                            success_count, failed_subjects = batch_assign_subject_teacher(selected_user_id, class_name, _active_session or '', subject_names)
+                            success_count, failed_subjects = batch_assign_subject_teacher(selected_user_id, class_name, active_session or '', subject_names)
                             
                             if success_count == len(subjects):
                                 st.success(f"✅ All {success_count} subjects assigned successfully to {next(u["username"] for u in teacher_users if u["id"] == selected_user_id)}!")
@@ -678,7 +691,7 @@ def render_assign_subject_teacher_tab(get_fresh_classes, get_fresh_subjects):
                         ActivityTracker.watch_form(submitted)
                         
                         if submitted and subject_name:
-                            if assign_teacher(selected_user_id, class_name, _active_session or '', subject_name, 'subject_teacher'):
+                            if assign_teacher(selected_user_id, class_name, active_session or '', subject_name, 'subject_teacher'):
                                 st.success(f"✅ Subject teacher assigned: {next(u["username"] for u in teacher_users if u["id"] == selected_user_id)} to {subject_name}.")
                                 time.sleep(1)
                                 st.rerun()

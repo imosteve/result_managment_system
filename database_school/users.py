@@ -220,6 +220,9 @@ def assign_teacher(user_id, class_name, session, subject_name=None, assignment_t
     Assign a user as class teacher or subject teacher.
     term is no longer a column on teacher_assignments — assignments cover all terms in a session.
 
+    The teacher_assignments table requires class_session_id (NOT NULL FK to class_sessions).
+    This function resolves it from class_name + session automatically.
+
     Args:
         user_id:         User ID to assign
         class_name:      Class name
@@ -240,19 +243,33 @@ def assign_teacher(user_id, class_name, session, subject_name=None, assignment_t
         if assignment_type == 'class_teacher':
             subject_name = None
 
+        # Resolve class_session_id — required NOT NULL FK
+        cursor.execute("""
+            SELECT id FROM class_sessions
+            WHERE class_name = ? AND session = ?
+        """, (class_name, session))
+        row = cursor.fetchone()
+        if not row:
+            logger.error(
+                f"assign_teacher: no class_session for '{class_name}' / '{session}'. "
+                "Open the class for this session first."
+            )
+            return False
+        class_session_id = row[0]
+
         # Duplicate check
         if assignment_type == 'class_teacher':
             cursor.execute("""
                 SELECT id FROM teacher_assignments
-                WHERE user_id = ? AND class_name = ? AND session = ?
+                WHERE user_id = ? AND class_session_id = ?
                   AND assignment_type = 'class_teacher'
-            """, (user_id, class_name, session))
+            """, (user_id, class_session_id))
         else:
             cursor.execute("""
                 SELECT id FROM teacher_assignments
-                WHERE user_id = ? AND class_name = ? AND session = ?
+                WHERE user_id = ? AND class_session_id = ?
                   AND subject_name = ? AND assignment_type = 'subject_teacher'
-            """, (user_id, class_name, session, subject_name))
+            """, (user_id, class_session_id, subject_name))
 
         if cursor.fetchone():
             logger.warning(f"Assignment already exists for user {user_id}")
@@ -260,9 +277,9 @@ def assign_teacher(user_id, class_name, session, subject_name=None, assignment_t
 
         cursor.execute("""
             INSERT INTO teacher_assignments
-                (user_id, class_name, session, subject_name, assignment_type)
-            VALUES (?, ?, ?, ?, ?)
-        """, (user_id, class_name, session, subject_name, assignment_type))
+                (user_id, class_session_id, class_name, session, subject_name, assignment_type)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (user_id, class_session_id, class_name, session, subject_name, assignment_type))
         conn.commit()
         logger.info(f"Assigned user {user_id} as {assignment_type} for {class_name}-{session}")
         return True
@@ -310,7 +327,7 @@ def delete_assignment(assignment_id):
 def update_assignment(assignment_id, new_class_name, new_subject_name=None):
     """
     Update a teacher assignment's class and subject.
-    term is no longer stored on assignments.
+    Resolves class_session_id from the new class_name + existing session.
 
     Returns:
         bool: True if updated successfully, False otherwise
@@ -318,11 +335,33 @@ def update_assignment(assignment_id, new_class_name, new_subject_name=None):
     conn = get_connection()
     cursor = conn.cursor()
     try:
+        # Get existing session for this assignment
+        cursor.execute("SELECT session FROM teacher_assignments WHERE id = ?", (assignment_id,))
+        row = cursor.fetchone()
+        if not row:
+            logger.warning(f"Assignment {assignment_id} not found")
+            return False
+        session = row[0]
+
+        # Resolve new class_session_id
+        cursor.execute("""
+            SELECT id FROM class_sessions
+            WHERE class_name = ? AND session = ?
+        """, (new_class_name, session))
+        cs_row = cursor.fetchone()
+        if not cs_row:
+            logger.error(
+                f"update_assignment: no class_session for '{new_class_name}' / '{session}'. "
+                "Open the class for this session first."
+            )
+            return False
+        class_session_id = cs_row[0]
+
         cursor.execute("""
             UPDATE teacher_assignments
-            SET class_name = ?, subject_name = ?
+            SET class_session_id = ?, class_name = ?, subject_name = ?
             WHERE id = ?
-        """, (new_class_name, new_subject_name, assignment_id))
+        """, (class_session_id, new_class_name, new_subject_name, assignment_id))
         conn.commit()
         logger.info(f"Assignment {assignment_id} updated successfully")
         return True
