@@ -461,7 +461,7 @@ def render_assignments_tab(user_id, admin_role, get_fresh_classes, get_fresh_sub
                         
                         selected_class_index = class_options.index(new_class)
                         class_data = classes[selected_class_index]
-                        new_class_name, new_term, new_session = class_data['class_name'], class_data['term'], class_data['session']
+                        new_class_name = class_data['class_name']
                     
                     with col2:
                         if selected_assignment['subject_name']:

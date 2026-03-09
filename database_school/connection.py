@@ -31,6 +31,9 @@ BACKUP_PATH = os.getenv('BACKUP_PATH',  os.path.join("data", "backups"))
 # Path resolution
 # ─────────────────────────────────────────────
 
+def dict_factory(cursor, row):
+    return {col[0]: row[idx] for idx, col in enumerate(cursor.description)}
+
 def get_db_path(db_path: Optional[str] = None) -> str:
     """
     Resolve which SQLite file to open, in priority order:
@@ -80,6 +83,7 @@ def get_connection(db_path: Optional[str] = None) -> sqlite3.Connection:
     conn = sqlite3.connect(path)
     conn.execute("PRAGMA foreign_keys = ON")
     conn.row_factory = sqlite3.Row
+    # conn.row_factory = dict_factory
     return conn
 
 
