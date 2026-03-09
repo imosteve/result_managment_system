@@ -26,6 +26,7 @@ from .academic_settings import (
     get_all_sessions,
     create_session,
     delete_session,
+    update_session,
 )
 
 # ── Classes ──────────────────────────────────────────────────────────────────

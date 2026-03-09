@@ -86,31 +86,23 @@ def create_metric_4col(class_name, term, session, subjects_or_students, type):
             st.markdown(f"<div class='custom-metric'><div class='label'>Total Subjects</div><div class='value'>{len(subjects_or_students)}</div></div>", unsafe_allow_html=True)
 
 
-def create_metric_5col_broadsheet(subjects, students, class_average, broadsheet_data, class_name, term, session, user_id, role):
-    from database_school import get_subjects_by_class
-    
-    # Get all possible subjects for the class
-    all_subjects = get_subjects_by_class(class_name, term, session, user_id, role)
-    
-    # Count subjects with scores (subjects that appear in broadsheet data with Total column)
-    subjects_with_scores = set()
-    for row in broadsheet_data:
-        for subject in all_subjects:
-            subject_name = subject[1]
-            # Check the Total column for this subject
-            total_key = f"{subject_name} (Total)"
-            if total_key in row and row[total_key] != "-":
-                subjects_with_scores.add(subject_name)
-    
-    subjects_added = len(subjects_with_scores)
-    subjects_not_added = len(all_subjects) - subjects_added
-    
-    # Get list of subjects without scores
-    subjects_without_scores = []
-    for subject in all_subjects:
-        subject_name = subject[1]
-        if subject_name not in subjects_with_scores:
-            subjects_without_scores.append(subject_name)
+def create_metric_5col_broadsheet(subjects, students, class_average, broadsheet_data, class_name, term, session, user_id=None, role=None):
+    from database_school import get_subjects_by_class, get_scores_for_class
+
+    # All subjects defined for this class (session/term-independent)
+    all_subjects = get_subjects_by_class(class_name)
+    all_subject_names = {
+        (s["subject_name"] if isinstance(s, dict) else s[1])
+        for s in all_subjects
+    }
+
+    # Subjects that have at least one real score row in the DB for this class/session/term
+    score_rows = get_scores_for_class(class_name, session, term)
+    subjects_with_scores = {row["subject_name"] for row in score_rows}
+
+    subjects_added          = len(subjects_with_scores)
+    subjects_without_scores = sorted(all_subject_names - subjects_with_scores)
+    subjects_not_added      = len(subjects_without_scores)
 
     col1, col2, col3, col4, col5 = st.columns(5)
 
@@ -277,176 +269,113 @@ def initialize_class_persistence():
     """Initialize the global class persistence storage in session state"""
     if 'class_selection_state' not in st.session_state:
         st.session_state.class_selection_state = {
-            'class_name': None,
-            'term': None,
-            'session': None,
-            'display_string': None
+            'class_name':     None,
+            'display_string': None,
         }
 
 def get_persistent_class_data():
-    """Get the currently selected class data from session state"""
+    """Get the currently selected class name from session state"""
     initialize_class_persistence()
     return st.session_state.class_selection_state
 
-def set_persistent_class_data(class_name: str, term: str, session: str):
-    """Store the selected class data in session state"""
+def set_persistent_class_data(class_name: str, term: str = None, session: str = None):
+    """
+    Store the selected class name in session state.
+    term and session are accepted for backwards compatibility but ignored —
+    they are read from academic_settings at runtime.
+    """
     initialize_class_persistence()
     st.session_state.class_selection_state = {
-        'class_name': class_name,
-        'term': term,
-        'session': session,
-        'display_string': f"{class_name} - {term} - {session}"
+        'class_name':     class_name,
+        'display_string': class_name,
     }
 
 def render_persistent_class_selector(classes: List[Dict[str, Any]], 
                                     widget_key: str = "global_class_selector") -> Optional[Dict[str, Any]]:
     """
-    Render a class selector that persists selection across page navigation
-    
+    Render a class selector that persists selection across page navigation.
+
+    New schema: classes are session-independent permanent definitions.
+    They only carry {id, class_name, description, created_at}.
+    Active session/term are read from academic_settings, not from the class.
+
     Args:
-        classes: List of class dictionaries with class_name, term, session
-        widget_key: Unique key for this selector (use different keys if you need multiple selectors)
-        
+        classes:    List of class dicts — must contain at least 'class_name'.
+        widget_key: Unique key for this selector widget.
+
     Returns:
-        Dictionary with selected class data (class_name, term, session) or None
+        Dict with at least 'class_name', or None if no classes available.
     """
     if not classes:
         return None
-    
+
     initialize_class_persistence()
-    
-    # Create class options
-    class_options = [f"{cls['class_name']} - {cls['term']} - {cls['session']}" for cls in classes]
-    
-    # Create a mapping from display string to class data
-    class_map = {f"{cls['class_name']} - {cls['term']} - {cls['session']}": cls for cls in classes}
-    
-    # Get the last selected class from widget state (if exists) or session state
-    # Widget state takes precedence to handle immediate updates
+
+    class_options = [c["class_name"] for c in classes]
+    class_map     = {c["class_name"]: c for c in classes}
+
+    # Restore last selection
     widget_state_key = f"{widget_key}_value"
-    
-    if widget_state_key in st.session_state:
-        # Use the widget's current value
-        last_selection = st.session_state[widget_state_key]
-    else:
-        # Use the persisted session state
-        last_selection = st.session_state.class_selection_state.get('display_string')
-    
-    # Find the index of the last selection, default to 0 if not found
+    last_selection = (
+        st.session_state.get(widget_state_key)
+        or st.session_state.class_selection_state.get("class_name")
+    )
+
     default_index = 0
     if last_selection and last_selection in class_options:
         try:
             default_index = class_options.index(last_selection)
         except ValueError:
             default_index = 0
-    
-    # Callback function to update session state immediately when selection changes
+
     def on_class_change():
-        selected_display = st.session_state[widget_key]
-        if selected_display in class_map:
-            selected_data = class_map[selected_display]
-            set_persistent_class_data(
-                selected_data['class_name'],
-                selected_data['term'],
-                selected_data['session']
-            )
-            # Store in widget state as well
-            st.session_state[widget_state_key] = selected_display
-    
-    # Render the selectbox with the remembered index and callback
-    selected_class_display = st.selectbox(
-        "Select Class", 
+        selected = st.session_state[widget_key]
+        if selected in class_map:
+            st.session_state.class_selection_state["class_name"]     = selected
+            st.session_state.class_selection_state["display_string"] = selected
+            st.session_state[widget_state_key] = selected
+
+    selected_class_name = st.selectbox(
+        "Select Class",
         class_options,
         index=default_index,
         key=widget_key,
-        on_change=on_class_change
+        on_change=on_class_change,
     )
-    
-    # Get selected class details
-    if selected_class_display in class_map:
-        selected_class_data = class_map[selected_class_display]
-        
-        # Update session state with the new selection (in case callback wasn't triggered)
-        set_persistent_class_data(
-            selected_class_data['class_name'],
-            selected_class_data['term'],
-            selected_class_data['session']
-        )
-        
-        return selected_class_data
-    
-    # Fallback to first class if something goes wrong
-    if classes:
-        return classes[0]
-    return None
+
+    if selected_class_name in class_map:
+        st.session_state.class_selection_state["class_name"]     = selected_class_name
+        st.session_state.class_selection_state["display_string"] = selected_class_name
+        return class_map[selected_class_name]
+
+    return classes[0] if classes else None
 
 def render_persistent_next_term_selector(
-    classes: List[Dict[str, Any]], 
+    classes: List[Dict[str, Any]],
     widget_key: str = "global_term_session_selector"
 ) -> Optional[Dict[str, Any]]:
+    """
+    In the new schema, term and session are global (from academic_settings),
+    not per-class. This selector simply reads the active context and returns
+    it so callers can use it to load / save next_term_info records.
 
-    if not classes:
+    The `classes` argument is accepted for backwards compatibility but unused.
+
+    Returns:
+        dict: {"term": str, "session": str} from the active academic settings,
+              or None if not configured.
+    """
+    from database_school import get_active_session, get_active_term_name
+
+    session = get_active_session()
+    term    = get_active_term_name()
+
+    if not session:
+        st.warning("⚠️ No active session configured. Ask an admin to set one in Academic Settings.")
         return None
 
-    initialize_class_persistence()
-    
-    seen = set()
-    class_options = []
-    unique_map = {}   # maps display → (term, session)
-
-    for cls in classes:
-        display = f"{cls['term']} - {cls['session']}"
-        if display not in seen:
-            seen.add(display)
-            class_options.append(display)
-            unique_map[display] = {
-                "term": cls["term"],
-                "session": cls["session"]
-            }
-    
-    # Get the last selected value from widget state or session state
-    widget_state_key = f"{widget_key}_value"
-    
-    if widget_state_key in st.session_state:
-        last_selection = st.session_state[widget_state_key]
-    else:
-        last_selection = st.session_state.class_selection_state.get("display_string")
-    
-    default_index = class_options.index(last_selection) if last_selection in class_options else 0
-
-    # Callback function to update session state immediately
-    def on_term_change():
-        selected_display = st.session_state[widget_key]
-        selected = unique_map.get(selected_display)
-        if selected:
-            set_persistent_class_data(
-                None,  # class_name not needed
-                selected["term"],
-                selected["session"]
-            )
-            st.session_state[widget_state_key] = selected_display
-
-    selected_display = st.selectbox(
-        "Select Term / Session",
-        class_options,
-        index=default_index,
-        key=widget_key,
-        on_change=on_term_change
-    )
-    
-    selected = unique_map.get(selected_display)
-
-    if selected:
-        # For persistence, store minimal data (no class name needed)
-        set_persistent_class_data(
-            None,                   # class_name not needed in this selector
-            selected["term"],
-            selected["session"]
-        )
-
-        return selected
-
-    return None
+    st.info(f"**Active:** {session} — {term} Term")
+    return {"term": term, "session": session}
 
 def clear_persistent_class_selection():
     """Clear the persistent class selection"""

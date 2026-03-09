@@ -180,7 +180,7 @@ def generate_broadsheet():
     )
 
     # Create columns with expanded metrics
-    create_metric_5col_broadsheet(subjects, students, class_average, broadsheet_data, class_name, term, session)
+    create_metric_5col_broadsheet(subjects, students, class_average, broadsheet_data, class_name, term, session, user_id, role)
 
     # Add sorting filter
     st.markdown("---")

@@ -214,3 +214,51 @@ def delete_session(session: str, performed_by: str = "") -> tuple:
         return False, str(e)
     finally:
         conn.close()
+
+
+def update_session(old_session: str, new_session: str,
+                   performed_by: str = "") -> tuple:
+    """
+    Rename an academic session string.
+
+    Refuses if:
+      - new_session already exists
+      - old_session does not exist
+
+    Cascade: class_sessions.session has ON UPDATE CASCADE so all
+    class_sessions, academic_settings, etc. follow automatically.
+
+    Returns:
+        (True, "")              on success
+        (False, reason_string)  on refusal or error
+    """
+    import sqlite3 as _sqlite3
+    new_session = new_session.strip()
+    if not new_session:
+        return False, "New session name cannot be blank."
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT id FROM sessions WHERE session = ?", (old_session,))
+        if not cursor.fetchone():
+            return False, f"Session '{old_session}' not found."
+
+        cursor.execute("SELECT id FROM sessions WHERE session = ?", (new_session,))
+        if cursor.fetchone():
+            return False, f"Session '{new_session}' already exists."
+
+        cursor.execute(
+            "UPDATE sessions SET session = ? WHERE session = ?",
+            (new_session, old_session)
+        )
+        conn.commit()
+        logger.info(f"Session renamed '{old_session}' → '{new_session}' by {performed_by}")
+        return True, ""
+    except _sqlite3.IntegrityError as e:
+        return False, f"Constraint error: {e}"
+    except Exception as e:
+        logger.error(f"Error updating session: {e}")
+        return False, str(e)
+    finally:
+        conn.close()

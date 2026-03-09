@@ -7,7 +7,8 @@ import pandas as pd
 from database_school import (
     get_all_classes, get_subjects_by_class, get_classes_for_session,
     get_active_session, get_active_term_name,
-    get_all_sessions, create_session, delete_session, set_active_term,
+    get_all_sessions, create_session, delete_session, update_session, set_active_term,
+    open_class_for_session, get_classes_for_session,
     create_user, get_all_users, delete_user, assign_teacher, get_user_assignments,
     delete_assignment, get_database_stats, update_user, update_assignment, get_user_role,
     batch_assign_subject_teacher, get_classes_summary
@@ -146,9 +147,9 @@ def render_view_delete_user_tab(user_id, admin_role):
         # Format user data with roles
         user_data = []
         for u in users:
-            username = u[1]
-            password = u[2]
-            role = u[3] if u[3] else "teacher"
+            username = u["username"]
+            password = u["password"]
+            role = u["role"] if u["role"] else "teacher"
             
             # admins cannot see superadmin/admin rows
             if admin_role == "admin" and role in ("superadmin", "admin"):
@@ -177,26 +178,26 @@ def render_view_delete_user_tab(user_id, admin_role):
                 
                 editable_users = [
                     u for u in users
-                    if admin_role == "superadmin" or u[3] not in ("superadmin", "admin")
+                    if admin_role == "superadmin" or u["role"] not in ("superadmin", "admin")
                 ]
-                user_ids = [""] + [u[0] for u in editable_users]
+                user_ids = [""] + [u["id"] for u in editable_users]
                 
                 user_id_to_edit = st.selectbox(
                     "Select User to Edit",
                     user_ids,
-                    format_func=lambda x: "Select a user" if x == "" else next(u[1] for u in editable_users if u[0] == x),
+                    format_func=lambda x: "Select a user" if x == "" else next(u["username"] for u in editable_users if u["id"] == x),
                     key="edit_user_select"
                 )
                 ActivityTracker.watch_value("edit_user_select", user_id_to_edit)
                 
                 if user_id_to_edit and user_id_to_edit != "":
-                    selected_user = next(u for u in editable_users if u[0] == user_id_to_edit)
-                    role_display = selected_user[3].title() if selected_user[3] else "Teacher"
-                    st.info(f"Editing: **{selected_user[1]}** (Role: {role_display})")
+                    selected_user = next(u for u in editable_users if u["id"] == user_id_to_edit)
+                    role_display = selected_user["role"].title() if selected_user["role"] else "Teacher"
+                    st.info(f"Editing: **{selected_user["username"]}** (Role: {role_display})")
                     
                     col1, col2 = st.columns(2)
                     with col1:
-                        new_username = st.text_input("New Username", value=selected_user[1], key="new_username")
+                        new_username = st.text_input("New Username", value=selected_user["username"], key="new_username")
                     with col2:
                         new_password = st.text_input("New Password", type="password", placeholder="Leave blank to keep current", key="new_password")
                     
@@ -220,22 +221,22 @@ def render_view_delete_user_tab(user_id, admin_role):
                 
                 deletable_users = [
                     u for u in users
-                    if admin_role == "superadmin" or u[3] not in ("superadmin", "admin")
+                    if admin_role == "superadmin" or u["role"] not in ("superadmin", "admin")
                 ]
-                user_ids = [""] + [u[0] for u in deletable_users]
+                user_ids = [""] + [u["id"] for u in deletable_users]
                 
                 user_id_to_delete = st.selectbox(
                     "Select User to Delete",
                     user_ids,
-                    format_func=lambda x: "Select a user" if x == "" else next(u[1] for u in deletable_users if u[0] == x),
+                    format_func=lambda x: "Select a user" if x == "" else next(u["username"] for u in deletable_users if u["id"] == x),
                     key="delete_user_select"
                 )
                 ActivityTracker.watch_value("delete_user_select", user_id_to_delete)
                 
                 if user_id_to_delete and user_id_to_delete != "":
-                    selected_user = next(u for u in deletable_users if u[0] == user_id_to_delete)
-                    role_display = selected_user[3].title() if selected_user[3] else "Teacher"
-                    st.info(f"Selected user: **{selected_user[1]}** (Role: {role_display})")
+                    selected_user = next(u for u in deletable_users if u["id"] == user_id_to_delete)
+                    role_display = selected_user["role"].title() if selected_user["role"] else "Teacher"
+                    st.info(f"Selected user: **{selected_user["username"]}** (Role: {role_display})")
                 
                 if st.button("❌ Delete Selected User", key="delete_user_button", type="primary"):
                     ActivityTracker.update()
@@ -245,11 +246,11 @@ def render_view_delete_user_tab(user_id, admin_role):
                     elif user_id_to_delete == user_id:
                         st.error("⚠️ Cannot delete your own account.")
                     else:
-                        selected_user = next(u for u in deletable_users if u[0] == user_id_to_delete)
-                        role_display = selected_user[3].title() if selected_user[3] else "Teacher"
+                        selected_user = next(u for u in deletable_users if u["id"] == user_id_to_delete)
+                        role_display = selected_user["role"].title() if selected_user["role"] else "Teacher"
                         st.session_state.user_to_delete_info = {
                             'id': user_id_to_delete,
-                            'name': selected_user[1],
+                            'name': selected_user["username"],
                             'role': role_display
                         }
                         st.session_state.show_delete_user_confirm = True
@@ -386,10 +387,10 @@ def render_assignments_tab(user_id, admin_role, get_fresh_classes, get_fresh_sub
     sn_counter = 1
     
     for u in users:
-        if admin_role == "admin" and u[3] in ("superadmin", "admin"):
+        if admin_role == "admin" and u["role"] in ("superadmin", "admin"):
             continue
             
-        user_assignments = get_user_assignments(u[0])
+        user_assignments = get_user_assignments(u["id"])
         for a in user_assignments:
             assignment_type = a['assignment_type']
             role_display = "Class Teacher" if assignment_type == "class_teacher" else "Subject Teacher"
@@ -397,8 +398,8 @@ def render_assignments_tab(user_id, admin_role, get_fresh_classes, get_fresh_sub
             assignments.append({
                 "id": a['id'],
                 "S/N": str(sn_counter),
-                "user_id": u[0],
-                "Username": u[1],
+                "user_id": u["id"],
+                "Username": u["username"],
                 "Role": role_display,
                 "Class": a['class_name'],
                 "class_name": a['class_name'],
@@ -452,7 +453,7 @@ def render_assignments_tab(user_id, admin_role, get_fresh_classes, get_fresh_sub
                     with col2:
                         if selected_assignment['subject_name']:
                             subjects = get_fresh_subjects(new_class_name)
-                            subject_options = [s[1] for s in subjects]
+                            subject_options = [s["subject_name"] if isinstance(s, dict) else s[1] for s in subjects]
                             current_subject_index = subject_options.index(selected_assignment['subject_name']) if selected_assignment['subject_name'] in subject_options else 0
                             new_subject = st.selectbox("New Subject", subject_options, index=current_subject_index, key="edit_assignment_subject")
                         else:
@@ -536,7 +537,7 @@ def render_assign_class_teacher_tab(get_fresh_classes):
     with st.form("assign_class_teacher_form"):
         st.subheader("Assign Class Teacher")
         users = get_all_users()
-        teacher_users = [u for u in users if u[3] == "teacher"]
+        teacher_users = [u for u in users if u["role"] == "teacher"]
         
         if not teacher_users:
             st.warning("⚠️ No teachers available. Add teachers in the Add New User tab.")
@@ -546,8 +547,8 @@ def render_assign_class_teacher_tab(get_fresh_classes):
             with col1:
                 selected_user_id = st.selectbox(
                     "Select Teacher",
-                    [u[0] for u in teacher_users],
-                    format_func=lambda x: next(u[1] for u in teacher_users if u[0] == x),
+                    [u["id"] for u in teacher_users],
+                    format_func=lambda x: next(u["username"] for u in teacher_users if u["id"] == x),
                     key="class_teacher_select"
                 )
             classes = get_fresh_classes()
@@ -566,7 +567,7 @@ def render_assign_class_teacher_tab(get_fresh_classes):
                 
                 if submitted:
                     if assign_teacher(selected_user_id, class_name, _active_session or '', None, 'class_teacher'):
-                        st.success(f"✅ Class teacher assigned: {next(u[1] for u in teacher_users if u[0] == selected_user_id)}.")
+                        st.success(f"✅ Class teacher assigned: {next(u["username"] for u in teacher_users if u["id"] == selected_user_id)}.")
                         st.rerun()
                     else:
                         st.error("❌ Failed to assign class teacher. Assignment may already exist.")
@@ -580,7 +581,7 @@ def render_assign_subject_teacher_tab(get_fresh_classes, get_fresh_subjects):
         st.session_state.selected_class_for_subject = None
     
     users = get_all_users()
-    teacher_users = [u for u in users if u[3] == "teacher"]
+    teacher_users = [u for u in users if u["role"] == "teacher"]
     
     if not teacher_users:
         st.warning("⚠️ No teachers available. Add teachers in the Add New User tab.")
@@ -589,8 +590,8 @@ def render_assign_subject_teacher_tab(get_fresh_classes, get_fresh_subjects):
         with col1:
             selected_user_id = st.selectbox(
                 "Select Teacher",
-                [u[0] for u in teacher_users],
-                format_func=lambda x: next(u[1] for u in teacher_users if u[0] == x),
+                [u["id"] for u in teacher_users],
+                format_func=lambda x: next(u["username"] for u in teacher_users if u["id"] == x),
                 key="subject_teacher_select"
             )
             ActivityTracker.watch_value("subject_teacher_select", selected_user_id)
@@ -622,7 +623,7 @@ def render_assign_subject_teacher_tab(get_fresh_classes, get_fresh_subjects):
                     st.info(f"💡 **Tip:** For {class_name.split()[0]} classes, you can assign all subjects at once using the button below.")
                     
                     with col3:
-                        subject_options = [s[1] for s in subjects]
+                        subject_options = [s["subject_name"] if isinstance(s, dict) else s[1] for s in subjects]
                         subject_name = st.selectbox("Select Subject", [""] + subject_options, key=f"subject_select_{selected_class}")
                         ActivityTracker.watch_value("subject_select", subject_name)
                     
@@ -645,7 +646,7 @@ def render_assign_subject_teacher_tab(get_fresh_classes, get_fresh_subjects):
                         
                         if submitted_single and subject_name:
                             if assign_teacher(selected_user_id, class_name, _active_session or '', subject_name, 'subject_teacher'):
-                                st.success(f"✅ Subject teacher assigned: {next(u[1] for u in teacher_users if u[0] == selected_user_id)} to {subject_name}.")
+                                st.success(f"✅ Subject teacher assigned: {next(u["username"] for u in teacher_users if u["id"] == selected_user_id)} to {subject_name}.")
                                 time.sleep(1)
                                 st.rerun()
                             else:
@@ -656,7 +657,7 @@ def render_assign_subject_teacher_tab(get_fresh_classes, get_fresh_subjects):
                             success_count, failed_subjects = batch_assign_subject_teacher(selected_user_id, class_name, _active_session or '', subject_names)
                             
                             if success_count == len(subjects):
-                                st.success(f"✅ All {success_count} subjects assigned successfully to {next(u[1] for u in teacher_users if u[0] == selected_user_id)}!")
+                                st.success(f"✅ All {success_count} subjects assigned successfully to {next(u["username"] for u in teacher_users if u["id"] == selected_user_id)}!")
                             elif success_count > 0:
                                 st.warning(f"⚠️ {success_count} subjects assigned. {len(failed_subjects)} subjects already existed or failed.")
                                 if failed_subjects:
@@ -668,7 +669,7 @@ def render_assign_subject_teacher_tab(get_fresh_classes, get_fresh_subjects):
                             st.rerun()
                 else:
                     with col3:
-                        subject_options = [s[1] for s in subjects]
+                        subject_options = [s["subject_name"] if isinstance(s, dict) else s[1] for s in subjects]
                         subject_name = st.selectbox("Select Subject", [""] + subject_options, key=f"subject_select_{selected_class}")
                         ActivityTracker.watch_value("subject_select", subject_name)
                     
@@ -678,7 +679,7 @@ def render_assign_subject_teacher_tab(get_fresh_classes, get_fresh_subjects):
                         
                         if submitted and subject_name:
                             if assign_teacher(selected_user_id, class_name, _active_session or '', subject_name, 'subject_teacher'):
-                                st.success(f"✅ Subject teacher assigned: {next(u[1] for u in teacher_users if u[0] == selected_user_id)} to {subject_name}.")
+                                st.success(f"✅ Subject teacher assigned: {next(u["username"] for u in teacher_users if u["id"] == selected_user_id)} to {subject_name}.")
                                 time.sleep(1)
                                 st.rerun()
                             else:
@@ -821,9 +822,9 @@ def render_academic_settings_tab():
                     "Select Session to Delete",
                     session_names,
                     key="del_session_select",
-                    help="Deleting a session removes all associated class-session enrollments and scores"
+                    help="Deleting a session removes all associated class-session enrollments and scores."
                 )
-                submitted_delete = st.form_submit_button("🗑️ Delete Session", type="primary")
+                submitted_delete = st.form_submit_button("🗑️ Delete Session", type="secondary")
                 ActivityTracker.watch_form(submitted_delete)
                 if submitted_delete:
                     st.session_state.session_to_delete_name = session_to_del
@@ -874,6 +875,81 @@ def render_academic_settings_tab():
     else:
         st.info("No sessions configured.")
 
+    # ── Rename session ─────────────────────────────────────────────────────────
+    st.markdown("---")
+    st.markdown("#### ✏️ Rename Session")
+    if not session_names:
+        st.info("No sessions available to rename.")
+    else:
+        with st.form("rename_session_form"):
+            col1, col2 = st.columns(2)
+            with col1:
+                session_to_rename = st.selectbox("Session to Rename", session_names, key="rename_session_select")
+            with col2:
+                new_session_name = st.text_input("New Name", placeholder="e.g. 2025/2026")
+            submitted_rename = st.form_submit_button("✏️ Rename Session")
+            ActivityTracker.watch_form(submitted_rename)
+            if submitted_rename:
+                if not new_session_name.strip():
+                    st.error("❌ New name cannot be blank.")
+                else:
+                    parts = new_session_name.strip().split('/')
+                    if len(parts) != 2 or not all(p.isdigit() and len(p) == 4 for p in parts):
+                        st.error("❌ Session must be in format YYYY/YYYY (e.g. 2025/2026).")
+                    else:
+                        success, reason = update_session(session_to_rename, new_session_name.strip(), str(performed_by))
+                        if success:
+                            st.success(f"✅ Session renamed to '{new_session_name.strip()}'.")
+                            st.rerun()
+                        else:
+                            st.error(f"❌ {reason}")
+
+    # ── Class-Session Enrollment ───────────────────────────────────────────────
+    st.markdown("---")
+    st.markdown("#### 🏫 Open Classes for Active Session")
+    st.info(
+        "Before teachers can register students or enter scores, each class must be "
+        "opened for the active session. Tick classes below and click **Open Selected Classes**. "
+        "This is safe to run multiple times — already-open classes are skipped."
+    )
+
+    if not active_session:
+        st.warning("⚠️ Set an active session above before opening classes.")
+    else:
+        all_cls = get_all_classes()
+        if not all_cls:
+            st.info("No classes defined yet. Create classes first.")
+        else:
+            already_open = {c["class_name"] for c in get_classes_for_session(active_session)}
+
+            cls_cols = st.columns(3)
+            class_checks = {}
+            for i, c in enumerate(all_cls):
+                cname = c["class_name"]
+                is_open = cname in already_open
+                label = f"{'✅' if is_open else '☐'} {cname}"
+                class_checks[cname] = cls_cols[i % 3].checkbox(
+                    label, value=False, key=f"open_class_{cname}",
+                    disabled=is_open,
+                    help="Already open for this session" if is_open else "Tick to open for current session"
+                )
+
+            selected_to_open = [cn for cn, checked in class_checks.items() if checked]
+
+            if st.button("🔓 Open Selected Classes", key="open_classes_btn",
+                         disabled=not selected_to_open, type="primary"):
+                ActivityTracker.update()
+                opened, skipped = 0, 0
+                for cn in selected_to_open:
+                    if open_class_for_session(cn, active_session):
+                        opened += 1
+                    else:
+                        skipped += 1
+                if opened:
+                    st.success(f"✅ Opened {opened} class(es) for {active_session}.")
+                if skipped:
+                    st.info(f"{skipped} class(es) were already open.")
+                st.rerun()
 
 
 if __name__ == '__main__':

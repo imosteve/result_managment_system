@@ -435,12 +435,11 @@ def render_analytics_tab(stats):
     if class_summary:
         class_data = [
             {
-                "Class": row[0],
-                "Term": row[1],
-                "Session": row[2],
-                "Students": row[3],
-                "Subjects": row[4],
-                "Scores": row[5]
+                "Class": row["class_name"],
+                "Session": row["session"],
+                "Students": row["student_count"],
+                "Subjects": row["subject_count"],
+                "Scores": row["score_count"]
             }
             for row in class_summary
         ]

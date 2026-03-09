@@ -61,33 +61,28 @@ def get_database_stats():
 
 def get_classes_summary():
     """
-    Get summary of all classes with counts.
-    Uses new schema: classes → class_sessions → class_session_students / scores / subjects
-    
+    Get summary of all class-sessions with student, subject, and score counts.
+    New schema: classes × sessions → class_sessions; subjects are per-class only.
+
     Returns:
-        list: List of dicts with class_name, session, student_count, subject_count, score_count
+        list of dicts: {class_name, session, student_count, subject_count, score_count}
     """
     conn = get_connection()
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
     cursor.execute("""
         SELECT
-            c.class_name,
+            cs.class_name,
             cs.session,
-            COUNT(DISTINCT css.id)  AS student_count,
-            COUNT(DISTINCT sub.id)  AS subject_count,
-            COUNT(DISTINCT sc.id)   AS score_count
-        FROM classes c
-        LEFT JOIN class_sessions cs
-               ON cs.class_name = c.class_name
-        LEFT JOIN class_session_students css
-               ON css.class_session_id = cs.id
-        LEFT JOIN subjects sub
-               ON sub.class_name = c.class_name
-        LEFT JOIN scores sc
-               ON sc.enrollment_id = css.id
-        GROUP BY c.class_name, cs.session
-        ORDER BY cs.session DESC, c.class_name
+            COUNT(DISTINCT css.id)    AS student_count,
+            COUNT(DISTINCT sub.id)    AS subject_count,
+            COUNT(DISTINCT sc.id)     AS score_count
+        FROM      class_sessions cs
+        LEFT JOIN class_session_students css ON css.class_session_id = cs.id
+        LEFT JOIN subjects sub               ON sub.class_name = cs.class_name
+        LEFT JOIN scores   sc                ON sc.enrollment_id = css.id
+        GROUP BY cs.class_name, cs.session
+        ORDER BY cs.session DESC, cs.class_name
     """)
     rows = cursor.fetchall()
     conn.close()
