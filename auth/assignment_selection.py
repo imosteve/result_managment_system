@@ -37,7 +37,6 @@ def get_user_roles(user_id: int) -> Dict[str, List[Dict[str, Any]]]:
             assignment_dict = {
                 'id': assignment['id'],
                 'class_name': assignment['class_name'],
-                'term': assignment['term'],
                 'session': assignment['session'],
                 'subject_name': assignment['subject_name'],
                 'assignment_type': assignment['assignment_type']

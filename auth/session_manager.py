@@ -110,7 +110,6 @@ class SessionManager:
 
             st.session_state.assignment = {
                 "class_name":      assignment_data["class_name"],
-                "term":            assignment_data["term"],
                 "session":         assignment_data["session"],
                 "subject_name":    subject_name,
                 "assignment_type": assignment_type,
@@ -118,7 +117,6 @@ class SessionManager:
             st.session_state.role = assignment_type
 
             cookies["assignment_class"]   = str(assignment_data["class_name"])
-            cookies["assignment_term"]    = str(assignment_data["term"])
             cookies["assignment_session"] = str(assignment_data["session"])
             cookies["assignment_subject"] = subject_name
             cookies["assignment_type"]    = assignment_type
@@ -145,7 +143,7 @@ class SessionManager:
                 for key in [
                     "authenticated", "user_id", "role", "username",
                     "login_time", "last_activity", "school_code",
-                    "assignment_class", "assignment_term",
+                    "assignment_class",
                     "assignment_session", "assignment_subject",
                     "assignment_type",
                 ]:
@@ -236,11 +234,9 @@ class SessionManager:
 
             # ── Assignment (teachers only) ─────────────────────────────────
             if (cookies.get("assignment_class") and
-                    cookies.get("assignment_term") and
                     cookies.get("assignment_session")):
                 st.session_state.assignment = {
                     "class_name":      cookies["assignment_class"],
-                    "term":            cookies["assignment_term"],
                     "session":         cookies["assignment_session"],
                     "subject_name":    cookies.get("assignment_subject", ""),
                     "assignment_type": cookies.get("assignment_type",

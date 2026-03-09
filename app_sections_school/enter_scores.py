@@ -81,10 +81,10 @@ def _render_score_management_interface():
         _term_map      = dict(zip(_term_display, _term_options))
         _term_rmap     = dict(zip(_term_options, _term_display))
 
-        classes = get_classes_for_session(_active_session)
-        class_names = [c["class_name"] for c in classes] if classes else []
+        classes = get_classes_for_session(session)
+        class_names = [c["class_name"] for c in classes]
         if not class_names:
-            st.warning("⚠️ No classes found for the active session.")
+            st.warning("⚠️ No classes found.")
             return
 
         _col_class, _col_term, _col_session = st.columns(3)
@@ -110,12 +110,14 @@ def _render_score_management_interface():
             return
         session = _active_session
         term    = _active_term
-        classes = get_classes_for_session(session)
-        class_names = [c["class_name"] for c in classes]
-        if not class_names:
-            st.warning(f"⚠️ No classes found for session {session}.")
+        user_assignments = get_user_assignments(user_id)
+        assigned_classes = list(dict.fromkeys(
+            a["class_name"] for a in user_assignments if a.get("class_name")
+        ))
+        if not assigned_classes:
+            st.warning("⚠️ No class assignments found. Contact your administrator.")
             return
-        class_name = st.selectbox("Select Class", class_names, key="enter_scores_class")
+        class_name = st.selectbox("Select Class", assigned_classes, key="enter_scores_class")
         st.info(f"**Active:** {session} — {term} Term")
 
     selected_class = class_name

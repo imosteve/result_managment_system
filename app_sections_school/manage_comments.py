@@ -8,9 +8,8 @@ from database_school import (
     get_enrolled_students, create_comment, get_comment,
     delete_comment, create_psychomotor_rating, get_psychomotor_rating,
     delete_psychomotor_rating, get_all_comment_templates, get_student_average,
-    get_head_teacher_comment_by_average,
-    get_all_sessions,
-    get_all_classes)
+    get_head_teacher_comment_by_average, get_user_assignments
+)
 from main_utils import render_page_header, inject_login_css
 from auth.activity_tracker import ActivityTracker
 
@@ -51,55 +50,37 @@ def manage_comments():
     # Page header
     render_page_header("Manage Comments & Psychomotor Ratings")
     
-    # ── Session / term context ────────────────────────────────────────────────
-    _active_session = get_active_session()
-    _active_term    = get_active_term_name()
+    # Active session/term — teachers never pick these manually
+    session = get_active_session()
+    if not session:
+        st.warning("⚠️ No active session configured. Ask an admin to set the active session.")
+        return
 
+    term = get_active_term_name()
+    if not term:
+        st.warning("⚠️ No active term configured. Ask an admin to set the active term.")
+        return
+
+    # Teachers only see their assigned class; admins see all classes
     if role in ("superadmin", "admin"):
-        _all_sessions  = get_all_sessions()
-        _session_names = [s["session"] for s in _all_sessions] if _all_sessions else ([_active_session] if _active_session else [])
-        _term_options  = ["First", "Second", "Third"]
-        _term_display  = ["1st Term", "2nd Term", "3rd Term"]
-        _term_map      = dict(zip(_term_display, _term_options))
-        _term_rmap     = dict(zip(_term_options, _term_display))
-
-        _classes   = get_classes_for_session(_active_session)
-        _class_names = [c["class_name"] for c in _classes] if _classes else []
-        if not _class_names:
-            st.warning("⚠️ No classes found for the active session.")
+        classes = get_classes_for_session(session)
+        if not classes:
+            st.warning("⚠️ No classes available. Add a class in the Manage Classes section.")
             return
-
-        _col_class, _col_term, _col_session = st.columns(3)
-        with _col_class:
-            class_name = st.selectbox("Select Class", _class_names, key="manage_comments_class")
-        with _col_term:
-            _term_default = _term_rmap.get(_active_term, "1st Term")
-            _term_sel     = st.selectbox("Select Term", _term_display,
-                                         index=_term_display.index(_term_default),
-                                         key="manage_comments_term")
-            term = _term_map[_term_sel]
-        with _col_session:
-            _sess_idx = _session_names.index(_active_session) if _active_session in _session_names else 0
-            session   = st.selectbox("Select Session", _session_names,
-                                     index=_sess_idx,
-                                     key="manage_comments_session")
+        class_names = [c['class_name'] for c in classes]
+        class_name = st.selectbox("Select Class", class_names, key="manage_comments_class")
     else:
-        if not _active_session:
-            st.warning("⚠️ No active session configured. Ask an admin to set one in Academic Settings.")
+        user_assignments = get_user_assignments(user_id)
+        assigned_classes = list(dict.fromkeys(
+            a["class_name"] for a in user_assignments if a.get("class_name")
+        ))
+        if not assigned_classes:
+            st.warning("⚠️ No class assignments found. Contact your administrator.")
             return
-        if not _active_term:
-            st.warning("⚠️ No active term configured. Ask an admin to set one in Academic Settings.")
-            return
-        session = _active_session
-        term    = _active_term
-        _classes = get_classes_for_session(session)
-        if not _classes:
-            st.warning(f"⚠️ No classes found for session {session}.")
-            return
-        class_name = st.selectbox("Select Class", [c["class_name"] for c in _classes], key="manage_comments_class")
-        st.info(f"**Active:** {session} — {term} Term")
+        class_name = st.selectbox("Select Class", assigned_classes, key="manage_comments_class")
     if not class_name:
         return
+
     ActivityTracker.watch_value("manage_comments_class_selector", f"{class_name}_{session}_{term}")
 
     students = get_enrolled_students(class_name, session)

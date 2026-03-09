@@ -7,7 +7,8 @@ import os
 from database_school import (
     get_active_session, get_active_term_name, get_classes_for_session, 
     get_enrolled_students, get_subjects_by_class, get_scores_for_subject, 
-    get_student_grand_totals, get_grade_distribution, get_all_sessions
+    get_student_grand_totals, get_grade_distribution, get_all_sessions,
+    get_user_assignments
 )
 from main_utils import (
     assign_grade, create_metric_5col_broadsheet, 
@@ -66,10 +67,10 @@ def generate_broadsheet():
         _term_map      = dict(zip(_term_display, _term_options))
         _term_rmap     = dict(zip(_term_options, _term_display))
 
-        classes = get_classes_for_session(_active_session)
-        class_names = [c["class_name"] for c in classes] if classes else []
+        classes = get_classes_for_session(session)
+        class_names = [c["class_name"] for c in classes]
         if not class_names:
-            st.warning("⚠️ No classes found for the active session.")
+            st.warning("⚠️ No classes found.")
             return
 
         _col_class, _col_term, _col_session = st.columns(3)
@@ -95,12 +96,14 @@ def generate_broadsheet():
             return
         session = _active_session
         term    = _active_term
-        classes = get_classes_for_session(session)
-        class_names = [c["class_name"] for c in classes]
-        if not class_names:
-            st.warning(f"⚠️ No classes found for session {session}.")
+        user_assignments = get_user_assignments(user_id)
+        assigned_classes = list(dict.fromkeys(
+            a["class_name"] for a in user_assignments if a.get("class_name")
+        ))
+        if not assigned_classes:
+            st.warning("⚠️ No class assignments found. Contact your administrator.")
             return
-        class_name = st.selectbox("Select Class", class_names, key="view_broadsheet_class")
+        class_name = st.selectbox("Select Class", assigned_classes, key="view_broadsheet_class")
         st.info(f"**Active:** {session} — {term} Term")
     if not class_name:
         return

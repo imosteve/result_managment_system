@@ -202,10 +202,9 @@ class ApplicationManager:
                     "👤 My Profile":        profile_function,
                 }
 
-            if role == "teacher":
+            if role == "class_teacher":
                 return {
-                    "👥 Register Students": register_students.register_students,
-                    "📚 Manage Subjects":   manage_subjects.add_subjects,
+                    "📝 Enter Scores":      enter_scores.enter_scores,
                     "📝 Manage Comments":   manage_comments.manage_comments,
                     "📋 View Broadsheet":   view_broadsheet.generate_broadsheet,
                     "📄 Generate Reports":  generate_reports.report_card_section,
