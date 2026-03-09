@@ -126,12 +126,13 @@ def register_students():
             "S/N": str(idx),
             "Name": s["student_name"],
             "Gender": s.get("gender") or "",
+            "Email": s.get("email") or "",
             "Admission No": s.get("admission_number") or "",
             "Paid Fees": s.get("school_fees_paid") or "NO",
         })
 
     df = pd.DataFrame(df_data) if df_data else pd.DataFrame(
-        columns=["_name", "S/N", "Name", "Gender", "Admission No", "Paid Fees"]
+        columns=["_name", "S/N", "Name", "Gender", "Email", "Admission No", "Paid Fees"]
     )
 
     tabs = st.tabs(["👁️ View / Edit", "➕ Add Student", "📋 Batch Add", "🗑️ Remove Student"])
@@ -146,18 +147,19 @@ def register_students():
             st.session_state.register_students_tab_tracker = 0
 
         st.subheader("Student List")
-        display_df = df[["S/N", "Name", "Gender", "Admission No", "Paid Fees"]] if not df.empty else \
-            pd.DataFrame(columns=["S/N", "Name", "Gender", "Admission No", "Paid Fees"])
+        display_df = df[["S/N", "Name", "Gender", "Email", "Admission No", "Paid Fees"]] if not df.empty else \
+            pd.DataFrame(columns=["S/N", "Name", "Gender", "Email", "Admission No", "Paid Fees"])
         original_names = df["_name"].tolist() if not df.empty else []
 
         filtered_df = streamlit_filter(display_df, table_name="students_table")
         edited_df = st.data_editor(
             filtered_df,
             column_config={
-                "S/N": st.column_config.TextColumn("S/N", disabled=True, width=10),
-                "Name": st.column_config.TextColumn("Name", required=True, width=300),
-                "Gender": st.column_config.SelectboxColumn("Gender", options=["M", "F"], width=50),
-                "Admission No": st.column_config.TextColumn("Admission No", width=150),
+                "S/N": st.column_config.TextColumn("S/N", disabled=True, width=20),
+                "Name": st.column_config.TextColumn("Name", required=True, width=250),
+                "Gender": st.column_config.SelectboxColumn("Gender", options=["M", "F"], width=70),
+                "Email": st.column_config.TextColumn("Email", width=200),
+                "Admission No": st.column_config.TextColumn("Admission No", width=100),
                 "Paid Fees": st.column_config.SelectboxColumn("Paid Fees", options=["NO", "YES"], width=80),
             },
             hide_index=True,
@@ -177,6 +179,7 @@ def register_students():
                     continue
                 new_name      = clean_input(str(row.get("Name", "")), "name")
                 gender        = str(row.get("Gender", ""))
+                email         = clean_input(str(row.get("Email", "")), "email") or None
                 admission_no  = clean_input(str(row.get("Admission No", "")), "name")
                 fees_paid     = str(row.get("Paid Fees", ""))
                 if not new_name:
@@ -190,6 +193,7 @@ def register_students():
                         old_name,
                         new_name=new_name if new_name != old_name else None,
                         gender=gender or None,
+                        email=email,
                         admission_number=admission_no or None,
                         school_fees_paid=fees_paid or None,
                     )
@@ -216,6 +220,7 @@ def register_students():
         with st.form(f"add_student_form_{st.session_state.student_form_counter}"):
             new_name         = st.text_input("Name", placeholder="Enter student name")
             new_gender       = st.selectbox("Gender", ["M", "F"])
+            new_email        = st.text_input("Email (optional)", placeholder="student@example.com")
             new_admission_no = st.text_input("Admission Number (optional)")
             fees_paid        = st.selectbox("Paid Fees", ["NO", "YES"])
             submit_button    = st.form_submit_button("➕ Add Student")
@@ -235,6 +240,7 @@ def register_students():
                 else:
                     # create in master registry if not already there, then enroll
                     create_student(new_name, new_gender,
+                                   email=new_email.strip() or None,
                                    admission_number=new_admission_no or None,
                                    school_fees_paid=fees_paid)
                     ok, reason = enroll_student(new_name, class_name, session)
@@ -257,12 +263,13 @@ def register_students():
             st.session_state.batch_form_counter = 0
 
         batch_df = pd.DataFrame({"Name": [""]*3, "Gender": [""]*3,
-                                  "Admission No": [""]*3, "Paid Fees": [""]*3})
+                                  "Email": [""]*3, "Admission No": [""]*3, "Paid Fees": [""]*3})
         edited_batch_df = st.data_editor(
             batch_df,
             column_config={
                 "Name": st.column_config.TextColumn("Name", required=True, width="medium"),
                 "Gender": st.column_config.SelectboxColumn("Gender", options=["M", "F"], width="small"),
+                "Email": st.column_config.TextColumn("Email", width="medium"),
                 "Admission No": st.column_config.TextColumn("Admission No", width="medium"),
                 "Paid Fees": st.column_config.SelectboxColumn("Paid Fees", options=["NO", "YES"], width="small"),
             },
@@ -287,6 +294,7 @@ def register_students():
             for idx, row in edited_batch_df.iterrows():
                 name         = clean_input(str(row.get("Name", "")), "name")
                 gender       = str(row.get("Gender", ""))
+                email        = clean_input(str(row.get("Email", "")), "email") or None
                 admission_no = clean_input(str(row.get("Admission No", "")), "name")
                 fees_paid    = str(row.get("Paid Fees", "NO"))
                 if not name:
@@ -301,6 +309,7 @@ def register_students():
                     errors.append(f"❌ Row {idx+1}: Gender must be M or F")
                     continue
                 create_student(name, gender or None,
+                               email=email,
                                admission_number=admission_no or None,
                                school_fees_paid=fees_paid or "NO")
                 ok, reason = enroll_student(name, class_name, session)
