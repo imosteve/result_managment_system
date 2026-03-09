@@ -7,8 +7,8 @@ from database_school import (
     get_all_classes, get_subjects_by_class, create_subject, delete_subject, update_subject, clear_all_subjects,
     get_active_session, get_active_term_name, open_class_for_session,
     get_enrolled_students, get_student_selected_subjects, save_student_subject_selections,
-    get_all_student_subject_selections
-)
+    get_all_student_subject_selections,
+    get_all_sessions)
 from main_utils import clean_input, create_metric_4col, inject_login_css, render_page_header, render_persistent_class_selector
 from auth.activity_tracker import ActivityTracker
 
@@ -50,32 +50,56 @@ def add_subjects():
     if "clear_selections_info" not in st.session_state:
         st.session_state.clear_selections_info = None
 
-    classes = get_all_classes()
+    # ── Session / term context ────────────────────────────────────────────────
     _active_session = get_active_session()
     _active_term    = get_active_term_name()
 
-    if not _active_session:
-        st.warning("⚠️ No active session configured. Ask an admin to set one in Academic Settings.")
-        return
+    if role in ("superadmin", "admin"):
+        _all_sessions  = get_all_sessions()
+        _session_names = [s["session"] for s in _all_sessions] if _all_sessions else ([_active_session] if _active_session else [])
+        _term_options  = ["First", "Second", "Third"]
+        _term_display  = ["1st Term", "2nd Term", "3rd Term"]
+        _term_map      = dict(zip(_term_display, _term_options))
+        _term_rmap     = dict(zip(_term_options, _term_display))
 
-    if not classes:
-        st.warning("⚠️ Please create at least one class first.")
-        if role in ["class_teacher", "subject_teacher"]:
-            st.info("You may need to select a class assignment in the 'Change Assignment' section.")
-        return
+        _all_classes = get_all_classes()
+        _class_names = [c["class_name"] for c in _all_classes] if _all_classes else []
+        if not _class_names:
+            st.warning("⚠️ No classes found. Create a class first.")
+            return
 
-    # Select class
-    class_names = [c["class_name"] for c in classes]
-    class_name = st.selectbox("Select Class", class_names, key="manage_subjects_class")
+        _col_class, _col_term, _col_session = st.columns(3)
+        with _col_class:
+            class_name = st.selectbox("Select Class", _class_names, key="manage_subjects_class")
+        with _col_term:
+            _term_default = _term_rmap.get(_active_term, "1st Term")
+            _term_sel     = st.selectbox("Select Term", _term_display,
+                                         index=_term_display.index(_term_default),
+                                         key="manage_subjects_term")
+            term = _term_map[_term_sel]
+        with _col_session:
+            _sess_idx = _session_names.index(_active_session) if _active_session in _session_names else 0
+            session   = st.selectbox("Select Session", _session_names,
+                                     index=_sess_idx,
+                                     key="manage_subjects_session")
+    else:
+        if not _active_session:
+            st.warning("⚠️ No active session configured. Ask an admin to set one in Academic Settings.")
+            return
+        if not _active_term:
+            st.warning("⚠️ No active term configured. Ask an admin to set one in Academic Settings.")
+            return
+        session = _active_session
+        term    = _active_term
+        _all_classes = get_all_classes()
+        if not _all_classes:
+            st.warning("⚠️ No classes found. Create a class first.")
+            return
+        class_name = st.selectbox("Select Class", [c["class_name"] for c in _all_classes], key="manage_subjects_class")
+        st.info(f"**Active:** {session} — {term} Term")
     ActivityTracker.watch_value("manage_subjects_class_selector", class_name)
-
     if not class_name:
         return
-
-    session = _active_session
-    term    = _active_term
-
-    st.info(f"**Active:** {session} — {term} Term")
 
     # Ensure class is open for this session (idempotent)
     open_class_for_session(class_name, session)

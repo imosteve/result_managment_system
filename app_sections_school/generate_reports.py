@@ -16,8 +16,9 @@ from database_school import (
     get_active_session, get_active_term_name, get_classes_for_session,
     get_enrolled_students, get_scores_for_subject, get_subjects_by_class,
     get_student_average, get_student_grand_totals, get_grade_distribution,
-    is_configured
-)
+    is_configured,
+    get_all_sessions,
+    get_all_classes)
 from auth.activity_tracker import ActivityTracker
 from config import APP_CONFIG
 
@@ -149,22 +150,53 @@ def generate_tab():
     user_id = st.session_state.user_id
     role = st.session_state.role
 
-    session = get_active_session()
-    if not session:
-        st.warning("⚠️ No active session configured. Ask an admin to set it.")
-        return
-    term = get_active_term_name()
-    if not term:
-        st.warning("⚠️ No active term configured. Ask an admin to set it.")
-        return
+    # ── Session / term context ────────────────────────────────────────────────
+    _active_session = get_active_session()
+    _active_term    = get_active_term_name()
 
-    classes = get_classes_for_session(session)
-    if not classes:
-        st.warning("⚠️ No classes found for the active session.")
-        return
+    if role in ("superadmin", "admin"):
+        _all_sessions  = get_all_sessions()
+        _session_names = [s["session"] for s in _all_sessions] if _all_sessions else ([_active_session] if _active_session else [])
+        _term_options  = ["First", "Second", "Third"]
+        _term_display  = ["1st Term", "2nd Term", "3rd Term"]
+        _term_map      = dict(zip(_term_display, _term_options))
+        _term_rmap     = dict(zip(_term_options, _term_display))
 
-    class_names = [c['class_name'] for c in classes]
-    class_name = st.selectbox("Select Class", class_names, key="generate_reports_class")
+        _classes   = get_classes_for_session(_active_session)
+        _class_names = [c["class_name"] for c in _classes] if _classes else []
+        if not _class_names:
+            st.warning("⚠️ No classes found for the active session.")
+            return
+
+        _col_class, _col_term, _col_session = st.columns(3)
+        with _col_class:
+            class_name = st.selectbox("Select Class", _class_names, key="generate_reports_class")
+        with _col_term:
+            _term_default = _term_rmap.get(_active_term, "1st Term")
+            _term_sel     = st.selectbox("Select Term", _term_display,
+                                         index=_term_display.index(_term_default),
+                                         key="generate_reports_term")
+            term = _term_map[_term_sel]
+        with _col_session:
+            _sess_idx = _session_names.index(_active_session) if _active_session in _session_names else 0
+            session   = st.selectbox("Select Session", _session_names,
+                                     index=_sess_idx,
+                                     key="generate_reports_session")
+    else:
+        if not _active_session:
+            st.warning("⚠️ No active session configured. Ask an admin to set one in Academic Settings.")
+            return
+        if not _active_term:
+            st.warning("⚠️ No active term configured. Ask an admin to set one in Academic Settings.")
+            return
+        session = _active_session
+        term    = _active_term
+        _classes = get_classes_for_session(session)
+        if not _classes:
+            st.warning(f"⚠️ No classes found for session {session}.")
+            return
+        class_name = st.selectbox("Select Class", [c["class_name"] for c in _classes], key="generate_reports_class")
+        st.info(f"**Active:** {session} — {term} Term")
     ActivityTracker.watch_value("generate_reports_class", f"{class_name}_{session}_{term}")
 
     is_senior_class = bool(re.match(r"SSS [123].*$", class_name))
@@ -310,22 +342,53 @@ def email_tab():
     user_id = st.session_state.user_id
     role = st.session_state.role
 
-    session = get_active_session()
-    if not session:
-        st.warning("⚠️ No active session configured.")
-        return
-    term = get_active_term_name()
-    if not term:
-        st.warning("⚠️ No active term configured.")
-        return
+    # ── Session / term context ────────────────────────────────────────────────
+    _active_session = get_active_session()
+    _active_term    = get_active_term_name()
 
-    classes = get_classes_for_session(session)
-    if not classes:
-        st.warning("⚠️ No classes found.")
-        return
+    if role in ("superadmin", "admin"):
+        _all_sessions  = get_all_sessions()
+        _session_names = [s["session"] for s in _all_sessions] if _all_sessions else ([_active_session] if _active_session else [])
+        _term_options  = ["First", "Second", "Third"]
+        _term_display  = ["1st Term", "2nd Term", "3rd Term"]
+        _term_map      = dict(zip(_term_display, _term_options))
+        _term_rmap     = dict(zip(_term_options, _term_display))
 
-    class_names = [c['class_name'] for c in classes]
-    class_name = st.selectbox("Select Class", class_names, key="email_reports_class")
+        _classes   = get_classes_for_session(_active_session)
+        _class_names = [c["class_name"] for c in _classes] if _classes else []
+        if not _class_names:
+            st.warning("⚠️ No classes found for the active session.")
+            return
+
+        _col_class, _col_term, _col_session = st.columns(3)
+        with _col_class:
+            class_name = st.selectbox("Select Class", _class_names, key="email_reports_class")
+        with _col_term:
+            _term_default = _term_rmap.get(_active_term, "1st Term")
+            _term_sel     = st.selectbox("Select Term", _term_display,
+                                         index=_term_display.index(_term_default),
+                                         key="email_reports_term")
+            term = _term_map[_term_sel]
+        with _col_session:
+            _sess_idx = _session_names.index(_active_session) if _active_session in _session_names else 0
+            session   = st.selectbox("Select Session", _session_names,
+                                     index=_sess_idx,
+                                     key="email_reports_session")
+    else:
+        if not _active_session:
+            st.warning("⚠️ No active session configured. Ask an admin to set one in Academic Settings.")
+            return
+        if not _active_term:
+            st.warning("⚠️ No active term configured. Ask an admin to set one in Academic Settings.")
+            return
+        session = _active_session
+        term    = _active_term
+        _classes = get_classes_for_session(session)
+        if not _classes:
+            st.warning(f"⚠️ No classes found for session {session}.")
+            return
+        class_name = st.selectbox("Select Class", [c["class_name"] for c in _classes], key="email_reports_class")
+        st.info(f"**Active:** {session} — {term} Term")
     ActivityTracker.watch_value("email_reports_class", f"{class_name}_{session}_{term}")
 
     import re

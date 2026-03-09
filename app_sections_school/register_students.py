@@ -7,7 +7,8 @@ from database_school import (
     get_enrolled_students, enroll_student, unenroll_student,
     create_student, update_student, delete_student,
     open_class_for_session,
-)
+    get_all_sessions,
+    get_classes_for_session)
 from main_utils import clean_input, inject_login_css, render_page_header, inject_metric_css
 from auth.activity_tracker import ActivityTracker
 from utils.paginators import streamlit_filter
@@ -31,41 +32,70 @@ def register_students():
     inject_login_css("templates/tabs_styles.css")
     render_page_header("Manage Students Data")
 
-    # ── Active session / term ──────────────────────────────────────────────────
+    # ── Session / term context ────────────────────────────────────────────────
     _active_session = get_active_session()
     _active_term    = get_active_term_name()
 
-    if not _active_session:
-        st.warning("⚠️ No active session configured. Ask an admin to set one in Academic Settings.")
-        return
+    role = st.session_state.role
 
-    st.info(f"**Active:** {_active_session} — {_active_term} Term")
+    if role in ("superadmin", "admin"):
+        _all_sessions  = get_all_sessions()
+        _session_names = [s["session"] for s in _all_sessions] if _all_sessions else ([_active_session] if _active_session else [])
+        _term_options  = ["First", "Second", "Third"]
+        _term_display  = ["1st Term", "2nd Term", "3rd Term"]
+        _term_map      = dict(zip(_term_display, _term_options))
+        _term_rmap     = dict(zip(_term_options, _term_display))
 
-    # ── Class selector ─────────────────────────────────────────────────────────
-    all_classes = get_all_classes()
-    if not all_classes:
-        st.warning("⚠️ No classes found. Create a class first.")
-        return
+        _all_classes = get_all_classes()
+        _class_names = [c["class_name"] for c in _all_classes] if _all_classes else []
+        if not _class_names:
+            st.warning("⚠️ No classes found. Create a class first.")
+            return
 
-    class_names = [c["class_name"] for c in all_classes]
-    class_name = st.selectbox("Select Class", class_names, key="register_students_class")
+        _col_class, _col_term, _col_session = st.columns(3)
+        with _col_class:
+            class_name = st.selectbox("Select Class", _class_names, key="register_students_class")
+        with _col_term:
+            _term_default = _term_rmap.get(_active_term, "1st Term")
+            _term_sel     = st.selectbox("Select Term", _term_display,
+                                         index=_term_display.index(_term_default),
+                                         key="register_students_term")
+            term = _term_map[_term_sel]
+        with _col_session:
+            _sess_idx = _session_names.index(_active_session) if _active_session in _session_names else 0
+            session   = st.selectbox("Select Session", _session_names,
+                                     index=_sess_idx,
+                                     key="register_students_session")
+    else:
+        if not _active_session:
+            st.warning("⚠️ No active session configured. Ask an admin to set one in Academic Settings.")
+            return
+        if not _active_term:
+            st.warning("⚠️ No active term configured. Ask an admin to set one in Academic Settings.")
+            return
+        session = _active_session
+        term    = _active_term
+        _all_classes = get_all_classes()
+        if not _all_classes:
+            st.warning("⚠️ No classes found. Create a class first.")
+            return
+        class_name = st.selectbox("Select Class", [c["class_name"] for c in _all_classes], key="register_students_class")
+        st.info(f"**Active:** {session} — {term} Term")
     if not class_name:
         return
-
     ActivityTracker.watch_value("register_students_class_selector", class_name)
 
     # ── Ensure class is open for this session ──────────────────────────────────
-    # open_class_for_session is idempotent (INSERT OR IGNORE)
-    open_class_for_session(class_name, _active_session)
+    open_class_for_session(class_name, session)
 
     # ── Load enrolled students ─────────────────────────────────────────────────
-    students = get_enrolled_students(class_name, _active_session)
+    students = get_enrolled_students(class_name, session)
 
     inject_metric_css()
     
     col1, col2, col3 = st.columns(3)
     col1.metric("Class", class_name)
-    col2.metric("Session", _active_session)
+    col2.metric("Session", session)
     col3.metric("Enrolled Students", len(students))
 
     # ── Build DataFrame ────────────────────────────────────────────────────────
@@ -187,7 +217,7 @@ def register_students():
                     create_student(new_name, new_gender,
                                    admission_number=new_admission_no or None,
                                    school_fees_paid=fees_paid)
-                    ok, reason = enroll_student(new_name, class_name, _active_session)
+                    ok, reason = enroll_student(new_name, class_name, session)
                     if ok:
                         st.success("✅ Student added and enrolled successfully!")
                         st.session_state.student_form_counter += 1
@@ -253,7 +283,7 @@ def register_students():
                 create_student(name, gender or None,
                                admission_number=admission_no or None,
                                school_fees_paid=fees_paid or "NO")
-                ok, reason = enroll_student(name, class_name, _active_session)
+                ok, reason = enroll_student(name, class_name, session)
                 if ok:
                     success_count += 1
                     processed_names.add(name.lower())
@@ -293,12 +323,12 @@ def register_students():
 
                     @st.dialog("Confirm Unenrollment", width="small")
                     def confirm_unenroll():
-                        st.warning(f"⚠️ Remove **{student_to_remove}** from **{class_name}** / **{_active_session}**?")
+                        st.warning(f"⚠️ Remove **{student_to_remove}** from **{class_name}** / **{session}**?")
                         st.error("This will permanently delete all their scores, comments, and subject selections for this session.")
                         c1, c2 = st.columns(2)
                         if c1.button("✅ Unenroll", key="confirm_unenroll_ok"):
                             ActivityTracker.update()
-                            if unenroll_student(student_to_remove, class_name, _active_session):
+                            if unenroll_student(student_to_remove, class_name, session):
                                 st.success("✅ Student unenrolled.")
                             else:
                                 st.error("❌ Failed to unenroll student.")
@@ -320,13 +350,13 @@ def register_students():
 
                     @st.dialog("Confirm Unenroll All", width="small")
                     def confirm_unenroll_all():
-                        st.warning(f"Remove ALL {len(students)} students from **{class_name}** / **{_active_session}**?")
+                        st.warning(f"Remove ALL {len(students)} students from **{class_name}** / **{session}**?")
                         c1, c2 = st.columns(2)
                         if c1.button("✅ Unenroll All", key="confirm_unenroll_all_ok"):
                             ActivityTracker.update()
                             removed = 0
                             for s in students:
-                                if unenroll_student(s["student_name"], class_name, _active_session):
+                                if unenroll_student(s["student_name"], class_name, session):
                                     removed += 1
                             st.success(f"✅ Unenrolled {removed} student(s).")
                             st.rerun()

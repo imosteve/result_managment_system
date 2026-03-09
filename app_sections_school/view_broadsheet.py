@@ -4,7 +4,11 @@ import streamlit as st
 import pandas as pd
 import re
 import os
-from database_school import get_active_session, get_active_term_name, get_classes_for_session, get_enrolled_students, get_subjects_by_class, get_scores_for_subject, get_student_grand_totals, get_grade_distribution
+from database_school import (
+    get_active_session, get_active_term_name, get_classes_for_session, 
+    get_enrolled_students, get_subjects_by_class, get_scores_for_subject, 
+    get_student_grand_totals, get_grade_distribution, get_all_sessions
+)
 from main_utils import (
     assign_grade, create_metric_5col_broadsheet, 
     format_ordinal, render_page_header, inject_login_css
@@ -50,24 +54,54 @@ def generate_broadsheet():
     # Subheader
     render_page_header("View Broadsheet Data")
 
-    session = get_active_session()
-    if not session:
-        st.warning("⚠️ No active session configured. Ask an admin to set it.")
-        return
-    term = get_active_term_name()
-    if not term:
-        st.warning("⚠️ No active term configured. Ask an admin to set it.")
-        return
+    # ── Session / term context ────────────────────────────────────────────────
+    _active_session = get_active_session()
+    _active_term    = get_active_term_name()
 
-    classes = get_classes_for_session(session)
-    if not classes:
-        st.warning("⚠️ No classes found for the active session.")
-        if role in ["class_teacher", "subject_teacher"]:
-            st.info("You may need to check your class assignment.")
-        return
+    if role in ("superadmin", "admin"):
+        _all_sessions  = get_all_sessions()
+        _session_names = [s["session"] for s in _all_sessions] if _all_sessions else ([_active_session] if _active_session else [])
+        _term_options  = ["First", "Second", "Third"]
+        _term_display  = ["1st Term", "2nd Term", "3rd Term"]
+        _term_map      = dict(zip(_term_display, _term_options))
+        _term_rmap     = dict(zip(_term_options, _term_display))
 
-    class_names = [c['class_name'] for c in classes]
-    class_name = st.selectbox("Select Class", class_names, key="view_broadsheet_class")
+        classes = get_classes_for_session(_active_session)
+        class_names = [c["class_name"] for c in classes] if classes else []
+        if not class_names:
+            st.warning("⚠️ No classes found for the active session.")
+            return
+
+        _col_class, _col_term, _col_session = st.columns(3)
+        with _col_class:
+            class_name = st.selectbox("Select Class", class_names, key="view_broadsheet_class")
+        with _col_term:
+            _term_default = _term_rmap.get(_active_term, "1st Term")
+            _term_sel     = st.selectbox("Select Term", _term_display,
+                                         index=_term_display.index(_term_default),
+                                         key="view_broadsheet_term")
+            term = _term_map[_term_sel]
+        with _col_session:
+            _sess_default = _session_names.index(_active_session) if _active_session in _session_names else 0
+            session       = st.selectbox("Select Session", _session_names,
+                                         index=_sess_default,
+                                         key="view_broadsheet_session")
+    else:
+        if not _active_session:
+            st.warning("⚠️ No active session configured. Ask an admin to set one in Academic Settings.")
+            return
+        if not _active_term:
+            st.warning("⚠️ No active term configured. Ask an admin to set one in Academic Settings.")
+            return
+        session = _active_session
+        term    = _active_term
+        classes = get_classes_for_session(session)
+        class_names = [c["class_name"] for c in classes]
+        if not class_names:
+            st.warning(f"⚠️ No classes found for session {session}.")
+            return
+        class_name = st.selectbox("Select Class", class_names, key="view_broadsheet_class")
+        st.info(f"**Active:** {session} — {term} Term")
     if not class_name:
         return
     
