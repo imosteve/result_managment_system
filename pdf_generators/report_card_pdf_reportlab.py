@@ -32,6 +32,15 @@ if not school_code:
 school_info = get_school_by_code(school_code) if school_code != "platform" else None
 school_address = school_info.get("address") if school_info else " "
 
+logo_path = f"static/logos/{school_code}_logo.png"
+watermark_path = f"static/logos/{school_code}_logo.png"
+
+if not os.path.exists(logo_path):
+    logo_path = "static/logos/platform_logo.png"
+if not os.path.exists(watermark_path):
+    watermark_path = "static/logos/platform_logo.png"
+
+
 # Register Arial fonts if available (fallback to Helvetica if not)
 try:
     # Try different possible Arial font paths
@@ -98,7 +107,6 @@ class ReportCardCanvas(canvas.Canvas):
         # self.rect(10*mm, 10*mm, page_width - 20*mm, page_height - 20*mm)
         
         # Draw watermark (centered, faded logo)
-        watermark_path = f"static/logos/{school_code}_logo.png"
         if os.path.exists(watermark_path):
             self.saveState()
             self.setFillAlpha(0.1)
@@ -256,13 +264,15 @@ def generate_report_card(student_name, class_name, term, session, is_secondary_c
         avg = 0
         grade = "-"
 
-    # Class average — derive from grand totals
+    # Class average: mean of all students' grand_totals divided by subject count
     grand_totals = get_student_grand_totals(class_name, session, term)
-    all_avgs = []
-    for gt in grand_totals:
-        if gt.get("average") is not None:
-            all_avgs.append(float(gt["average"]))
-    class_average = round(sum(all_avgs) / len(all_avgs), 1) if all_avgs else 0.0
+    if grand_totals:
+        num_subjects = len(get_subjects_by_class(class_name)) or 1
+        class_average = round(
+            sum(gt["grand_total"] for gt in grand_totals) / len(grand_totals) / num_subjects, 1
+        )
+    else:
+        class_average = 0.0
 
     position_data = next((gt for gt in grand_totals if gt['student_name'] == student_name), None)
 
@@ -412,7 +422,6 @@ def generate_report_card(student_name, class_name, term, session, is_secondary_c
         )
         
         # Header with logo
-        logo_path = f"static/logos/{school_code}_logo.png"
         if os.path.exists(logo_path):
             logo = Image(logo_path, width=60, height=60)
         else:
@@ -525,8 +534,8 @@ def generate_report_card(student_name, class_name, term, session, is_secondary_c
         ]
         
         subjects_table_data = [subjects_header]
-        cell_style = ParagraphStyle('Cell', fontSize=10, alignment=TA_CENTER)
-        subject_style = ParagraphStyle('Subject', fontSize=10, alignment=TA_LEFT)
+        cell_style = ParagraphStyle('Cell', fontSize=10, fontName=FONT_NAME, alignment=TA_CENTER)
+        subject_style = ParagraphStyle('Subject', fontSize=10, fontName=FONT_NAME, alignment=TA_LEFT)
         
         for subj in subjects_data:
             subjects_table_data.append([

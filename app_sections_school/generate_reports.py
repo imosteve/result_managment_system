@@ -215,9 +215,17 @@ def generate_tab():
     no_in_class = len(students)
     # New schema: use get_student_average directly
     student_average = get_student_average(selected_student, class_name, session, term) or 0
-    class_average = 0  # Computed from grand totals below
     grand_totals = get_student_grand_totals(class_name, session, term)
     position_data = next((gt for gt in grand_totals if gt['student_name'] == selected_student), None)
+    # Class average: mean of each student's per-subject average across the class
+    if grand_totals:
+        num_subjects = get_subjects_by_class(class_name)
+        num_subjects = len(num_subjects) if num_subjects else 1
+        class_average = round(
+            sum(gt['grand_total'] for gt in grand_totals) / len(grand_totals) / num_subjects, 1
+        )
+    else:
+        class_average = 0
     
     is_sss2_or_sss3 = bool(re.match(r"SSS [23].*$", class_name))
     if is_sss2_or_sss3:

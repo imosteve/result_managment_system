@@ -6,7 +6,7 @@ from database_school import (
     get_all_classes, get_active_session, get_active_term_name,
     get_enrolled_students, enroll_student, unenroll_student,
     create_student, update_student, delete_student,
-    open_class_for_session,
+    open_class_for_session, get_user_assignments,
     get_all_sessions,
     get_classes_for_session)
 from main_utils import clean_input, inject_login_css, render_page_header, inject_metric_css
@@ -66,6 +66,26 @@ def register_students():
             session   = st.selectbox("Select Session", _session_names,
                                      index=_sess_idx,
                                      key="register_students_session")
+    elif role == "class_teacher":
+        if not _active_session:
+            st.warning("⚠️ No active session configured. Ask an admin to set one in Academic Settings.")
+            return
+        if not _active_term:
+            st.warning("⚠️ No active term configured. Ask an admin to set one in Academic Settings.")
+            return
+        session = _active_session
+        term    = _active_term
+        user_id = st.session_state.get('user_id', None)
+        user_assignments = get_user_assignments(user_id)
+        assigned_classes = list(dict.fromkeys(
+            a["class_name"] for a in user_assignments if a.get("class_name")
+        ))
+        if not assigned_classes:
+            st.warning("⚠️ No class assignments found. Contact your administrator.")
+            return
+        class_name = st.selectbox("Select Class", assigned_classes, key="register_students_class")
+        st.info(f"**Active:** {session} — {term} Term")
+    
     else:
         if not _active_session:
             st.warning("⚠️ No active session configured. Ask an admin to set one in Academic Settings.")

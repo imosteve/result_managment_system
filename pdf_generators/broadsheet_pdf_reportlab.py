@@ -39,7 +39,17 @@ SCHOOL_ADDRESS = school_info.get("address").upper() if school_info else " "
 
 # Get paths
 BASE_DIR = Path(__file__).resolve().parent.parent
-LOGO_PATH = BASE_DIR / 'static' / 'logos' / 'SU_logo.png'
+
+school_code = st.session_state.get("school_code", "platform")
+if not school_code:
+    school_code = "platform"
+
+from pathlib import Path as _Path
+LOGO_PATH = _Path(f"static/logos/{school_code}_logo.png")
+
+if not LOGO_PATH.exists():
+    LOGO_PATH = _Path("static/logos/platform_logo.png")
+
 
 # Register Arial fonts if available (fallback to Helvetica if not)
 try:
@@ -106,13 +116,13 @@ def get_dynamic_sizing(num_subjects, num_students):
     # A2 landscape provides plenty of space, but we need to scale for many subjects
     
     return {
-        'body_font': 7,
+        'body_font': 8,
         'school_name_font': 18,
-        'logo_size': 45,
-        'header_font': 5,
-        'subheader_font': 5,
-        'student_name_font': 5,
-        'score_font': 6
+        'logo_size': 55,
+        'header_font': 6,
+        'subheader_font': 6,
+        'student_name_font': 7,
+        'score_font': 8
     }
 
 
