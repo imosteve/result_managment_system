@@ -177,11 +177,13 @@ def register_students():
                 except IndexError:
                     errors.append(f"❌ Row {idx + 1}: Cannot determine student — skipped.")
                     continue
-                new_name      = clean_input(str(row.get("Name", "")), "name")
-                gender        = str(row.get("Gender", ""))
-                email         = clean_input(str(row.get("Email", "")), "email") or None
-                admission_no  = clean_input(str(row.get("Admission No", "")), "name")
-                fees_paid     = str(row.get("Paid Fees", ""))
+                new_name      = clean_input(str(row.get("Name", "") or ""), "name")
+                _gender_raw   = row.get("Gender") or ""
+                gender        = str(_gender_raw).strip() if str(_gender_raw).strip() in ("M", "F") else ""
+                _email_raw    = row.get("Email") or ""
+                email         = clean_input(str(_email_raw).strip(), "email") or None
+                admission_no  = clean_input(str(row.get("Admission No", "") or ""), "name")
+                fees_paid     = str(row.get("Paid Fees", "") or "")
                 if not new_name:
                     errors.append(f"❌ Row {idx + 1}: Name is required")
                     continue
@@ -292,11 +294,14 @@ def register_students():
                 errors.append(f"❌ Duplicate names in batch at rows: {', '.join(map(str, dup_rows))}")
 
             for idx, row in edited_batch_df.iterrows():
-                name         = clean_input(str(row.get("Name", "")), "name")
-                gender       = str(row.get("Gender", ""))
-                email        = clean_input(str(row.get("Email", "")), "email") or None
-                admission_no = clean_input(str(row.get("Admission No", "")), "name")
-                fees_paid    = str(row.get("Paid Fees", "NO"))
+                name         = clean_input(str(row.get("Name", "") or ""), "name")
+                _gender_raw  = row.get("Gender") or ""
+                gender       = str(_gender_raw).strip() if str(_gender_raw).strip() in ("M", "F") else ""
+                _email_raw   = row.get("Email") or ""
+                email        = clean_input(str(_email_raw).strip(), "email") or None
+                admission_no = clean_input(str(row.get("Admission No", "") or ""), "name")
+                _fees_raw    = row.get("Paid Fees") or "NO"
+                fees_paid    = str(_fees_raw) if str(_fees_raw) in ("YES", "NO") else "NO"
                 if not name:
                     continue
                 if name.lower() in processed_names:

@@ -289,6 +289,7 @@ def get_enrolled_students(class_name: str, session: str) -> list:
             css.class_name,
             css.session,
             s.gender,
+            s.email,
             s.admission_number,
             s.school_fees_paid,
             css.enrollment_date
