@@ -81,15 +81,7 @@ def _render_score_management_interface():
         _term_map      = dict(zip(_term_display, _term_options))
         _term_rmap     = dict(zip(_term_options, _term_display))
 
-        classes = get_classes_for_session(session)
-        class_names = [c["class_name"] for c in classes]
-        if not class_names:
-            st.warning("⚠️ No classes found.")
-            return
-
         _col_class, _col_term, _col_session = st.columns(3)
-        with _col_class:
-            class_name = st.selectbox("Select Class", class_names, key="enter_scores_class")
         with _col_term:
             _term_default = _term_rmap.get(_active_term, "1st Term")
             _term_sel     = st.selectbox("Select Term", _term_display,
@@ -101,6 +93,15 @@ def _render_score_management_interface():
             session       = st.selectbox("Select Session", _session_names,
                                          index=_sess_default,
                                          key="enter_scores_session")
+
+        classes = get_classes_for_session(session)
+        class_names = [c["class_name"] for c in classes]
+        if not class_names:
+            st.warning("⚠️ No classes found.")
+            return
+
+        with _col_class:
+            class_name = st.selectbox("Select Class", class_names, key="enter_scores_class")
     else:
         if not _active_session:
             st.warning("⚠️ No active session configured. Ask an admin to set one in Academic Settings.")
