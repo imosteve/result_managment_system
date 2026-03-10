@@ -54,14 +54,14 @@ def send_email(to_email, student_name, pdf_path, term, session):
         env = Environment(loader=FileSystemLoader("templates"))
         template = env.get_template("email_template.html")
         html_body = template.render(
-            school_name=APP_CONFIG["school_name"],
+            school_name=st.session_state.get("school_name", "School Administration"),
             student_name=student_name,
             term=term,
             session=session,
             year=datetime.now().year
         )
         
-        school_name=APP_CONFIG["school_name"]
+        school_name=st.session_state.get("school_name", "School Administration")
         # Plain text fallback
         text_body = f"""Dear Parent/Guardian,
 
@@ -424,8 +424,8 @@ def email_tab():
             pdf_path = generate_report_card(selected_student, class_name, term, session, is_secondary_class, is_primary_class)
             if pdf_path and os.path.exists(pdf_path):
                 # Send email
-                if send_email(student_data[3], selected_student, pdf_path, term, session):
-                    st.success(f"✅ Report card sent to {student_data[3]}")
+                if send_email(student_data["email"], selected_student, pdf_path, term, session):
+                    st.success(f"✅ Report card sent to {student_data['email']}")
                 else:
                     st.error("❌ Failed to send email. Please check email configuration.")
             else:
