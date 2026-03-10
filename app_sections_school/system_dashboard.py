@@ -16,7 +16,6 @@ from database_school import (
 )
 from main_utils import inject_login_css, render_page_header, format_ordinal, inject_metric_css
 from config import DB_CONFIG, APP_CONFIG
-from database_school.connection import DB_PATH
 from utils.paginators import streamlit_paginator
 
 logger = logging.getLogger(__name__)
@@ -222,7 +221,11 @@ def render_database_management_tab():
         school_code = st.session_state.school_code
         
         # Read the actual file as bytes
-        with open(DB_PATH, "rb") as f:
+        _db_path = st.session_state.get("school_db_path")
+        if not _db_path:
+            st.error("⚠️ School database path not found in session. Please log in again.")
+            return
+        with open(_db_path, "rb") as f:
             db_data = f.read()
 
         st.download_button(
