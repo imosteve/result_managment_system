@@ -328,32 +328,26 @@ def get_grade_distribution(student_name: str, class_name: str,
     if not scores:
         return ""
 
-    grade_order = ["A1", "B2", "B3", "C4", "C5", "C6", "D7", "E8", "F9"]
+    grade_order = ["A", "B", "C", "D", "E", "F"]
     counts: dict[str, int] = {}
 
     for row in scores:
         total = row.get("total_score") or 0
-        if total >= 75:
-            grade = "A1"
+        if total >= 80:
+            grade = "A"
         elif total >= 70:
-            grade = "B2"
-        elif total >= 65:
-            grade = "B3"
+            grade = "B"
         elif total >= 60:
-            grade = "C4"
-        elif total >= 55:
-            grade = "C5"
+            grade = "C"
         elif total >= 50:
-            grade = "C6"
+            grade = "D"
         elif total >= 45:
-            grade = "D7"
-        elif total >= 40:
-            grade = "E8"
+            grade = "E"
         else:
-            grade = "F9"
+            grade = "F"
         counts[grade] = counts.get(grade, 0) + 1
 
-    parts = [f"{g}×{counts[g]}" for g in grade_order if g in counts]
+    parts = [f"{counts[g]}{g}s" if counts[g] > 1 else f"{counts[g]}{g}" for g in grade_order if g in counts]
     return ", ".join(parts)
 
 

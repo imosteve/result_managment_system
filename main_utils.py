@@ -523,25 +523,53 @@ def render_class_term_session_selector(
         session = _active_session
         term    = _active_term
 
+        # Filter assignments strictly by the role the teacher logged in as.
+        # A teacher assigned as both class_teacher and subject_teacher for
+        # different classes must only see the classes relevant to this login role.
+        teacher_role = role  # "class_teacher" or "subject_teacher"
         user_assignments = get_user_assignments(user_id) or []
         assigned_classes = list(dict.fromkeys(
-            a["class_name"] for a in user_assignments if a.get("class_name")
+            a["class_name"]
+            for a in user_assignments
+            if a.get("class_name") and a.get("assignment_type") == teacher_role
         ))
+
+        # Fallback: if no assignments match this specific role, show nothing
         if not assigned_classes:
-            st.warning("⚠️ No class assignments found. Contact your administrator.")
+            st.warning("⚠️ No class assignments found for your current role. Contact your administrator.")
             return None
 
-        # Restore persisted class if in teacher's list
+        # Restore persisted class if in teacher's filtered list
         _class_idx = 0
         if _saved_class and _saved_class in assigned_classes:
             _class_idx = assigned_classes.index(_saved_class)
 
-        class_name = st.selectbox(
-            "Select Class", assigned_classes,
-            index=_class_idx,
-            key=f"{page_key}_class",
-        )
-        st.info(f"**Active:** {session} — {term} Term")
+        # 3-column layout: Class (interactive) | Term (locked) | Session (locked)
+        _col_class, _col_term, _col_session = st.columns(3)
+
+        with _col_class:
+            class_name = st.selectbox(
+                "Select Class", assigned_classes,
+                index=_class_idx,
+                key=f"{page_key}_class",
+            )
+
+        _term_display_val = _term_rmap.get(term, term)
+        with _col_term:
+            st.selectbox(
+                "Term", [_term_display_val],
+                index=0,
+                key=f"{page_key}_term_locked",
+                disabled=True,
+            )
+
+        with _col_session:
+            st.selectbox(
+                "Session", [session],
+                index=0,
+                key=f"{page_key}_session_locked",
+                disabled=True,
+            )
 
     # ── Persist the selected class for cross-page retention ──────────────────
     st.session_state.class_selection_state["class_name"]     = class_name
