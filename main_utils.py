@@ -386,3 +386,165 @@ def clear_persistent_class_selection():
             'session': None,
             'display_string': None
         }
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Shared class / term / session selector
+# ─────────────────────────────────────────────────────────────────────────────
+
+def render_class_term_session_selector(
+    page_key: str,
+    allow_term_session_override: bool = True,   # kept for backward compat, ignored
+) -> "Optional[dict]":
+    """
+    Render a role-aware class / term / session selector and return the
+    selected context, or None if the page should stop rendering.
+
+    Admins always get the full 3-column picker [Class | Term | Session] on
+    every page.  Teachers get their assigned-class list only, locked to the
+    active session/term.
+
+    The selected class is persisted in ``st.session_state.class_selection_state``
+    so navigating between pages keeps the same class pre-selected.
+
+    Parameters
+    ----------
+    page_key : str
+        Unique prefix for Streamlit widget keys on this page, e.g.
+        ``"enter_scores"``.  Prevents key collisions across pages.
+
+    Returns
+    -------
+    ``{"class_name": str, "term": str, "session": str}``
+        or ``None`` — caller must ``return`` immediately when None.
+
+    Usage
+    -----
+    ::
+
+        ctx = render_class_term_session_selector("enter_scores")
+        if ctx is None:
+            return
+        class_name = ctx["class_name"]
+        term       = ctx["term"]
+        session    = ctx["session"]
+    """
+    from database_school import (
+        get_active_session, get_active_term_name,
+        get_all_sessions, get_classes_for_session,
+        get_all_classes, get_user_assignments,
+    )
+
+    # Ensure persistence store exists
+    initialize_class_persistence()
+
+    user_id         = st.session_state.get("user_id")
+    role            = st.session_state.get("role")
+    _active_session = get_active_session()
+    _active_term    = get_active_term_name()
+    is_admin        = role in ("superadmin", "admin")
+
+    _term_options = ["First", "Second", "Third"]
+    _term_display = ["1st Term", "2nd Term", "3rd Term"]
+    _term_map     = dict(zip(_term_display, _term_options))   # "1st Term" → "First"
+    _term_rmap    = dict(zip(_term_options, _term_display))   # "First" → "1st Term"
+
+    # Previously persisted class (survives page navigation)
+    _saved_class = st.session_state.class_selection_state.get("class_name")
+
+    # ── ADMIN — full 3-column picker [Class | Term | Session] ────────────────
+    if is_admin:
+        _all_sessions  = get_all_sessions() or []
+        _session_names = (
+            [s["session"] for s in _all_sessions]
+            if _all_sessions
+            else ([_active_session] if _active_session else [])
+        )
+        if not _session_names:
+            st.warning("⚠️ No sessions found. Please configure an academic session.")
+            return None
+
+        _all_classes = get_all_classes() or []
+        _class_names = [c["class_name"] for c in _all_classes]
+        if not _class_names:
+            st.warning("⚠️ No classes found. Create a class first.")
+            return None
+
+        _col_class, _col_term, _col_session = st.columns(3)
+
+        with _col_term:
+            _term_default = _term_rmap.get(_active_term, "1st Term")
+            _term_sel = st.selectbox(
+                "Select Term", _term_display,
+                index=_term_display.index(_term_default),
+                key=f"{page_key}_term",
+            )
+            term = _term_map[_term_sel]
+
+        with _col_session:
+            _sess_idx = (
+                _session_names.index(_active_session)
+                if _active_session in _session_names else 0
+            )
+            session = st.selectbox(
+                "Select Session", _session_names,
+                index=_sess_idx,
+                key=f"{page_key}_session",
+            )
+
+        # Class list for selected session; fall back to all classes
+        session_classes     = get_classes_for_session(session) or []
+        session_class_names = [c["class_name"] for c in session_classes]
+        display_class_names = session_class_names or _class_names
+        if not display_class_names:
+            st.warning(f"⚠️ No classes found for session '{session}'.")
+            return None
+
+        # Restore persisted class selection if it's in the list
+        _class_idx = 0
+        if _saved_class and _saved_class in display_class_names:
+            _class_idx = display_class_names.index(_saved_class)
+
+        with _col_class:
+            class_name = st.selectbox(
+                "Select Class", display_class_names,
+                index=_class_idx,
+                key=f"{page_key}_class",
+            )
+
+    # ── TEACHER / other non-admin roles ──────────────────────────────────────
+    else:
+        if not _active_session:
+            st.warning("⚠️ No active session configured. Ask an admin to set one in Academic Settings.")
+            return None
+        if not _active_term:
+            st.warning("⚠️ No active term configured. Ask an admin to set one in Academic Settings.")
+            return None
+
+        session = _active_session
+        term    = _active_term
+
+        user_assignments = get_user_assignments(user_id) or []
+        assigned_classes = list(dict.fromkeys(
+            a["class_name"] for a in user_assignments if a.get("class_name")
+        ))
+        if not assigned_classes:
+            st.warning("⚠️ No class assignments found. Contact your administrator.")
+            return None
+
+        # Restore persisted class if in teacher's list
+        _class_idx = 0
+        if _saved_class and _saved_class in assigned_classes:
+            _class_idx = assigned_classes.index(_saved_class)
+
+        class_name = st.selectbox(
+            "Select Class", assigned_classes,
+            index=_class_idx,
+            key=f"{page_key}_class",
+        )
+        st.info(f"**Active:** {session} — {term} Term")
+
+    # ── Persist the selected class for cross-page retention ──────────────────
+    st.session_state.class_selection_state["class_name"]     = class_name
+    st.session_state.class_selection_state["display_string"] = class_name
+
+    return {"class_name": class_name, "term": term, "session": session}

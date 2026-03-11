@@ -9,8 +9,8 @@ from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
 from main_utils import (
-    assign_grade, create_metric_5col_report, format_ordinal, 
-    render_page_header, inject_login_css
+    assign_grade, create_metric_5col_report, format_ordinal,
+    render_page_header, inject_login_css, render_class_term_session_selector
 )
 from database_school import (
     get_active_session, get_active_term_name, get_classes_for_session,
@@ -149,34 +149,13 @@ def generate_tab():
     user_id = st.session_state.user_id
     role = st.session_state.role
 
-    session = get_active_session()
-    if not session:
-        st.warning("⚠️ No active session configured. Ask an admin to set it.")
+    _ctx = render_class_term_session_selector("generate_reports", allow_term_session_override=True)
+    if _ctx is None:
         return
-    term = get_active_term_name()
-    if not term:
-        st.warning("⚠️ No active term configured. Ask an admin to set it.")
-        return
-
-    # Teachers only see their assigned class; admins see all classes
-    if role in ("superadmin", "admin"):
-        classes = get_classes_for_session(session)
-        if not classes:
-            st.warning("⚠️ No classes found for the active session.")
-            return
-        class_names = [c['class_name'] for c in classes]
-        class_name = st.selectbox("Select Class", class_names, key="generate_reports_class")
-        ActivityTracker.watch_value("generate_reports_class", f"{class_name}_{session}_{term}")
-    else:
-        user_assignments = get_user_assignments(user_id)
-        assigned_classes = list(dict.fromkeys(
-            a["class_name"] for a in user_assignments if a.get("class_name")
-        ))
-        if not assigned_classes:
-            st.warning("⚠️ No class assignments found. Contact your administrator.")
-            return
-        class_name = st.selectbox("Select Class", assigned_classes, key="generate_reports_class")
-        ActivityTracker.watch_value("generate_reports_class", f"{class_name}_{session}_{term}")
+    class_name = _ctx["class_name"]
+    term       = _ctx["term"]
+    session    = _ctx["session"]
+    ActivityTracker.watch_value("generate_reports_class", f"{class_name}_{session}_{term}")
 
     is_senior_class = bool(re.match(r"SSS [123].*$", class_name))
     is_junior_class = bool(re.match(r"JSS [123].*$", class_name))
@@ -329,33 +308,13 @@ def email_tab():
     user_id = st.session_state.user_id
     role = st.session_state.role
 
-    session = get_active_session()
-    if not session:
-        st.warning("⚠️ No active session configured.")
+    _ctx = render_class_term_session_selector("email_reports", allow_term_session_override=True)
+    if _ctx is None:
         return
-    term = get_active_term_name()
-    if not term:
-        st.warning("⚠️ No active term configured.")
-        return
-
-    if role in ("superadmin", "admin"):
-        classes = get_classes_for_session(session)
-        if not classes:
-            st.warning("⚠️ No classes found.")
-            return
-        class_names = [c['class_name'] for c in classes]
-        class_name = st.selectbox("Select Class", class_names, key="email_reports_class")
-        ActivityTracker.watch_value("email_reports_class", f"{class_name}_{session}_{term}")
-    else:
-        user_assignments = get_user_assignments(user_id)
-        assigned_classes = list(dict.fromkeys(
-            a["class_name"] for a in user_assignments if a.get("class_name")
-        ))
-        if not assigned_classes:
-            st.warning("⚠️ No class assignments found. Contact your administrator.")
-            return
-        class_name = st.selectbox("Select Class", assigned_classes, key="email_reports_class")
-        ActivityTracker.watch_value("email_reports_class", f"{class_name}_{session}_{term}")
+    class_name = _ctx["class_name"]
+    term       = _ctx["term"]
+    session    = _ctx["session"]
+    ActivityTracker.watch_value("email_reports_class", f"{class_name}_{session}_{term}")
 
     import re
     is_senior_class = bool(re.match(r"SSS [123].*$", class_name))

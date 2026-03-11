@@ -10,7 +10,7 @@ from database_school import (
     delete_psychomotor_rating, get_all_comment_templates, get_student_average,
     get_head_teacher_comment_by_average, get_user_assignments
 )
-from main_utils import render_page_header, inject_login_css
+from main_utils import render_page_header, inject_login_css, render_class_term_session_selector
 from auth.activity_tracker import ActivityTracker
 
 # Psychomotor categories with their display names
@@ -51,36 +51,12 @@ def manage_comments():
     render_page_header("Manage Comments & Psychomotor Ratings")
     
     # Active session/term — teachers never pick these manually
-    session = get_active_session()
-    if not session:
-        st.warning("⚠️ No active session configured. Ask an admin to set the active session.")
+    _ctx = render_class_term_session_selector("manage_comments", allow_term_session_override=True)
+    if _ctx is None:
         return
-
-    term = get_active_term_name()
-    if not term:
-        st.warning("⚠️ No active term configured. Ask an admin to set the active term.")
-        return
-
-    # Teachers only see their assigned class; admins see all classes
-    if role in ("superadmin", "admin"):
-        classes = get_classes_for_session(session)
-        if not classes:
-            st.warning("⚠️ No classes available. Add a class in the Manage Classes section.")
-            return
-        class_names = [c['class_name'] for c in classes]
-        class_name = st.selectbox("Select Class", class_names, key="manage_comments_class")
-    else:
-        user_assignments = get_user_assignments(user_id)
-        assigned_classes = list(dict.fromkeys(
-            a["class_name"] for a in user_assignments if a.get("class_name")
-        ))
-        if not assigned_classes:
-            st.warning("⚠️ No class assignments found. Contact your administrator.")
-            return
-        class_name = st.selectbox("Select Class", assigned_classes, key="manage_comments_class")
-    if not class_name:
-        return
-
+    class_name = _ctx["class_name"]
+    term       = _ctx["term"]
+    session    = _ctx["session"]
     ActivityTracker.watch_value("manage_comments_class_selector", f"{class_name}_{session}_{term}")
 
     students = get_enrolled_students(class_name, session)

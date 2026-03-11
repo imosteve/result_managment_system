@@ -73,7 +73,6 @@ def system_dashboard():
     tabs = st.tabs([
         "🏥 System Health",
         "💾 Database Management",
-        "📊 Analytics & Reports",
         "🔧 Maintenance",
         "🔒 Security & Logs",
         "⚙️ System Settings"
@@ -87,20 +86,16 @@ def system_dashboard():
     with tabs[1]:
         render_database_management_tab()
     
-    # TAB 3: Analytics & Reports
+    # TAB 3: Maintenance
     with tabs[2]:
-        render_analytics_tab(stats)
-    
-    # TAB 4: Maintenance
-    with tabs[3]:
         render_maintenance_tab()
     
-    # TAB 5: Security & Logs
-    with tabs[4]:
+    # TAB 4: Security & Logs
+    with tabs[3]:
         render_security_logs_tab()
     
-    # TAB 6: System Settings
-    with tabs[5]:
+    # TAB 5: System Settings
+    with tabs[4]:
         render_system_settings_tab()
 
 
@@ -396,76 +391,6 @@ def render_database_management_tab():
         st.markdown("**Performance Indexes**", help="Create or update indexes on key columns to improve query performance. This can speed up data retrieval but may take time on large datasets.")
         if st.button("🔍 Create/Update PI", width=200):
             create_indexes()
-
-
-def render_analytics_tab(stats):
-    """Render analytics and reports tab"""
-    st.subheader("📊 Analytics & Reports")
-    
-    # User distribution
-    st.markdown("#### 👥 User Distribution")
-    
-    users = get_all_users()
-    # ── CHANGE: count by the three new role values ──
-    user_roles = {'Superadmin': 0, 'Admin': 0, 'Teacher': 0}
-    
-    for user in users:
-        role = user[3] if user[3] else 'teacher'
-        if role == 'superadmin':
-            user_roles['Superadmin'] += 1
-        elif role == 'admin':
-            user_roles['Admin'] += 1
-        else:
-            # catches 'teacher' and any unexpected legacy values
-            user_roles['Teacher'] += 1
-    
-    inject_metric_css()
-
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Superadmins", user_roles['Superadmin'])
-    with col2:
-        st.metric("Admins", user_roles['Admin'])
-    with col3:
-        st.metric("Teachers", user_roles['Teacher'])
-    
-    # Class distribution
-    st.markdown("---")
-    st.markdown("#### 🏫 Class Overview")
-    
-    class_summary = get_classes_summary()
-    
-    if class_summary:
-        class_data = [
-            {
-                "Class": row["class_name"],
-                "Session": row["session"],
-                "Students": row["student_count"],
-                "Subjects": row["subject_count"],
-                "Scores": row["score_count"]
-            }
-            for row in class_summary
-        ]
-
-        streamlit_paginator(class_data, table_name="class_summary_analytics")
-    else:
-        st.info("No classes found in the system.")
-
-    # Activity statistics
-    st.markdown("---")
-    st.markdown("#### 📈 Activity Statistics")
-    
-    activity_stats = get_activity_statistics()
-    
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("Active Classes", activity_stats['active_classes'])
-    with col2:
-        st.metric("Active Students", activity_stats['active_students'])
-    with col3:
-        st.metric("Score Completion", f"{activity_stats['score_completion']}%")
-    with col4:
-        st.metric("Assignments", stats['assignments'])
 
 
 def render_maintenance_tab():

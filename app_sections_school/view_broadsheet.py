@@ -11,8 +11,9 @@ from database_school import (
     get_user_assignments
 )
 from main_utils import (
-    assign_grade, create_metric_5col_broadsheet, 
-    format_ordinal, render_page_header, inject_login_css
+    assign_grade, create_metric_5col_broadsheet,
+    format_ordinal, render_page_header, inject_login_css,
+    render_class_term_session_selector
 )
 from pdf_generators.broadsheet_pdf_reportlab import (
     generate_blank_broadsheet_pdf,
@@ -56,58 +57,12 @@ def generate_broadsheet():
     render_page_header("View Broadsheet Data")
 
     # ── Session / term context ────────────────────────────────────────────────
-    _active_session = get_active_session()
-    _active_term    = get_active_term_name()
-
-    if role in ("superadmin", "admin"):
-        _all_sessions  = get_all_sessions()
-        _session_names = [s["session"] for s in _all_sessions] if _all_sessions else ([_active_session] if _active_session else [])
-        _term_options  = ["First", "Second", "Third"]
-        _term_display  = ["1st Term", "2nd Term", "3rd Term"]
-        _term_map      = dict(zip(_term_display, _term_options))
-        _term_rmap     = dict(zip(_term_options, _term_display))
-
-        _col_class, _col_term, _col_session = st.columns(3)
-        with _col_term:
-            _term_default = _term_rmap.get(_active_term, "1st Term")
-            _term_sel     = st.selectbox("Select Term", _term_display,
-                                         index=_term_display.index(_term_default),
-                                         key="view_broadsheet_term")
-            term = _term_map[_term_sel]
-        with _col_session:
-            _sess_default = _session_names.index(_active_session) if _active_session in _session_names else 0
-            session       = st.selectbox("Select Session", _session_names,
-                                         index=_sess_default,
-                                         key="view_broadsheet_session")
-
-        classes = get_classes_for_session(session)
-        class_names = [c["class_name"] for c in classes]
-        if not class_names:
-            st.warning("⚠️ No classes found.")
-            return
-
-        with _col_class:
-            class_name = st.selectbox("Select Class", class_names, key="view_broadsheet_class")
-    else:
-        if not _active_session:
-            st.warning("⚠️ No active session configured. Ask an admin to set one in Academic Settings.")
-            return
-        if not _active_term:
-            st.warning("⚠️ No active term configured. Ask an admin to set one in Academic Settings.")
-            return
-        session = _active_session
-        term    = _active_term
-        user_assignments = get_user_assignments(user_id)
-        assigned_classes = list(dict.fromkeys(
-            a["class_name"] for a in user_assignments if a.get("class_name")
-        ))
-        if not assigned_classes:
-            st.warning("⚠️ No class assignments found. Contact your administrator.")
-            return
-        class_name = st.selectbox("Select Class", assigned_classes, key="view_broadsheet_class")
-        st.info(f"**Active:** {session} — {term} Term")
-    if not class_name:
+    _ctx = render_class_term_session_selector("view_broadsheet", allow_term_session_override=True)
+    if _ctx is None:
         return
+    class_name = _ctx["class_name"]
+    term       = _ctx["term"]
+    session    = _ctx["session"]
     
     # Check if this is SSS2 or SSS3
     is_sss2_or_sss3 = bool(re.match(r"SSS [23].*$", class_name))
@@ -324,6 +279,7 @@ def generate_broadsheet():
     
     with col3:
         # Export all classes broadsheet
+        classes = get_classes_for_session(session)
         if role in ["superadmin", "admin"]:
             if st.button("Export All Classes", use_container_width=True):
                 try:
