@@ -165,7 +165,7 @@ def _get_accessible_students(class_name: str, session: str, term: str,
                 if sn in seen:
                     continue
                 # New schema: get_student_selected_subjects(name, class_name, session, term)
-                sels = get_student_selected_subjects(sn, class_name, session, term)
+                sels = get_student_selected_subjects(sn, class_name, term, session)
                 if subject_name in sels:
                     filtered.append(student)
                     seen.add(sn)

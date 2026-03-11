@@ -255,9 +255,9 @@ def get_scores_for_subject(class_name: str, session: str,
     cursor.execute("""
         SELECT
             css.student_name,
-            COALESCE(sc.ca_score,    0) AS ca_score,
-            COALESCE(sc.exam_score,  0) AS exam_score,
-            COALESCE(sc.total_score, 0) AS total_score,
+            sc.ca_score,
+            sc.exam_score,
+            sc.total_score,
             sc.grade,
             sc.position,
             css.id AS enrollment_id
@@ -314,17 +314,41 @@ def get_grade_distribution(student_name: str, class_name: str,
                             session: str, term: str) -> str:
     """
     Return a grade-distribution summary string for a student in one term.
-    Used by the broadsheet and report-card views for SSS2/SSS3 students
-    where a position rank is not shown.
-
-    Grades are derived from total_score using the standard bands:
-        A1  ≥ 75  |  B2  70–74  |  B3  65–69  |  C4  60–64
-        C5  55–59 |  C6  50–54  |  D7  45–49  |  E8  40–44  |  F9  < 40
-
-    Returns:
-        A compact string such as "A1×3, B2×2, C4×1", or "" if no scores.
+    For SSS2/SSS3: only counts subjects the student selected.
+    Used by the broadsheet and report-card views.
     """
-    scores = get_scores_for_student(student_name, class_name, session, term)
+    import re as _re
+    is_senior = bool(_re.match(r"SSS [23]", class_name))
+
+    conn = get_connection()
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    if is_senior:
+        cursor.execute("""
+            SELECT sc.total_score
+            FROM   scores sc
+            JOIN   class_session_students css
+                       ON css.student_name = sc.student_name
+            JOIN   class_sessions cs ON cs.id = css.class_session_id
+            JOIN   student_subject_selections sss
+                       ON sss.enrollment_id = css.id
+                      AND sss.subject_name  = sc.subject_name
+                      AND sss.term          = sc.term
+            WHERE  sc.student_name = ? AND sc.class_name = ?
+              AND  sc.session = ? AND sc.term = ?
+              AND  cs.class_name = ? AND cs.session = ?
+        """, (student_name, class_name, session, term, class_name, session))
+    else:
+        cursor.execute("""
+            SELECT total_score FROM scores
+            WHERE  student_name = ? AND class_name = ?
+              AND  session = ? AND term = ?
+        """, (student_name, class_name, session, term))
+
+    scores = cursor.fetchall()
+    conn.close()
+
     if not scores:
         return ""
 
@@ -332,7 +356,7 @@ def get_grade_distribution(student_name: str, class_name: str,
     counts: dict[str, int] = {}
 
     for row in scores:
-        total = row.get("total_score") or 0
+        total = row["total_score"] or 0
         if total >= 80:
             grade = "A"
         elif total >= 70:
@@ -354,21 +378,44 @@ def get_grade_distribution(student_name: str, class_name: str,
 def get_student_grand_totals(class_name: str, session: str, term: str) -> list:
     """
     Grand totals and overall ranks for all students in a class/term.
-    Used by broadsheet and report cards for position-in-class.
+    For SSS2/SSS3: only counts subjects the student actually selected,
+    so unselected subjects never inflate or deflate the total.
+    For all other classes: sums all scored subjects.
 
     Returns list of dicts:
         {student_name, grand_total, position}
     """
+    import re as _re
+    is_senior = bool(_re.match(r"SSS [23]", class_name))
+
     conn = get_connection()
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
-    cursor.execute("""
-        SELECT student_name, SUM(total_score) AS grand_total
-        FROM   scores
-        WHERE  class_name = ? AND session = ? AND term = ?
-        GROUP  BY student_name
-        ORDER  BY grand_total DESC
-    """, (class_name, session, term))
+
+    if is_senior:
+        cursor.execute("""
+            SELECT sc.student_name, SUM(sc.total_score) AS grand_total
+            FROM   scores sc
+            JOIN   class_session_students css
+                       ON css.student_name = sc.student_name
+            JOIN   class_sessions cs ON cs.id = css.class_session_id
+            JOIN   student_subject_selections sss
+                       ON sss.enrollment_id = css.id
+                      AND sss.subject_name  = sc.subject_name
+                      AND sss.term          = sc.term
+            WHERE  sc.class_name = ? AND sc.session = ? AND sc.term = ?
+              AND  cs.class_name = ? AND cs.session = ?
+            GROUP  BY sc.student_name
+            ORDER  BY grand_total DESC
+        """, (class_name, session, term, class_name, session))
+    else:
+        cursor.execute("""
+            SELECT student_name, SUM(total_score) AS grand_total
+            FROM   scores
+            WHERE  class_name = ? AND session = ? AND term = ?
+            GROUP  BY student_name
+            ORDER  BY grand_total DESC
+        """, (class_name, session, term))
     rows = cursor.fetchall()
     conn.close()
 

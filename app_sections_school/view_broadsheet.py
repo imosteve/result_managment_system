@@ -8,7 +8,7 @@ from database_school import (
     get_active_session, get_active_term_name, get_classes_for_session, 
     get_enrolled_students, get_subjects_by_class, get_scores_for_subject, 
     get_student_grand_totals, get_grade_distribution, get_all_sessions,
-    get_user_assignments
+    get_user_assignments, get_student_selected_subjects
 )
 from main_utils import (
     assign_grade, create_metric_5col_broadsheet,
@@ -92,24 +92,40 @@ def generate_broadsheet():
 
     for student in students:
         student_name = student["student_name"]
-        # scores_by_subject is preloaded below; look up per subject
+
+        # For SSS2/SSS3, get this student's selected subjects for this term
+        if is_sss2_or_sss3:
+            selected_subjects = set(
+                get_student_selected_subjects(student_name, class_name, term, session)
+            )
+        else:
+            selected_subjects = None  # None = all subjects count
+
         test_scores = {}
         exam_scores = {}
         total_scores = {}
         for subject in subjects:
             subj_name = subject["subject_name"] if isinstance(subject, dict) else subject[1]
+
+            # For SSS2/SSS3: if subject not selected by this student, show "-"
+            if selected_subjects is not None and subj_name not in selected_subjects:
+                test_scores[subj_name] = "-"
+                exam_scores[subj_name] = "-"
+                total_scores[subj_name] = "-"
+                continue
+
             subj_scores = scores_by_subject.get(subj_name, {})
             student_score = subj_scores.get(student_name)
             if student_score:
-                ca = student_score.get("ca_score") if isinstance(student_score, dict) else student_score[3]
-                exam = student_score.get("exam_score") if isinstance(student_score, dict) else student_score[4]
+                ca    = student_score.get("ca_score")    if isinstance(student_score, dict) else student_score[3]
+                exam  = student_score.get("exam_score")  if isinstance(student_score, dict) else student_score[4]
                 total = student_score.get("total_score") if isinstance(student_score, dict) else student_score[5]
-                test_scores[subj_name] = str(int(ca)) if ca is not None else "-"
-                exam_scores[subj_name] = str(int(exam)) if exam is not None else "-"
+                test_scores[subj_name]  = str(int(ca))    if ca    is not None else "-"
+                exam_scores[subj_name]  = str(int(exam))  if exam  is not None else "-"
                 total_scores[subj_name] = str(int(total)) if total is not None else "-"
             else:
-                test_scores[subj_name] = "-"
-                exam_scores[subj_name] = "-"
+                test_scores[subj_name]  = "-"
+                exam_scores[subj_name]  = "-"
                 total_scores[subj_name] = "-"
         
         row = {"Student": student_name}
@@ -121,20 +137,31 @@ def generate_broadsheet():
             row[f"{subject_name} (Exam)"] = exam_scores.get(subject_name, "-")
             row[f"{subject_name} (Total)"] = total_scores.get(subject_name, "-")
         
-        # Calculate grand total (sum of all subject totals)
-        numeric_totals = [int(v) for v in total_scores.values() if v != "-"]
-        grand_total = str(sum(numeric_totals)) if numeric_totals else "-"
-        row["Grand Total"] = grand_total
-        
-        # Calculate average
-        if grand_total != "-" and numeric_totals:
-            avg = round(int(grand_total) / len(numeric_totals), 1)
-            row["Average"] = str(avg)
-        else:
-            row["Average"] = "-"
-        
-        # Get position or grade based on class type
+        # Calculate grand total and average
+        # For SSS2/SSS3: use the pre-computed grand_total (selected subjects only)
+        # For others: sum all non-"-" subject totals
         position_data = next((gt for gt in grand_totals if gt['student_name'] == student_name), None)
+
+        if is_sss2_or_sss3:
+            if position_data and position_data['grand_total'] is not None:
+                grand_total = str(int(position_data['grand_total']))
+                # Average over selected subjects only
+                selected_totals = [int(v) for k, v in total_scores.items() if v != "-"]
+                avg = round(int(grand_total) / len(selected_totals), 1) if selected_totals else 0
+                row["Grand Total"] = grand_total
+                row["Average"] = str(avg)
+            else:
+                row["Grand Total"] = "-"
+                row["Average"] = "-"
+        else:
+            numeric_totals = [int(v) for v in total_scores.values() if v != "-"]
+            grand_total = str(sum(numeric_totals)) if numeric_totals else "-"
+            row["Grand Total"] = grand_total
+            if grand_total != "-" and numeric_totals:
+                avg = round(sum(numeric_totals) / len(numeric_totals), 1)
+                row["Average"] = str(avg)
+            else:
+                row["Average"] = "-"
         
         if is_sss2_or_sss3:
             # For SSS2 and SSS3, get grade distribution
