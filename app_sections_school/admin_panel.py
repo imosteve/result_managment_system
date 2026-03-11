@@ -80,8 +80,7 @@ def admin_panel():
         "View/Delete User",
         "Add New User",
         "View/Edit Assignment",
-        "Assign Class Teacher",
-        "Assign Subject Teacher",
+        "Assign Teacher",
         "Academic Settings",
         "Analytics & Reports",
     ])
@@ -117,24 +116,19 @@ def admin_panel():
         st.session_state.admin_panel_active_tab = 2
         render_assignments_tab(user_id, admin_role, get_fresh_classes, get_fresh_subjects)
 
-    # Assign Class Teacher Tab
+    # Assign Teacher Tab (class teacher + subject teacher combined)
     with tabs[3]:
         st.session_state.admin_panel_active_tab = 3
-        render_assign_class_teacher_tab(get_fresh_classes, _active_session)
-
-    # Assign Subject Teacher Tab
-    with tabs[4]:
-        st.session_state.admin_panel_active_tab = 4
-        render_assign_subject_teacher_tab(get_fresh_classes, get_fresh_subjects, _active_session)
+        render_assign_teacher_tab(get_fresh_classes, get_fresh_subjects, _active_session)
 
     # Academic Settings Tab
-    with tabs[5]:
-        st.session_state.admin_panel_active_tab = 5
+    with tabs[4]:
+        st.session_state.admin_panel_active_tab = 4
         render_academic_settings_tab()
 
     # Analytics & Reports
-    with tabs[6]:
-        st.session_state.admin_panel_active_tab = 6
+    with tabs[5]:
+        st.session_state.admin_panel_active_tab = 5
         render_analytics_tab(stats)
 
 
@@ -545,158 +539,137 @@ def render_assignments_tab(user_id, admin_role, get_fresh_classes, get_fresh_sub
         st.info("No assignments found.")
 
 
-def render_assign_class_teacher_tab(get_fresh_classes, active_session):
-    """Render Assign Class Teacher tab"""
-    with st.form("assign_class_teacher_form"):
-        st.subheader("Assign Class Teacher")
-        users = get_all_users()
-        teacher_users = [u for u in users if u["role"] == "teacher"]
-        
-        if not teacher_users:
-            st.warning("⚠️ No teachers available. Add teachers in the Add New User tab.")
-            submitted = st.form_submit_button("Assign", disabled=True)
-        else:
-            col1, col2 = st.columns(2)
-            with col1:
-                selected_user_id = st.selectbox(
-                    "Select Teacher",
-                    [u["id"] for u in teacher_users],
-                    format_func=lambda x: next(u["username"] for u in teacher_users if u["id"] == x),
-                    key="class_teacher_select"
-                )
-            classes = get_fresh_classes()
-            if not classes:
-                st.warning("⚠️ No classes available. Add a class in the Manage Classes section.")
-                submitted = st.form_submit_button("Assign", disabled=True)
-            else:
-                with col2:
-                    class_options = [cls['class_name'] for cls in classes]
-                    selected_class = st.selectbox("Select Class", class_options, key="class_teacher_class_select")
-                selected_index = class_options.index(selected_class)
-                class_data = classes[selected_index]
-                class_name = class_data['class_name']
-                submitted = st.form_submit_button("Assign Class Teacher")
-                ActivityTracker.watch_form(submitted)
-                
-                if submitted:
-                    if assign_teacher(selected_user_id, class_name, active_session or '', None, 'class_teacher'):
-                        st.success(f"✅ Class teacher assigned: {next(u["username"] for u in teacher_users if u["id"] == selected_user_id)}.")
-                        st.rerun()
-                    else:
-                        st.error("❌ Failed to assign class teacher. Assignment may already exist.")
-
-
-def render_assign_subject_teacher_tab(get_fresh_classes, get_fresh_subjects, active_session):
-    """Render Assign Subject Teacher tab"""
-    st.subheader("Assign Subject Teacher")
-    
-    if 'selected_class_for_subject' not in st.session_state:
-        st.session_state.selected_class_for_subject = None
-    
+def render_assign_teacher_tab(get_fresh_classes, get_fresh_subjects, active_session):
+    """Render Assign Teacher tab — class teacher and subject teacher combined."""
     users = get_all_users()
     teacher_users = [u for u in users if u["role"] == "teacher"]
-    
+
     if not teacher_users:
         st.warning("⚠️ No teachers available. Add teachers in the Add New User tab.")
-    else:
-        col1, col2, col3 = st.columns(3)
+        return
+
+    classes = get_fresh_classes()
+    if not classes:
+        st.warning("⚠️ No classes available. Add a class in the Manage Classes section.")
+        return
+
+    class_options = [cls['class_name'] for cls in classes]
+
+    # ── Assign Class Teacher ──────────────────────────────────────────────────
+    with st.form("assign_class_teacher_form"):
+        st.subheader("Assign Class Teacher")
+        col1, col2 = st.columns(2)
         with col1:
-            selected_user_id = st.selectbox(
+            ct_user_id = st.selectbox(
                 "Select Teacher",
                 [u["id"] for u in teacher_users],
                 format_func=lambda x: next(u["username"] for u in teacher_users if u["id"] == x),
-                key="subject_teacher_select"
+                key="class_teacher_select"
             )
-            ActivityTracker.watch_value("subject_teacher_select", selected_user_id)
-        
-        classes = get_fresh_classes()
-        if not classes:
-            st.warning("⚠️ No classes available. Add a class in the Manage Classes section.")
-        else:
-            with col2:
-                class_options = [cls['class_name'] for cls in classes]
-                selected_class = st.selectbox("Select Class", class_options, key="subject_teacher_class_select")
-                ActivityTracker.watch_value("subject_teacher_class_select", selected_class)
-            
-            if st.session_state.selected_class_for_subject != selected_class:
-                st.session_state.selected_class_for_subject = selected_class
-            
-            selected_index = class_options.index(selected_class)
-            class_data = classes[selected_index]
-            class_name = class_data['class_name']
-            
-            subjects = get_fresh_subjects(class_name)
-            
-            if not subjects:
-                st.warning("⚠️ No subjects available for this class. Add subjects in the Manage Subjects section.")
+        with col2:
+            ct_class = st.selectbox("Select Class", class_options, key="class_teacher_class_select")
+
+        submitted_ct = st.form_submit_button("Assign Class Teacher")
+        ActivityTracker.watch_form(submitted_ct)
+        if submitted_ct:
+            ct_class_name = classes[class_options.index(ct_class)]['class_name']
+            if assign_teacher(ct_user_id, ct_class_name, active_session or '', None, 'class_teacher'):
+                st.success(f"✅ Class teacher assigned: {next(u['username'] for u in teacher_users if u['id'] == ct_user_id)}.")
+                st.rerun()
             else:
-                is_kindergarten_nursery = class_name.upper().startswith("KINDERGARTEN") or class_name.upper().startswith("NURSERY")
-                
-                if is_kindergarten_nursery:
-                    st.info(f"💡 **Tip:** For {class_name.split()[0]} classes, you can assign all subjects at once using the button below.")
-                    
-                    with col3:
-                        subject_options = [s["subject_name"] if isinstance(s, dict) else s[1] for s in subjects]
-                        subject_name = st.selectbox("Select Subject", [""] + subject_options, key=f"subject_select_{selected_class}")
-                        ActivityTracker.watch_value("subject_select", subject_name)
-                    
-                    with st.form("assign_subject_teacher_form"):
-                        col_single, col_batch = st.columns([1, 1])
-                        
-                        with col_single:
-                            st.markdown("**Assign Single Subject**")
-                            submitted_single = st.form_submit_button("Assign Subject Teacher", disabled=not subject_name, width='stretch')
-                        
-                        with col_batch:
-                            st.markdown("**Assign All Subjects**")
-                            st.caption(f"This will assign **{len(subjects)} subjects** to the selected teacher.")
-                            submitted_all = st.form_submit_button("Assign All Subjects", type="primary", width='stretch')
-                        
-                        if submitted_single:
-                            ActivityTracker.update()
-                        if submitted_all:
-                            ActivityTracker.update()
-                        
-                        if submitted_single and subject_name:
-                            if assign_teacher(selected_user_id, class_name, active_session or '', subject_name, 'subject_teacher'):
-                                st.success(f"✅ Subject teacher assigned: {next(u["username"] for u in teacher_users if u["id"] == selected_user_id)} to {subject_name}.")
-                                time.sleep(1)
-                                st.rerun()
-                            else:
-                                st.error("❌ Failed to assign subject teacher. Assignment may already exist.")
-                        
-                        if submitted_all:
-                            subject_names = [s['subject_name'] if isinstance(s, dict) else s[1] for s in subjects]
-                            success_count, failed_subjects = batch_assign_subject_teacher(selected_user_id, class_name, active_session or '', subject_names)
-                            
-                            if success_count == len(subjects):
-                                st.success(f"✅ All {success_count} subjects assigned successfully to {next(u["username"] for u in teacher_users if u["id"] == selected_user_id)}!")
-                            elif success_count > 0:
-                                st.warning(f"⚠️ {success_count} subjects assigned. {len(failed_subjects)} subjects already existed or failed.")
-                                if failed_subjects:
-                                    st.info(f"Skipped subjects: {', '.join(failed_subjects)}")
-                            else:
-                                st.error("❌ No subjects were assigned. They may already exist.")
-                            
-                            time.sleep(1)
-                            st.rerun()
+                st.error("❌ Failed to assign class teacher. Assignment may already exist.")
+
+    st.markdown("---")
+
+    # ── Assign Subject Teacher ────────────────────────────────────────────────
+    st.subheader("Assign Subject Teacher")
+
+    if 'selected_class_for_subject' not in st.session_state:
+        st.session_state.selected_class_for_subject = None
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st_user_id = st.selectbox(
+            "Select Teacher",
+            [u["id"] for u in teacher_users],
+            format_func=lambda x: next(u["username"] for u in teacher_users if u["id"] == x),
+            key="subject_teacher_select"
+        )
+        ActivityTracker.watch_value("subject_teacher_select", st_user_id)
+    with col2:
+        selected_class = st.selectbox("Select Class", class_options, key="subject_teacher_class_select")
+        ActivityTracker.watch_value("subject_teacher_class_select", selected_class)
+
+    if st.session_state.selected_class_for_subject != selected_class:
+        st.session_state.selected_class_for_subject = selected_class
+
+    class_name = classes[class_options.index(selected_class)]['class_name']
+    subjects = get_fresh_subjects(class_name)
+
+    if not subjects:
+        st.warning("⚠️ No subjects available for this class. Add subjects in the Manage Subjects section.")
+        return
+
+    is_kindergarten_nursery = (
+        class_name.upper().startswith("KINDERGARTEN") or class_name.upper().startswith("NURSERY")
+    )
+
+    if is_kindergarten_nursery:
+        st.info(f"💡 **Tip:** For {class_name.split()[0]} classes, you can assign all subjects at once using the button below.")
+
+    with col3:
+        subject_options = [s["subject_name"] if isinstance(s, dict) else s[1] for s in subjects]
+        subject_name = st.selectbox("Select Subject", [""] + subject_options, key=f"subject_select_{selected_class}")
+        ActivityTracker.watch_value("subject_select", subject_name)
+
+    if is_kindergarten_nursery:
+        with st.form("assign_subject_teacher_form"):
+            col_single, col_batch = st.columns([1, 1])
+            with col_single:
+                st.markdown("**Assign Single Subject**")
+                submitted_single = st.form_submit_button("Assign Subject Teacher", disabled=not subject_name, width='stretch')
+            with col_batch:
+                st.markdown("**Assign All Subjects**")
+                st.caption(f"This will assign **{len(subjects)} subjects** to the selected teacher.")
+                submitted_all = st.form_submit_button("Assign All Subjects", type="primary", width='stretch')
+
+            if submitted_single:
+                ActivityTracker.update()
+            if submitted_all:
+                ActivityTracker.update()
+
+            if submitted_single and subject_name:
+                if assign_teacher(st_user_id, class_name, active_session or '', subject_name, 'subject_teacher'):
+                    st.success(f"✅ Subject teacher assigned: {next(u['username'] for u in teacher_users if u['id'] == st_user_id)} to {subject_name}.")
+                    time.sleep(1)
+                    st.rerun()
                 else:
-                    with col3:
-                        subject_options = [s["subject_name"] if isinstance(s, dict) else s[1] for s in subjects]
-                        subject_name = st.selectbox("Select Subject", [""] + subject_options, key=f"subject_select_{selected_class}")
-                        ActivityTracker.watch_value("subject_select", subject_name)
-                    
-                    with st.form("assign_subject_teacher_form_regular"):
-                        submitted = st.form_submit_button("Assign Subject Teacher", disabled=not subject_name)
-                        ActivityTracker.watch_form(submitted)
-                        
-                        if submitted and subject_name:
-                            if assign_teacher(selected_user_id, class_name, active_session or '', subject_name, 'subject_teacher'):
-                                st.success(f"✅ Subject teacher assigned: {next(u["username"] for u in teacher_users if u["id"] == selected_user_id)} to {subject_name}.")
-                                time.sleep(1)
-                                st.rerun()
-                            else:
-                                st.error("❌ Failed to assign subject teacher. Assignment may already exist.")
+                    st.error("❌ Failed to assign subject teacher. Assignment may already exist.")
+
+            if submitted_all:
+                subject_names = [s['subject_name'] if isinstance(s, dict) else s[1] for s in subjects]
+                success_count, failed_subjects = batch_assign_subject_teacher(st_user_id, class_name, active_session or '', subject_names)
+                if success_count == len(subjects):
+                    st.success(f"✅ All {success_count} subjects assigned successfully to {next(u['username'] for u in teacher_users if u['id'] == st_user_id)}!")
+                elif success_count > 0:
+                    st.warning(f"⚠️ {success_count} subjects assigned. {len(failed_subjects)} subjects already existed or failed.")
+                    if failed_subjects:
+                        st.info(f"Skipped subjects: {', '.join(failed_subjects)}")
+                else:
+                    st.error("❌ No subjects were assigned. They may already exist.")
+                time.sleep(1)
+                st.rerun()
+    else:
+        with st.form("assign_subject_teacher_form_regular"):
+            submitted = st.form_submit_button("Assign Subject Teacher", disabled=not subject_name)
+            ActivityTracker.watch_form(submitted)
+            if submitted and subject_name:
+                if assign_teacher(st_user_id, class_name, active_session or '', subject_name, 'subject_teacher'):
+                    st.success(f"✅ Subject teacher assigned: {next(u['username'] for u in teacher_users if u['id'] == st_user_id)} to {subject_name}.")
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.error("❌ Failed to assign subject teacher. Assignment may already exist.")
 
 
 def render_analytics_tab(stats):
