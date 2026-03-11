@@ -432,7 +432,7 @@ def generate_report_card(student_name, class_name, term, session, is_secondary_c
             [
                 Paragraph(f"<b>{school_name.upper()}</b>", title_style),
                 Paragraph(school_address.upper(), subtitle_style),
-                Paragraph(f"<b>TERMLY REPORT FOR {term.upper()}, {session} SESSION</b>", report_title_style)
+                Paragraph(f"<b>TERMLY REPORT FOR {term.upper()} TERM, {session} SESSION</b>", report_title_style)
             ]
         ]]
         
