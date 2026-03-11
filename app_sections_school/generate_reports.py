@@ -32,10 +32,11 @@ from pdf_generators.report_card_pdf_reportlab import (
     merge_pdfs_into_single_file,
 )
 
-def send_email(to_email, student_name, pdf_path, term, session):
+def send_email(to_email, student_name, pdf_buffer, term, session):
     """Send email with PDF attachment using HTML template"""
     import re
     import socket
+    import tempfile
     from datetime import datetime
     from jinja2 import Environment, FileSystemLoader
 
@@ -97,20 +98,32 @@ Best regards,
 School Administration"""
         msg.attach(MIMEText(body, "plain"))
 
-    # Ensure attachment exists before attempting to open/send
-    if not pdf_path or not os.path.exists(pdf_path):
-        st.error(f"Attachment not found: {pdf_path}")
-        return False
+    # Write buffer to a temp file only for the duration of the email send
+    safe_name = "".join(c if c.isalnum() or c in (' ', '_') else "_" for c in student_name)
+    attachment_filename = f"{safe_name.replace(' ', '_')}_{term.replace(' ', '_')}_{session.replace('/', '_')}_report.pdf"
 
     try:
-        with open(pdf_path, "rb") as attachment:
-            part = MIMEBase("application", "octet-stream")
-            part.set_payload(attachment.read())
-            encoders.encode_base64(part)
-            part.add_header(
-                "Content-Disposition", f"attachment; filename={os.path.basename(pdf_path)}"
-            )
-            msg.attach(part)
+        # Use delete=False so Windows doesn't lock the file while it's open
+        tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+        try:
+            pdf_buffer.seek(0)
+            tmp.write(pdf_buffer.read())
+            tmp.close()  # Must close before re-opening on Windows
+
+            with open(tmp.name, "rb") as attachment:
+                part = MIMEBase("application", "octet-stream")
+                part.set_payload(attachment.read())
+                encoders.encode_base64(part)
+                part.add_header(
+                    "Content-Disposition", f"attachment; filename={attachment_filename}"
+                )
+                msg.attach(part)
+        finally:
+            # Always clean up the temp file regardless of success or failure
+            try:
+                os.unlink(tmp.name)
+            except Exception:
+                pass
 
         # Connect and send using SSL for port 465, otherwise use STARTTLS
         server = None
@@ -232,22 +245,21 @@ def generate_tab():
         # Track generate button
         ActivityTracker.update()
         
-        pdf_path = generate_report_card(selected_student, class_name, term, session, is_secondary_class, is_primary_class)
-        with st.spinner(f"Generating and sending report for {selected_student}..."):
-            if pdf_path and os.path.exists(pdf_path):
-                with open(pdf_path, "rb") as f:
-                    st.download_button(
-                        label=f"📥 Download {selected_student}'s Report Card",
-                        data=f,
-                        file_name=os.path.basename(pdf_path),
-                        mime="application/pdf",
-                        on_click=ActivityTracker.update  # Track download
-                    )
+        with st.spinner(f"Generating report for {selected_student}..."):
+            pdf_buffer = generate_report_card(selected_student, class_name, term, session, is_secondary_class, is_primary_class)
+            if pdf_buffer:
+                safe_name = "".join(c if c.isalnum() or c in (' ', '_') else "_" for c in selected_student)
+                file_name = f"{safe_name.replace(' ', '_')}_{term.replace(' ', '_')}_{session.replace('/', '_')}_report.pdf"
+                st.download_button(
+                    label=f"📥 Download {selected_student}'s Report Card",
+                    data=pdf_buffer,
+                    file_name=file_name,
+                    mime="application/pdf",
+                    on_click=ActivityTracker.update
+                )
                 st.success(f"✅ Report card generated for {selected_student}")
             else:
                 st.error("❌ Failed to generate report card. Make sure subjects has been added to class.")
-
-    st.markdown("---")
 
     # Batch Report Cards
     if st.button("Generate All Report Cards"):
@@ -258,7 +270,7 @@ def generate_tab():
         
         success_count = 0
         failed_students = []
-        pdf_paths = []
+        pdf_buffers = []
         progress_bar = st.progress(0)
         status_text = st.empty()
         
@@ -266,10 +278,10 @@ def generate_tab():
             student_name = student["student_name"]
             status_text.text(f"Generating report for {student_name}...")
             
-            pdf_path = generate_report_card(student_name, class_name, term, session, is_secondary_class, is_primary_class)
-            if pdf_path and os.path.exists(pdf_path):
+            pdf_buffer = generate_report_card(student_name, class_name, term, session, is_secondary_class, is_primary_class)
+            if pdf_buffer:
                 success_count += 1
-                pdf_paths.append(pdf_path)
+                pdf_buffers.append(pdf_buffer)
             else:
                 failed_students.append(student_name)
                 
@@ -277,21 +289,20 @@ def generate_tab():
 
         status_text.text("Merging all reports into a single PDF...")
         
-        if pdf_paths:
-            merged_pdf_path = merge_pdfs_into_single_file(pdf_paths, class_name, term, session)
+        if pdf_buffers:
+            merged_buffer = merge_pdfs_into_single_file(pdf_buffers, class_name, term, session)
             
-            if merged_pdf_path and os.path.exists(merged_pdf_path):
+            if merged_buffer:
                 status_text.text("Complete!")
                 st.success(f"✅ Generated {success_count}/{len(students)} report cards successfully and merged into single PDF.")
-                
-                with open(merged_pdf_path, "rb") as f:
-                    st.download_button(
-                        label=f"📥 Download All Report Cards (Single PDF)",
-                        data=f,
-                        file_name=os.path.basename(merged_pdf_path),
-                        mime="application/pdf",
-                        on_click=ActivityTracker.update  # Track download
-                    )
+                merged_filename = f"{class_name.replace(' ', '_')}_{term.replace(' ', '_')}_{session.replace('/', '_')}_All_Reports.pdf"
+                st.download_button(
+                    label=f"📥 Download All Report Cards (Single PDF)",
+                    data=merged_buffer,
+                    file_name=merged_filename,
+                    mime="application/pdf",
+                    on_click=ActivityTracker.update
+                )
             else:
                 status_text.text("Complete!")
                 st.error("❌ Failed to merge PDFs into single file.")
@@ -380,10 +391,10 @@ def email_tab():
             
         with st.spinner(f"Generating and sending report for {selected_student}..."):
             # Generate PDF
-            pdf_path = generate_report_card(selected_student, class_name, term, session, is_secondary_class, is_primary_class)
-            if pdf_path and os.path.exists(pdf_path):
+            pdf_buffer = generate_report_card(selected_student, class_name, term, session, is_secondary_class, is_primary_class)
+            if pdf_buffer:
                 # Send email
-                if send_email(student_data["email"], selected_student, pdf_path, term, session):
+                if send_email(student_data["email"], selected_student, pdf_buffer, term, session):
                     st.success(f"✅ Report card sent to {student_data['email']}")
                 else:
                     st.error("❌ Failed to send email. Please check email configuration.")
@@ -414,10 +425,10 @@ def email_tab():
             status_text.text(f"Processing {student_name} ({i+1}/{len(students_eligible)})...")
             
             # Generate PDF
-            pdf_path = generate_report_card(student_name, class_name, term, session, is_secondary_class, is_primary_class)
-            if pdf_path and os.path.exists(pdf_path):
+            pdf_buffer = generate_report_card(student_name, class_name, term, session, is_secondary_class, is_primary_class)
+            if pdf_buffer:
                 # Send email
-                if send_email(student_email, student_name, pdf_path, term, session):
+                if send_email(student_email, student_name, pdf_buffer, term, session):
                     success_count += 1
                     status_text.text(f"✅ Sent to {student_name}")
                 else:

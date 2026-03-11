@@ -698,24 +698,7 @@ def generate_broadsheet_with_scores_pdf(class_name, term, session, broadsheet_da
     doc.build(elements, canvasmaker=WatermarkCanvas)
     pdf_buffer.seek(0)
     
-    # Save to folder
-    file_path = None
-    try:
-        os.makedirs("data/broadsheet", exist_ok=True)
-        safe_class = class_name.replace(' ', '_')
-        safe_term = term.replace(' ', '_')
-        safe_session = session.replace('/', '_')
-        file_path = os.path.join("data/broadsheet", f"{safe_class}_{safe_term}_{safe_session}_Broadsheet.pdf")
-        
-        with open(file_path, 'wb') as f:
-            f.write(pdf_buffer.getvalue())
-        
-        pdf_buffer.seek(0)
-    except Exception as e:
-        print(f"Error saving broadsheet to folder: {e}")
-        file_path = None
-    
-    return pdf_buffer, file_path
+    return pdf_buffer
 
 
 def build_class_broadsheet_data(class_name, term, session, user_id, role, sort_by="Position"):
@@ -812,7 +795,7 @@ def generate_all_classes_broadsheet_pdf(classes, user_id, role, sort_by="Positio
 
         broadsheet_data, subjects, class_average, is_sss2_or_sss3 = result
 
-        class_pdf, _ = generate_broadsheet_with_scores_pdf(
+        class_pdf = generate_broadsheet_with_scores_pdf(
             class_name, term, session, broadsheet_data, subjects,
             class_average, is_sss2_or_sss3
         )

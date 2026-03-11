@@ -1,5 +1,6 @@
 """Report Card PDF generation module - ReportLab version (Exact WeasyPrint replica)"""
 
+import io
 import streamlit as st
 import re
 import os
@@ -368,14 +369,11 @@ def generate_report_card(student_name, class_name, term, session, is_secondary_c
 
     # Generate PDF
     try:
-        os.makedirs("data/reports", exist_ok=True)
-        safe_name = "".join(c if c.isalnum() or c in (' ', '_') else "_" for c in student_name)
-        output_path = os.path.join("data/reports", 
-            f"{safe_name.replace(' ', '_')}_{term.replace(' ', '_')}_{session.replace('/', '_')}_report.pdf")
-        
+        output_buffer = io.BytesIO()
+
         # Create document with custom canvas
         doc = SimpleDocTemplate(
-            output_path,
+            output_buffer,
             pagesize=A4,
             topMargin=10*mm,
             bottomMargin=10*mm,
@@ -757,10 +755,10 @@ def generate_report_card(student_name, class_name, term, session, is_secondary_c
                 **kwargs
             )
         
-        # Build PDF with custom
+        # Build PDF with custom canvas
         doc.build(elements, canvasmaker=make_canvas)
-        
-        return output_path
+        output_buffer.seek(0)
+        return output_buffer
         
     except Exception as e:
         st.error(f"Error generating PDF: {e}")
@@ -769,41 +767,33 @@ def generate_report_card(student_name, class_name, term, session, is_secondary_c
         return None
 
 
-def merge_pdfs_into_single_file(pdf_paths, class_name, term, session):
-    """Merge all PDFs into a single PDF file"""
+def merge_pdfs_into_single_file(pdf_buffers, class_name, term, session):
+    """Merge all PDF buffers into a single PDF buffer (no disk writes)"""
     try:
-        os.makedirs("data/reports", exist_ok=True)
-        merged_filename = f"{class_name.replace(' ', '_')}_{term.replace(' ', '_')}_{session.replace('/', '_')}_All_Reports.pdf"
-        merged_path = os.path.join("data/reports", merged_filename)
-        
         merger = PdfMerger()
-        
-        for pdf_path in pdf_paths:
-            if os.path.exists(pdf_path):
-                merger.append(pdf_path)
-        
-        merger.write(merged_path)
+        for buf in pdf_buffers:
+            buf.seek(0)
+            merger.append(buf)
+        output_buffer = io.BytesIO()
+        merger.write(output_buffer)
         merger.close()
-        
-        return merged_path
+        output_buffer.seek(0)
+        return output_buffer
     except Exception as e:
         st.error(f"Error merging PDFs: {e}")
         return None
 
 
-def create_zip_file(pdf_paths, class_name, term, session):
-    """Create a zip file containing all generated PDFs"""
+def create_zip_file(pdf_buffers_with_names, class_name, term, session):
+    """Create a zip buffer from a list of (filename, BytesIO) tuples (no disk writes)"""
     try:
-        os.makedirs("data/reports", exist_ok=True)
-        zip_filename = f"{class_name.replace(' ', '_')}_{term.replace(' ', '_')}_{session.replace('/', '_')}_Reports.zip"
-        zip_path = os.path.join("data/reports", zip_filename)
-        
-        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            for pdf_path in pdf_paths:
-                if os.path.exists(pdf_path):
-                    zipf.write(pdf_path, os.path.basename(pdf_path))
-        
-        return zip_path
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            for filename, buf in pdf_buffers_with_names:
+                buf.seek(0)
+                zipf.writestr(filename, buf.read())
+        zip_buffer.seek(0)
+        return zip_buffer
     except Exception as e:
         st.error(f"Error creating zip file: {e}")
         return None

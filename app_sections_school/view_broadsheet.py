@@ -290,7 +290,7 @@ def generate_broadsheet():
         # Export broadsheet with scores (automatically saves to folder)
         if st.button("Export with Scores", use_container_width=True):
             try:
-                pdf_buffer, file_path = generate_broadsheet_with_scores_pdf(
+                pdf_buffer = generate_broadsheet_with_scores_pdf(
                     class_name, term, session, sorted_data, subjects, 
                     class_average, is_sss2_or_sss3
                 )
@@ -314,15 +314,10 @@ def generate_broadsheet():
                         classes, user_id, role, sort_by
                     )
 
-                    os.makedirs("data/broadsheet", exist_ok=True)
                     safe_term = term.replace(' ', '_')
                     safe_session = session.replace('/', '_')
-                    file_name=f"All_Classes_{safe_term}_{safe_session}_Broadsheet.pdf"
-                    file_path = os.path.join("data/broadsheet", file_name)
-                    
-                    with open(file_path, 'wb') as f:
-                        f.write(pdf_buffer.getvalue())
-                        
+                    file_name = f"All_Classes_{safe_term}_{safe_session}_Broadsheet.pdf"
+
                     st.download_button(
                         label="⬇️ Download All Classes PDF",
                         data=pdf_buffer,
