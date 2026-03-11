@@ -369,7 +369,7 @@ def add_subjects():
                     return
 
                 # Display current selections summary
-                selections = get_all_student_subject_selections(class_name, session, term)
+                selections = get_all_student_subject_selections(class_name, term, session)
                 if selections:
                     # Create a summary DataFrame
                     selection_summary = {}
@@ -419,7 +419,7 @@ def add_subjects():
                     st.markdown(f"#### Subject Selection for **{selected_student}**")
                     
                     # Get current selections for this student
-                    current_selections = get_student_selected_subjects(selected_student, class_name, session, term)
+                    current_selections = get_student_selected_subjects(selected_student, class_name, term, session)
                     subject_names = [s["subject_name"] for s in subjects]
                     
                     # Create checkboxes for each subject
