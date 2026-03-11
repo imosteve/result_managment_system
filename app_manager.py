@@ -122,10 +122,9 @@ class ApplicationManager:
 
     def render_header(self):
         """
-        platform_superadmin → renders the live metrics header via
-                              render_platform_header() so the summary bar
-                              appears on every platform page.
-        School users        → school_name from session state (set at login).
+        Injects the school name into Streamlit's native top toolbar header.
+        platform_superadmin → renders the live metrics header via render_platform_header().
+        School users        → school name floated into the top bar via CSS pseudo-content.
         """
         role = st.session_state.get("role")
 
@@ -137,10 +136,43 @@ class ApplicationManager:
                 st.session_state.get("school_name")
                 or APP_CONFIG.get("platform_name", "School Result Management System")
             )
-            st.markdown(
-                f'<div class="main-header"><h2>{display_name.upper()}</h2></div>',
-                unsafe_allow_html=True,
-            )
+            st.markdown(f"""
+                <style>
+                /* Show school name inside Streamlit's top toolbar */
+                [data-testid="stHeader"]::before {{
+                    content: "{display_name.upper()}";
+                    display: block;
+                    position: absolute;
+                    left: 50%;
+                    top: 50%;
+                    transform: translate(-50%, -50%);
+                    font-size: 28px;
+                    font-weight: bold;
+                    color: white;
+                    white-space: nowrap;
+                    pointer-events: none;
+                    z-index: 999;
+                    text-shadow: 1px 1px 3px rgba(0,0,0,0.3);
+                    letter-spacing: 0.5px;
+                }}
+
+                /* Style the header bar to match your green theme */
+                [data-testid="stHeader"] {{
+                    background: linear-gradient(135deg, #198046, #228B22) !important;
+                    position: relative;
+                }}
+
+                /* Keep the sidebar toggle button visible */
+                [data-testid="stHeader"] button {{
+                    color: white !important;
+                }}
+
+                /* Remove the old in-page header div since it's now in the toolbar */
+                .main-header {{
+                    display: none !important;
+                }}
+                </style>
+            """, unsafe_allow_html=True)
 
     def get_navigation_options(self, role: str, username: str) -> Dict[str, Callable]:
         """
