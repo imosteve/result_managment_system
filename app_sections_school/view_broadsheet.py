@@ -18,8 +18,10 @@ from main_utils import (
 from pdf_generators.broadsheet_pdf_reportlab import (
     generate_blank_broadsheet_pdf,
     generate_broadsheet_with_scores_pdf,
-    generate_all_classes_broadsheet_pdf
+    generate_all_classes_broadsheet_pdf,
+    build_class_broadsheet_data
 )
+from PyPDF2 import PdfMerger
 from utils.broadsheet_import import show_import_interface
 import io
 
@@ -310,9 +312,39 @@ def generate_broadsheet():
         if role in ["superadmin", "admin"]:
             if st.button("Export All Classes", use_container_width=True):
                 try:
-                    pdf_buffer = generate_all_classes_broadsheet_pdf(
-                        classes, user_id, role, sort_by
-                    )
+                    total_classes = len(classes)
+                    progress_bar = st.progress(0)
+                    status_text = st.empty()
+                    merger = PdfMerger()
+                    skipped = []
+
+                    for i, class_data in enumerate(classes):
+                        class_name_iter = class_data['class_name']
+                        status_text.text(f"Processing {class_name_iter} ({i + 1}/{total_classes})...")
+
+                        result = build_class_broadsheet_data(class_name_iter, term, session, user_id, role, sort_by)
+                        if result is None:
+                            skipped.append(class_name_iter)
+                        else:
+                            bd_data, bd_subjects, bd_avg, bd_is_sss = result
+                            class_pdf = generate_broadsheet_with_scores_pdf(
+                                class_name_iter, term, session, bd_data, bd_subjects, bd_avg, bd_is_sss
+                            )
+                            merger.append(class_pdf)
+
+                        progress_bar.progress((i + 1) / total_classes)
+
+                    status_text.text("Merging all class broadsheets...")
+                    output_buffer = io.BytesIO()
+                    merger.write(output_buffer)
+                    merger.close()
+                    output_buffer.seek(0)
+
+                    progress_bar.progress(1.0)
+                    status_text.text(f"✅ Done! {total_classes - len(skipped)} class(es) exported.")
+
+                    if skipped:
+                        st.warning(f"⚠️ Skipped (no data): {', '.join(skipped)}")
 
                     safe_term = term.replace(' ', '_')
                     safe_session = session.replace('/', '_')
@@ -320,7 +352,7 @@ def generate_broadsheet():
 
                     st.download_button(
                         label="⬇️ Download All Classes PDF",
-                        data=pdf_buffer,
+                        data=output_buffer,
                         file_name=file_name,
                         mime="application/pdf",
                         use_container_width=True

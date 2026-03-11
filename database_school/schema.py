@@ -111,7 +111,7 @@ def create_tables(db_path=None):
             id               INTEGER PRIMARY KEY AUTOINCREMENT,
             student_name     TEXT    NOT NULL UNIQUE,
             gender           TEXT    CHECK(gender IN ('M', 'F')),
-            email            TEXT    UNIQUE,
+            email            TEXT,
             date_of_birth    TEXT,
             admission_number TEXT    UNIQUE,
             school_fees_paid TEXT    NOT NULL DEFAULT 'NO'
