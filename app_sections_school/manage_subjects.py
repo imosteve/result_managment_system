@@ -188,7 +188,7 @@ def add_subjects():
 
     # Tabs for different operations
     if is_senior_class:
-        tabs = st.tabs(["View/Edit Subjects", "Add Subjects", "Clear All Subjects", "Student Subject Selection"])
+        tabs = st.tabs(["View/Edit Subjects", "Add Subjects", "Clear All Subjects", "View Selections", "Manage Subject Selections"])
         current_tab = st.session_state.get("manage_subjects_current_tab", 0)
         
         # Detect tab changes by checking which tab content is being rendered
@@ -349,29 +349,21 @@ def add_subjects():
 
     # Tab 4: Student Subject Selection (only for senior classes)
     if is_senior_class:
+        # Tab 4: View Selections
         with tabs[3]:
-            # Track tab switch
             if st.session_state.manage_subjects_tab_tracker != 3:
                 ActivityTracker.watch_tab("manage_subjects_tabs", 3)
                 st.session_state.manage_subjects_tab_tracker = 3
-                
-            st.subheader("Student Subject Selection")
-            if role == "subject_teacher":
-                st.info("Subject Teachers cannot manage student subject selections.")
+
+            st.subheader("View Subject Selections")
+            students = get_enrolled_students(class_name, session)
+            if not students:
+                st.warning(f"⚠️ No students enrolled in {class_name} for {session}.")
+            elif not subjects:
+                st.warning("⚠️ No subjects available. Please add subjects first.")
             else:
-                students = get_enrolled_students(class_name, session)
-                if not students:
-                    st.warning(f"⚠️ No students enrolled in {class_name} for {session}.")
-                    return
-
-                if not subjects:
-                    st.warning("⚠️ No subjects available. Please add subjects first.")
-                    return
-
-                # Display current selections summary
                 selections = get_all_student_subject_selections(class_name, term, session)
                 if selections:
-                    # Create a summary DataFrame
                     selection_summary = {}
                     for student_name, subject_name in selections:
                         if student_name not in selection_summary:
@@ -399,106 +391,93 @@ def add_subjects():
                         },
                         hide_index=True,
                         width="stretch",
-                        height=35 * len(summary_data) + 38,  # 35px per row + 38px header (approximate)
+                        height=35 * len(summary_data) + 38,
                     )
                 else:
                     st.info("No subject selections made yet.")
 
-                st.markdown("---")
+        # Tab 5: Manage Selections
+        with tabs[4]:
+            if st.session_state.manage_subjects_tab_tracker != 4:
+                ActivityTracker.watch_tab("manage_subjects_tabs", 4)
+                st.session_state.manage_subjects_tab_tracker = 4
 
-                # Individual student subject selection
-                st.markdown("### Manage Individual Student Selections")
-                
-                student_names = [s["student_name"] for s in students]
-                selected_student = st.selectbox("Select Student", [""] + student_names, key="student_select")
-                
-                # Track student selection
-                ActivityTracker.watch_value("student_select_dropdown", selected_student)
+            if role == "subject_teacher":
+                st.info("Subject Teachers cannot manage student subject selections.")
+            else:
+                students = get_enrolled_students(class_name, session)
+                if not students:
+                    st.warning(f"⚠️ No students enrolled in {class_name} for {session}.")
+                elif not subjects:
+                    st.warning("⚠️ No subjects available. Please add subjects first.")
+                else:
+                    # Individual student subject selection
+                    st.markdown("### Individual Student Selections")
+                    student_names = [s["student_name"] for s in students]
+                    selected_student = st.selectbox("Select Student", [""] + student_names, key="student_select")
+                    ActivityTracker.watch_value("student_select_dropdown", selected_student)
 
-                if selected_student:
-                    st.markdown(f"#### Subject Selection for **{selected_student}**")
-                    
-                    # Get current selections for this student
-                    current_selections = get_student_selected_subjects(selected_student, class_name, term, session)
-                    subject_names = [s["subject_name"] for s in subjects]
-                    
-                    # Create checkboxes for each subject
-                    col1, col2 = st.columns(2)
-                    selected_subjects = []
-                    
-                    for i, subject_name in enumerate(subject_names):
-                        is_selected = subject_name in current_selections
-                        col = col1 if i % 2 == 0 else col2
-                        
-                        checkbox_key = f"subject_{selected_student}_{subject_name}"
-                        checkbox_value = col.checkbox(
-                            subject_name, 
-                            value=is_selected,
-                            key=checkbox_key
-                        )
-                        
-                        # Track checkbox changes
-                        ActivityTracker.watch_value(checkbox_key, checkbox_value)
-                        
-                        if checkbox_value:
-                            selected_subjects.append(subject_name)
+                    if selected_student:
+                        st.markdown(f"#### Subject Selection for **{selected_student}**")
+                        current_selections = get_student_selected_subjects(selected_student, class_name, term, session)
+                        subject_names = [s["subject_name"] for s in subjects]
 
-                    # Save button
-                    if st.button("💾 Save Subject Selections", key="save_selections"):
-                        ActivityTracker.update()  # Track save action
-                        try:
-                            save_student_subject_selections(
-                                selected_student, 
-                                selected_subjects, 
-                                class_name, 
-                                term, 
-                                session
-                            )
-                            st.success(f"✅ Subject selections saved for {selected_student}")
-                            # Reset the selectbox by deleting its session state
-                            if "student_select" in st.session_state:
-                                del st.session_state["student_select"]
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"❌ Error saving selections: {str(e)}")
+                        col1, col2 = st.columns(2)
+                        selected_subjects = []
 
-                st.markdown("---")
+                        for i, subject_name in enumerate(subject_names):
+                            is_selected = subject_name in current_selections
+                            col = col1 if i % 2 == 0 else col2
+                            checkbox_key = f"subject_{selected_student}_{subject_name}"
+                            checkbox_value = col.checkbox(subject_name, value=is_selected, key=checkbox_key)
+                            ActivityTracker.watch_value(checkbox_key, checkbox_value)
+                            if checkbox_value:
+                                selected_subjects.append(subject_name)
 
-                # Batch operations
-                st.markdown("### Batch Operations")
-                
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.markdown("#### Assign All Subjects to All Students")
-                    if st.button("📚 Assign All Subjects", key="assign_all"):
-                        ActivityTracker.update()  # Track batch assign action
-                        try:
-                            subject_names = [s["subject_name"] for s in subjects]
-                            for student in students:
-                                student_name = student["student_name"]
+                        if st.button("💾 Save Subject Selections", key="save_selections"):
+                            ActivityTracker.update()
+                            try:
                                 save_student_subject_selections(
-                                    student_name, 
-                                    subject_names, 
-                                    class_name, 
-                                    term, 
-                                    session
+                                    selected_student, selected_subjects, class_name, term, session
                                 )
-                            st.success("✅ All subjects assigned to all students")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"❌ Error in batch assignment: {str(e)}")
+                                st.success(f"✅ Subject selections saved for {selected_student}")
+                                if "student_select" in st.session_state:
+                                    del st.session_state["student_select"]
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"❌ Error saving selections: {str(e)}")
 
-                with col2:
-                    st.markdown("#### Clear All Selections")
-                    if st.button("🗑️ Clear All Selections", key="clear_all_selections_btn"):
-                        ActivityTracker.update()  # Track clear selections initiation
-                        st.session_state.show_clear_selections_confirm = True
-                        st.session_state.clear_selections_info = {
-                            "class_name": class_name,
-                            "term": term,
-                            "session": session,
-                            "students": [dict(s) for s in students],
-                            "student_count": len(students)
-                        }
-                        st.rerun()
+                    st.markdown("---")
+
+                    # Batch operations
+                    st.markdown("### Batch Operations")
+                    col1, col2 = st.columns(2)
+
+                    with col1:
+                        st.markdown("#### Assign All Subjects to All Students")
+                        if st.button("📚 Assign All Subjects", key="assign_all"):
+                            ActivityTracker.update()
+                            try:
+                                subject_names = [s["subject_name"] for s in subjects]
+                                for student in students:
+                                    save_student_subject_selections(
+                                        student["student_name"], subject_names, class_name, term, session
+                                    )
+                                st.success("✅ All subjects assigned to all students")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"❌ Error in batch assignment: {str(e)}")
+
+                    with col2:
+                        st.markdown("#### Clear All Selections")
+                        if st.button("🗑️ Clear All Selections", key="clear_all_selections_btn"):
+                            ActivityTracker.update()
+                            st.session_state.show_clear_selections_confirm = True
+                            st.session_state.clear_selections_info = {
+                                "class_name": class_name,
+                                "term": term,
+                                "session": session,
+                                "students": [dict(s) for s in students],
+                                "student_count": len(students)
+                            }
+                            st.rerun()
