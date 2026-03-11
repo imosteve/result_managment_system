@@ -499,16 +499,22 @@ def render_class_term_session_selector(
             st.warning(f"⚠️ No classes found for session '{session}'.")
             return None
 
-        # Restore persisted class selection if it's in the list
-        _class_idx = 0
-        if _saved_class and _saved_class in display_class_names:
+        # Use the widget's own session_state value if it already exists
+        # (avoids overriding the user's selection with the persisted value on re-render).
+        # Only fall back to _saved_class on the very first render of this widget.
+        _widget_key = f"{page_key}_class"
+        if _widget_key in st.session_state and st.session_state[_widget_key] in display_class_names:
+            _class_idx = display_class_names.index(st.session_state[_widget_key])
+        elif _saved_class and _saved_class in display_class_names:
             _class_idx = display_class_names.index(_saved_class)
+        else:
+            _class_idx = 0
 
         with _col_class:
             class_name = st.selectbox(
                 "Select Class", display_class_names,
                 index=_class_idx,
-                key=f"{page_key}_class",
+                key=_widget_key,
             )
 
     # ── TEACHER / other non-admin roles ──────────────────────────────────────
@@ -539,10 +545,14 @@ def render_class_term_session_selector(
             st.warning("⚠️ No class assignments found for your current role. Contact your administrator.")
             return None
 
-        # Restore persisted class if in teacher's filtered list
-        _class_idx = 0
-        if _saved_class and _saved_class in assigned_classes:
+        # Use the widget's own session_state value if it already exists
+        _widget_key = f"{page_key}_class"
+        if _widget_key in st.session_state and st.session_state[_widget_key] in assigned_classes:
+            _class_idx = assigned_classes.index(st.session_state[_widget_key])
+        elif _saved_class and _saved_class in assigned_classes:
             _class_idx = assigned_classes.index(_saved_class)
+        else:
+            _class_idx = 0
 
         # 3-column layout: Class (interactive) | Term (locked) | Session (locked)
         _col_class, _col_term, _col_session = st.columns(3)
@@ -551,7 +561,7 @@ def render_class_term_session_selector(
             class_name = st.selectbox(
                 "Select Class", assigned_classes,
                 index=_class_idx,
-                key=f"{page_key}_class",
+                key=_widget_key,
             )
 
         _term_display_val = _term_rmap.get(term, term)
