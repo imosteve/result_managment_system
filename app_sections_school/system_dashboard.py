@@ -425,18 +425,24 @@ def render_maintenance_tab():
     # System logs cleanup
     st.markdown("---")
     st.markdown("#### 📝 Log Management")
-    
-    col1, col2 = st.columns(2, vertical_alignment="bottom")
-    
-    with col1:
-        log_info = get_log_files_info()
-        st.info(f"**Total Log Size**: {log_info['total_size']}")
-        st.info(f"**Log Files**: {log_info['file_count']}")
-    
-    with col2:
-        days_to_keep = st.number_input("Keep logs from last (days)", min_value=1, max_value=365, value=30)
-        if st.button("🗑️ Clean Old Logs"):
+
+    log_info = get_log_files_info()
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Log Files", log_info['file_count'])
+    col2.metric("Total Size", log_info['total_size'])
+
+    st.markdown("**Clean old log entries**")
+    col_days, col_btn = st.columns([2, 1], vertical_alignment="bottom")
+    with col_days:
+        days_to_keep = st.number_input(
+            "Keep entries from last N days",
+            min_value=1, max_value=365, value=30,
+            key="log_days_to_keep"
+        )
+    with col_btn:
+        if st.button("🗑️ Clean Old Logs", key="clean_logs_btn"):
             clean_old_logs(days_to_keep)
+            st.rerun()
 
 
 def render_security_logs_tab():
@@ -461,10 +467,9 @@ def render_security_logs_tab():
     else:
         st.info("No logs found.")
     
-    # Download logs
+    # Download logs — must be rendered unconditionally (not inside a button click)
     st.markdown("---")
-    if st.button("⬇️ Download Full Logs"):
-        download_logs()
+    download_logs()
 
 
 def render_system_settings_tab():
@@ -556,7 +561,7 @@ def check_memory_health():
 def get_database_info():
     """Get database file information"""
     try:
-        db_path = DB_CONFIG['schools_dir']
+        db_path = st.session_state.get("school_db_path")
         if os.path.exists(db_path):
             size = os.path.getsize(db_path)
             size_mb = size / (1024 * 1024)
@@ -890,99 +895,185 @@ def clean_orphaned_records():
 
 
 def get_log_files_info():
-    """Get information about log files"""
+    """Get information about all log files (app.log + rotated backups)"""
     try:
         log_dir = 'logs'
         if not os.path.exists(log_dir):
-            return {'total_size': '0 MB', 'file_count': 0}
-        
+            return {'total_size': '0 MB', 'file_count': 0, 'files': []}
+
         total_size = 0
         file_count = 0
-        
-        for file in os.listdir(log_dir):
-            if file.endswith('.log'):
-                file_path = os.path.join(log_dir, file)
-                total_size += os.path.getsize(file_path)
+        files = []
+
+        for fname in os.listdir(log_dir):
+            fpath = os.path.join(log_dir, fname)
+            if not os.path.isfile(fpath):
+                continue
+            # Match app.log, app.log.1, app.log.2, error.log, error.log.1 …
+            if fname.endswith('.log') or (('.log.' in fname) and fname.split('.log.')[1].isdigit()):
+                size = os.path.getsize(fpath)
+                total_size += size
                 file_count += 1
-        
+                files.append({'name': fname, 'path': fpath, 'size': size})
+
         return {
             'total_size': f"{total_size / (1024 * 1024):.2f} MB",
-            'file_count': file_count
+            'file_count': file_count,
+            'files': files,
         }
     except Exception as e:
         logger.error(f"Error getting log info: {e}")
-        return {'total_size': '0 MB', 'file_count': 0}
+        return {'total_size': '0 MB', 'file_count': 0, 'files': []}
 
 
 def clean_old_logs(days_to_keep):
-    """Clean logs older than specified days"""
+    """
+    Remove log lines older than `days_to_keep` days from every log file.
+    Rotated backup files (app.log.1, app.log.2 …) are deleted entirely if
+    their newest line is older than the cutoff.
+    The active app.log is rewritten keeping only recent lines.
+    """
+    import re
+    # Matches the standard log timestamp prefix: 2026-03-12 16:24:24,276
+    TS_RE = re.compile(r'^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})')
+
+    def line_datetime(line):
+        m = TS_RE.match(line)
+        if m:
+            try:
+                return datetime.strptime(m.group(1), '%Y-%m-%d %H:%M:%S')
+            except ValueError:
+                pass
+        return None
+
     try:
         log_dir = 'logs'
         if not os.path.exists(log_dir):
-            st.info("No logs directory found")
+            st.info("No logs directory found.")
             return
-        
-        cutoff_date = datetime.now() - timedelta(days=days_to_keep)
-        deleted_count = 0
-        
-        with st.spinner(f"Cleaning logs older than {days_to_keep} days..."):
-            for file in os.listdir(log_dir):
-                if file.endswith('.log'):
-                    file_path = os.path.join(log_dir, file)
-                    file_time = datetime.fromtimestamp(os.path.getmtime(file_path))
-                    
-                    if file_time < cutoff_date:
-                        os.remove(file_path)
-                        deleted_count += 1
-            
-            time.sleep(1)
-        
-        st.success(f"✅ Cleaned {deleted_count} old log files")
+
+        cutoff = datetime.now() - timedelta(days=days_to_keep)
+        cleaned_files = 0
+        removed_lines = 0
+        deleted_files = 0
+
+        with st.spinner(f"Cleaning log entries older than {days_to_keep} day(s)..."):
+            for fname in sorted(os.listdir(log_dir)):
+                fpath = os.path.join(log_dir, fname)
+                if not os.path.isfile(fpath):
+                    continue
+                is_log = fname.endswith('.log') or (
+                    '.log.' in fname and fname.split('.log.')[1].isdigit()
+                )
+                if not is_log:
+                    continue
+
+                try:
+                    with open(fpath, 'r', encoding='utf-8', errors='replace') as f:
+                        lines = f.readlines()
+                except Exception:
+                    continue
+
+                if not lines:
+                    continue
+
+                # For rotated backups: if the NEWEST line is older than cutoff, delete entirely
+                is_rotated = '.log.' in fname
+                if is_rotated:
+                    newest_dt = None
+                    for line in reversed(lines):
+                        dt = line_datetime(line)
+                        if dt:
+                            newest_dt = dt
+                            break
+                    if newest_dt is None or newest_dt < cutoff:
+                        os.remove(fpath)
+                        deleted_files += 1
+                        continue
+
+                # For active logs: keep only lines newer than cutoff
+                # Lines with no timestamp are attached to the preceding entry — keep them
+                kept = []
+                current_keep = True
+                for line in lines:
+                    dt = line_datetime(line)
+                    if dt is not None:
+                        current_keep = dt >= cutoff
+                    if current_keep:
+                        kept.append(line)
+                    else:
+                        removed_lines += 1
+
+                if len(kept) < len(lines):
+                    with open(fpath, 'w', encoding='utf-8') as f:
+                        f.writelines(kept)
+                    cleaned_files += 1
+
+            time.sleep(0.5)
+
+        parts = []
+        if removed_lines:
+            parts.append(f"{removed_lines} old line(s) removed from {cleaned_files} file(s)")
+        if deleted_files:
+            parts.append(f"{deleted_files} rotated backup file(s) deleted")
+        if parts:
+            st.success("✅ " + "; ".join(parts))
+        else:
+            st.info(f"ℹ️ No log entries older than {days_to_keep} day(s) found.")
+
     except Exception as e:
         logger.error(f"Log cleanup failed: {e}")
         st.error(f"❌ Error cleaning logs: {str(e)}")
 
 
 def read_recent_logs(level="ALL", limit=100):
-    """Read recent log entries"""
+    """Read recent log entries from app.log"""
     try:
         log_file = 'logs/app.log'
         if not os.path.exists(log_file):
             return []
-        
-        with open(log_file, 'r', encoding='utf-8') as f:
+
+        with open(log_file, 'r', encoding='utf-8', errors='replace') as f:
             lines = f.readlines()
-        
-        recent_lines = lines[-limit:]
-        
+
+        # Filter by level first, then take the last `limit` lines
         if level != "ALL":
-            recent_lines = [line for line in recent_lines if level in line]
-        
-        return recent_lines
+            lines = [l for l in lines if level in l]
+
+        return lines[-limit:]
     except Exception as e:
         logger.error(f"Error reading logs: {e}")
         return []
 
 
-def download_logs():
-    """Download full log file"""
+def get_log_download_data():
+    """Return (content, filename) for the full log file, or (None, None) if unavailable."""
     try:
         log_file = 'logs/app.log'
-        if os.path.exists(log_file):
-            with open(log_file, 'r', encoding='utf-8') as f:
-                log_content = f.read()
-            
-            st.download_button(
-                label="⬇️ Download Logs",
-                data=log_content,
-                file_name=f"system_logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log",
-                mime="text/plain"
-            )
-        else:
-            st.error("Log file not found")
+        if not os.path.exists(log_file):
+            return None, None
+        with open(log_file, 'r', encoding='utf-8', errors='replace') as f:
+            content = f.read()
+        filename = f"system_logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+        return content, filename
     except Exception as e:
-        logger.error(f"Error downloading logs: {e}")
-        st.error(f"❌ Error downloading logs: {str(e)}")
+        logger.error(f"Error reading log for download: {e}")
+        return None, None
+
+
+def download_logs():
+    """Render a download button for the full log file (always visible — no nesting issue)."""
+    content, filename = get_log_download_data()
+    if content is not None:
+        st.download_button(
+            label="⬇️ Download Full Logs",
+            data=content,
+            file_name=filename,
+            mime="text/plain",
+            key="download_logs_btn",
+        )
+    else:
+        st.info("No log file found.")
 
 
 def get_system_information():
