@@ -265,9 +265,9 @@ def _render_score_preview_tab(students, score_map):
 
         existing = score_map.get(sn)
         if existing:
-            ca = int(existing['ca_score'] if isinstance(existing, dict) else existing[3] or 0)
-            exam = int(existing['exam_score'] if isinstance(existing, dict) else existing[4] or 0)
-            total = int(existing['total_score'] if isinstance(existing, dict) else existing[5] or ca + exam)
+            ca = int(existing['ca_score'] or 0 if isinstance(existing, dict) else existing[3] or 0)
+            exam = int(existing['exam_score'] or 0 if isinstance(existing, dict) else existing[4] or 0)
+            total = int(existing['total_score'] or 0 if isinstance(existing, dict) else existing[5] or ca + exam)
             grade = assign_grade(total)
         else:
             ca = exam = total = 0
@@ -384,8 +384,8 @@ def _render_mobile_score_entry(students, score_map, class_name, subject, session
         st.markdown("##### Enter Scores")
 
         existing = score_map.get(student_name)
-        current_ca = float(existing['ca_score'] if isinstance(existing, dict) else (existing[3] or 0)) if existing else 0.0
-        current_exam = float(existing['exam_score'] if isinstance(existing, dict) else (existing[4] or 0)) if existing else 0.0
+        current_ca = float(existing['ca_score'] or 0 if isinstance(existing, dict) else existing[3] or 0) if existing else 0.0
+        current_exam = float(existing['exam_score'] or 0 if isinstance(existing, dict) else existing[4] or 0) if existing else 0.0
 
         col1, col2, col3 = st.columns(3, vertical_alignment="bottom")
         with col1:
@@ -469,8 +469,8 @@ def _render_desktop_score_entry(students, score_map, class_name, subject, sessio
         if sn in student_scores:
             continue
         existing = score_map.get(sn)
-        ca = float(existing['ca_score'] if isinstance(existing, dict) else (existing[3] or 0)) if existing else 0.0
-        exam = float(existing['exam_score'] if isinstance(existing, dict) else (existing[4] or 0)) if existing else 0.0
+        ca = float(existing['ca_score'] or 0 if isinstance(existing, dict) else existing[3] or 0) if existing else 0.0
+        exam = float(existing['exam_score'] or 0 if isinstance(existing, dict) else existing[4] or 0) if existing else 0.0
         student_scores[sn] = {"S/N": str(idx), "Student": sn, "CA (30%)": ca, "Exam (70%)": exam}
 
     editable_rows = list(student_scores.values())
