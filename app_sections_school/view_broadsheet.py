@@ -69,7 +69,7 @@ def generate_broadsheet():
     # Check if this is SSS2 or SSS3
     is_sss2_or_sss3 = bool(re.match(r"SSS [23].*$", class_name))
     
-    students = get_enrolled_students(class_name, session)
+    students = get_enrolled_students(class_name, session, term)
     if not students:
         st.warning(f"⚠️ No students found for {class_name}.")
         return

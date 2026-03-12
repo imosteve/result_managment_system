@@ -179,7 +179,7 @@ def generate_tab():
     is_pri_class = bool(re.match(r"PRIMARY [123456].*$", class_name))
     is_primary_class = is_kg_class or is_nursery_class or is_pri_class
 
-    students = get_enrolled_students(class_name, session)
+    students = get_enrolled_students(class_name, session, term)
     if not students:
         st.warning(f"⚠️ No students found for {class_name} - {term} - {session}.")
         return
@@ -337,7 +337,7 @@ def email_tab():
     is_pri_class = bool(re.match(r"PRIMARY [123456].*$", class_name))
     is_primary_class = is_kg_class or is_nursery_class or is_pri_class
 
-    students = get_enrolled_students(class_name, session)
+    students = get_enrolled_students(class_name, session, term)
     if not students:
         st.warning("⚠️ No students found for this class.")
         return

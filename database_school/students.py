@@ -1,18 +1,25 @@
-# database/students.py
+# database_school/students.py
 """
-Student management — master registry and per-session enrollment.
+Student management — master registry and per-term enrollment.
 
 CONCEPTS
 ════════
 • students table  = master registry. One row per student, ever.
   student_name is the natural key used across all related tables.
 
-• class_session_students = enrollment. Links a student to a
-  class_session (class + academic year). Replaces the old per-term
-  student registration. Done ONCE per session — valid all 3 terms.
+• class_session_students = per-TERM enrollment.
+  One row per (student, class_session, term).
+  A student present for all 3 terms of a session has 3 rows.
+  A student who joins in Term 2 has rows for Second and Third only.
+  Adding/removing a student in Term 2 does NOT affect Term 1 or Term 3.
 
-• IMPORT / PROMOTION: use import_students_from_class() to bulk-enroll
-  students from a previous class into a new one (e.g. P4 → P5).
+• enrollment_id = class_session_students.id
+  The FK used by scores, comments, psychomotor_ratings, subject_selections.
+  Each enrollment_id is specific to one term — downstream data is
+  automatically term-scoped through this FK.
+
+• IMPORT / PROMOTION: import_students_from_class() bulk-enrolls students
+  from a previous class into a new one for all 3 terms by default.
 """
 
 import sqlite3
@@ -20,6 +27,8 @@ import logging
 from .connection import get_connection
 
 logger = logging.getLogger(__name__)
+
+VALID_TERMS = ("First", "Second", "Third")
 
 
 # ═════════════════════════════════════════════════════════════════
@@ -30,10 +39,6 @@ def create_student(student_name: str, gender: str = None,
                    email: str = None, date_of_birth: str = None,
                    admission_number: str = None,
                    school_fees_paid: str = "NO") -> bool:
-    """
-    Add a new student to the master registry.
-    Returns True on success, False if name or admission_number already exists.
-    """
     conn = get_connection()
     cursor = conn.cursor()
     try:
@@ -58,12 +63,6 @@ def create_student(student_name: str, gender: str = None,
 
 
 def get_all_students() -> list:
-    """
-    Return every student in the master registry, ordered by name.
-    Returns list of dicts:
-        {id, student_name, gender, email, date_of_birth,
-         admission_number, school_fees_paid, created_at}
-    """
     conn = get_connection()
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
@@ -79,7 +78,6 @@ def get_all_students() -> list:
 
 
 def student_exists(student_name: str) -> bool:
-    """Return True if a student with this name exists."""
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT 1 FROM students WHERE student_name = ?", (student_name,))
@@ -93,12 +91,6 @@ def update_student(student_name: str, new_name: str = None,
                    date_of_birth: str = None,
                    admission_number: str = None,
                    school_fees_paid: str = None) -> bool:
-    """
-    Update student details.
-    Renaming student_name cascades to class_session_students,
-    scores, comments etc. via ON UPDATE CASCADE.
-    Returns True on success, False on conflict or error.
-    """
     conn = get_connection()
     cursor = conn.cursor()
     try:
@@ -115,15 +107,12 @@ def update_student(student_name: str, new_name: str = None,
             updates["admission_number"] = admission_number
         if school_fees_paid is not None:
             updates["school_fees_paid"] = school_fees_paid
-
         if not updates:
-            return True  # nothing to update
-
+            return True
         set_clause = ", ".join(f"{k} = ?" for k in updates)
         values = list(updates.values()) + [student_name]
         cursor.execute(
-            f"UPDATE students SET {set_clause} WHERE student_name = ?",
-            values
+            f"UPDATE students SET {set_clause} WHERE student_name = ?", values
         )
         conn.commit()
         return True
@@ -138,11 +127,6 @@ def update_student(student_name: str, new_name: str = None,
 
 
 def delete_student(student_name: str) -> bool:
-    """
-    Delete a student from the master registry.
-    CASCADE removes all their enrollments, scores, comments, etc.
-    Use with caution — destroys all historical data for this student.
-    """
     conn = get_connection()
     cursor = conn.cursor()
     try:
@@ -157,35 +141,37 @@ def delete_student(student_name: str) -> bool:
 
 
 # ═════════════════════════════════════════════════════════════════
-# Enrollment (class_session_students)
+# Per-term enrollment (class_session_students)
 # ═════════════════════════════════════════════════════════════════
 
 def enroll_student(student_name: str, class_name: str,
-                   session: str) -> tuple:
+                   session: str, term: str) -> tuple:
     """
-    Enroll a student in a class for a session.
+    Enroll a student in a class for a specific term of a session.
     Auto-creates the student in the master registry if not already there.
-    The enrollment is valid for all three terms of the session.
+    Idempotent — safe to call if already enrolled (INSERT OR IGNORE).
 
     Args:
         student_name: student's full name
         class_name:   must have an open class_sessions row for this session
         session:      e.g. "2024/2025"
+        term:         "First", "Second", or "Third"
 
     Returns:
         (True, enrollment_id) on success
         (False, reason_string) on failure
     """
+    if term not in VALID_TERMS:
+        return False, f"Invalid term '{term}'. Must be one of {VALID_TERMS}."
+
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        # Ensure student exists in master registry
         cursor.execute(
             "INSERT OR IGNORE INTO students (student_name) VALUES (?)",
             (student_name.strip(),)
         )
 
-        # Resolve class_session_id
         cursor.execute("""
             SELECT id FROM class_sessions
             WHERE class_name = ? AND session = ?
@@ -199,21 +185,19 @@ def enroll_student(student_name: str, class_name: str,
             )
         class_session_id = row[0]
 
-        # Enroll (idempotent)
         cursor.execute("""
             INSERT OR IGNORE INTO class_session_students
-                (class_session_id, student_name, class_name, session)
-            VALUES (?, ?, ?, ?)
-        """, (class_session_id, student_name.strip(), class_name, session))
+                (class_session_id, student_name, class_name, session, term)
+            VALUES (?, ?, ?, ?, ?)
+        """, (class_session_id, student_name.strip(), class_name, session, term))
         conn.commit()
 
-        # Return enrollment id
         cursor.execute("""
             SELECT id FROM class_session_students
-            WHERE class_session_id = ? AND student_name = ?
-        """, (class_session_id, student_name.strip()))
+            WHERE class_session_id = ? AND student_name = ? AND term = ?
+        """, (class_session_id, student_name.strip(), term))
         enrollment_id = cursor.fetchone()[0]
-        logger.info(f"Enrolled '{student_name}' in '{class_name}' / '{session}'")
+        logger.info(f"Enrolled '{student_name}' in '{class_name}' / '{session}' / {term}")
         return True, enrollment_id
     except Exception as e:
         logger.error(f"Error enrolling student: {e}")
@@ -222,49 +206,88 @@ def enroll_student(student_name: str, class_name: str,
         conn.close()
 
 
+def enroll_student_all_terms(student_name: str, class_name: str,
+                              session: str) -> tuple:
+    """
+    Enroll a student in all 3 terms of a session at once.
+    Convenience wrapper for the common case.
+
+    Returns:
+        (True, {term: enrollment_id, ...}) on success
+        (False, reason_string) on first failure
+    """
+    ids = {}
+    for term in VALID_TERMS:
+        ok, result = enroll_student(student_name, class_name, session, term)
+        if not ok:
+            return False, result
+        ids[term] = result
+    return True, ids
+
+
 def bulk_enroll_students(student_names: list, class_name: str,
-                          session: str) -> dict:
+                          session: str, terms: tuple = VALID_TERMS) -> dict:
     """
-    Enroll multiple students at once.
-    Returns dict: {enrolled: [names], skipped: [names], errors: [{name, reason}]}
+    Enroll multiple students at once for the specified terms.
+
+    Args:
+        student_names: list of student name strings
+        class_name, session: context
+        terms: tuple of term strings to enroll for (default: all 3)
+
+    Returns:
+        dict: {enrolled: [names], errors: [{name, reason}]}
     """
-    results = {"enrolled": [], "skipped": [], "errors": []}
+    results = {"enrolled": [], "errors": []}
     for name in student_names:
         name = name.strip()
         if not name:
             continue
-        ok, detail = enroll_student(name, class_name, session)
-        if ok:
+        failed = False
+        for term in terms:
+            ok, detail = enroll_student(name, class_name, session, term)
+            if not ok and "already" not in str(detail).lower():
+                results["errors"].append({"name": name, "reason": detail})
+                failed = True
+                break
+        if not failed:
             results["enrolled"].append(name)
-        else:
-            results["errors"].append({"name": name, "reason": detail})
     return results
 
 
 def unenroll_student(student_name: str, class_name: str,
-                     session: str) -> bool:
+                     session: str, term: str) -> bool:
     """
-    Remove a student's enrollment from a class-session.
-    CASCADE deletes all their scores, comments, subject selections
-    for that session across all three terms.
-    USE WITH CAUTION.
+    Remove a student's enrollment from a specific term of a class-session.
+    CASCADE deletes all their scores, comments, psychomotor ratings, and
+    subject selections for that term only.
+    Other terms in the same session are NOT affected.
+
+    Args:
+        student_name, class_name, session: context
+        term: "First", "Second", or "Third" — only this term is removed
+
+    Returns True if a row was deleted.
     """
     conn = get_connection()
     cursor = conn.cursor()
     try:
         cursor.execute("""
             DELETE FROM class_session_students
-            WHERE student_name = ?
+            WHERE student_name = ? AND term = ?
               AND class_session_id = (
                   SELECT id FROM class_sessions
                   WHERE class_name = ? AND session = ?
               )
-        """, (student_name, class_name, session))
+        """, (student_name, term, class_name, session))
         conn.commit()
-        deleted = cursor.rowcount
+        deleted = cursor.rowcount > 0
         if deleted:
-            logger.info(f"Unenrolled '{student_name}' from '{class_name}' / '{session}'")
-        return deleted > 0
+            logger.info(
+                f"Unenrolled '{student_name}' from "
+                f"'{class_name}' / '{session}' / {term}"
+            )
+        return deleted
     except Exception as e:
         logger.error(f"Error unenrolling student: {e}")
         return False
@@ -272,12 +295,31 @@ def unenroll_student(student_name: str, class_name: str,
         conn.close()
 
 
-def get_enrolled_students(class_name: str, session: str) -> list:
+def unenroll_student_all_terms(student_name: str, class_name: str,
+                                session: str) -> int:
     """
-    Return all students enrolled in a class for a session.
+    Remove a student from ALL terms of a class-session.
+    Use when fully removing a student from a session (not just one term).
+    Returns count of term rows deleted (0-3).
+    """
+    count = 0
+    for term in VALID_TERMS:
+        if unenroll_student(student_name, class_name, session, term):
+            count += 1
+    return count
+
+
+def get_enrolled_students(class_name: str, session: str, term: str) -> list:
+    """
+    Return all students enrolled in a class for a specific term.
+
+    Args:
+        class_name, session: identify the class-session
+        term: "First", "Second", or "Third"
+
     Returns list of dicts:
-        {enrollment_id, student_name, class_name, session,
-         gender, admission_number, school_fees_paid, enrollment_date}
+        {enrollment_id, student_name, class_name, session, term,
+         gender, email, admission_number, school_fees_paid, enrollment_date}
     """
     conn = get_connection()
     conn.row_factory = sqlite3.Row
@@ -288,28 +330,29 @@ def get_enrolled_students(class_name: str, session: str) -> list:
             css.student_name,
             css.class_name,
             css.session,
+            css.term,
             s.gender,
             s.email,
             s.admission_number,
             s.school_fees_paid,
             css.enrollment_date
         FROM  class_session_students css
-        JOIN  students s           ON s.student_name = css.student_name
-        JOIN  class_sessions cs    ON cs.id = css.class_session_id
-        WHERE cs.class_name = ? AND cs.session = ?
+        JOIN  students s        ON s.student_name = css.student_name
+        JOIN  class_sessions cs ON cs.id = css.class_session_id
+        WHERE cs.class_name = ? AND cs.session = ? AND css.term = ?
         ORDER BY css.student_name
-    """, (class_name, session))
+    """, (class_name, session, term))
     rows = cursor.fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
 
 def get_enrollment_id(student_name: str, class_name: str,
-                      session: str) -> int | None:
+                      session: str, term: str) -> int | None:
     """
-    Return class_session_students.id for a student in a class/session.
+    Return class_session_students.id for a student in a class/session/term.
     Used as the FK when writing scores, comments, psychomotor, etc.
-    Returns None if student is not enrolled.
+    Returns None if student is not enrolled for that term.
     """
     conn = get_connection()
     cursor = conn.cursor()
@@ -320,15 +363,39 @@ def get_enrollment_id(student_name: str, class_name: str,
         WHERE  css.student_name = ?
           AND  cs.class_name   = ?
           AND  cs.session      = ?
-    """, (student_name, class_name, session))
+          AND  css.term        = ?
+    """, (student_name, class_name, session, term))
     row = cursor.fetchone()
     conn.close()
     return row[0] if row else None
 
 
-def get_students_not_enrolled_in(class_name: str, session: str) -> list:
+def get_student_enrolled_terms(student_name: str, class_name: str,
+                                session: str) -> list:
     """
-    Return master registry students NOT yet enrolled in this class/session.
+    Return the list of terms a student is enrolled in for a class/session.
+    e.g. ["First", "Second"] if they joined in Term 1 but left before Term 3.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT css.term
+        FROM   class_session_students css
+        JOIN   class_sessions cs ON cs.id = css.class_session_id
+        WHERE  css.student_name = ?
+          AND  cs.class_name   = ?
+          AND  cs.session      = ?
+        ORDER  BY css.term
+    """, (student_name, class_name, session))
+    rows = cursor.fetchall()
+    conn.close()
+    return [r[0] for r in rows]
+
+
+def get_students_not_enrolled_in(class_name: str, session: str,
+                                  term: str) -> list:
+    """
+    Return master registry students NOT enrolled in this class/session/term.
     Useful for the 'add students' picker UI.
     """
     conn = get_connection()
@@ -341,10 +408,10 @@ def get_students_not_enrolled_in(class_name: str, session: str) -> list:
             SELECT css.student_name
             FROM   class_session_students css
             JOIN   class_sessions cs ON cs.id = css.class_session_id
-            WHERE  cs.class_name = ? AND cs.session = ?
+            WHERE  cs.class_name = ? AND cs.session = ? AND css.term = ?
         )
         ORDER BY s.student_name
-    """, (class_name, session))
+    """, (class_name, session, term))
     rows = cursor.fetchall()
     conn.close()
     return [dict(r) for r in rows]
@@ -355,20 +422,40 @@ def get_students_not_enrolled_in(class_name: str, session: str) -> list:
 # ═════════════════════════════════════════════════════════════════
 
 def import_students_from_class(source_class: str, source_session: str,
-                                target_class: str, target_session: str) -> dict:
+                                target_class: str, target_session: str,
+                                terms: tuple = VALID_TERMS) -> dict:
     """
     Copy student enrollments from one class-session to another.
+    Enrolls each student in all specified terms of the target session.
 
-    Typical use: promotion.  E.g. copy all "Primary 4 / 2024-2025"
+    Typical use: promotion. E.g. copy all "Primary 4 / 2024-2025"
     students into "Primary 5 / 2025-2026".
 
     Target class_session must already exist (admin opens it first).
     Existing enrollments in the target are skipped (INSERT OR IGNORE).
 
+    Args:
+        source_class, source_session: where to copy from
+        target_class, target_session: where to copy to
+        terms: which terms to enroll in (default: all 3)
+
     Returns:
         dict: {imported: int, skipped: int, error: str or None}
     """
-    source_students = get_enrolled_students(source_class, source_session)
+    # Get distinct students from ANY term in the source
+    conn = get_connection()
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT DISTINCT css.student_name
+        FROM   class_session_students css
+        JOIN   class_sessions cs ON cs.id = css.class_session_id
+        WHERE  cs.class_name = ? AND cs.session = ?
+        ORDER  BY css.student_name
+    """, (source_class, source_session))
+    source_students = [r["student_name"] for r in cursor.fetchall()]
+    conn.close()
+
     if not source_students:
         return {
             "imported": 0, "skipped": 0,
@@ -378,7 +465,6 @@ def import_students_from_class(source_class: str, source_session: str,
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        # Verify target class_session exists
         cursor.execute("""
             SELECT id FROM class_sessions
             WHERE class_name = ? AND session = ?
@@ -395,17 +481,20 @@ def import_students_from_class(source_class: str, source_session: str,
         target_cs_id = row[0]
 
         imported = skipped = 0
-        for s in source_students:
-            name = s["student_name"]
+        for name in source_students:
             cursor.execute(
                 "INSERT OR IGNORE INTO students (student_name) VALUES (?)", (name,)
             )
-            cursor.execute("""
-                INSERT OR IGNORE INTO class_session_students
-                    (class_session_id, student_name, class_name, session)
-                VALUES (?, ?, ?, ?)
-            """, (target_cs_id, name, target_class, target_session))
-            if cursor.rowcount:
+            student_imported = False
+            for term in terms:
+                cursor.execute("""
+                    INSERT OR IGNORE INTO class_session_students
+                        (class_session_id, student_name, class_name, session, term)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (target_cs_id, name, target_class, target_session, term))
+                if cursor.rowcount:
+                    student_imported = True
+            if student_imported:
                 imported += 1
             else:
                 skipped += 1
@@ -413,7 +502,8 @@ def import_students_from_class(source_class: str, source_session: str,
         conn.commit()
         logger.info(
             f"Imported {imported} students from "
-            f"'{source_class}/{source_session}' → '{target_class}/{target_session}'"
+            f"'{source_class}/{source_session}' → "
+            f"'{target_class}/{target_session}' for terms {terms}"
         )
         return {"imported": imported, "skipped": skipped, "error": None}
     except Exception as e:

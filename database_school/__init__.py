@@ -57,6 +57,9 @@ from .students import (
     get_enrollment_id,
     get_students_not_enrolled_in,
     import_students_from_class,
+    enroll_student_all_terms,
+    unenroll_student_all_terms,
+    get_student_enrolled_terms,
 )
 
 # ── Scores ───────────────────────────────────────────────────────────────────

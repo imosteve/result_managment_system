@@ -48,7 +48,7 @@ def save_score(student_name: str, class_name: str, session: str,
     NOTE: total_score is auto-computed by the DB (ca_score + exam_score).
           Do NOT pass it as an argument.
     """
-    enrollment_id = get_enrollment_id(student_name, class_name, session)
+    enrollment_id = get_enrollment_id(student_name, class_name, session, term)
     if enrollment_id is None:
         logger.error(
             f"save_score: no enrollment for '{student_name}' "
@@ -102,12 +102,12 @@ def save_scores_bulk(scores: list, updated_by: str = "") -> dict:
     try:
         for s in scores:
             enrollment_id = get_enrollment_id(
-                s["student_name"], s["class_name"], s["session"]
+                s["student_name"], s["class_name"], s["session"], s["term"]
             )
             if not enrollment_id:
                 result["failed"] += 1
                 result["errors"].append(
-                    f"No enrollment: {s['student_name']} / {s['class_name']} / {s['session']}"
+                    f"No enrollment: {s['student_name']} / {s['class_name']} / {s['session']} / {s['term']}"
                 )
                 continue
             try:

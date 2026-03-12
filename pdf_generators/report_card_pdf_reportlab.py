@@ -233,7 +233,7 @@ def generate_report_card(student_name, class_name, term, session, is_secondary_c
     role = st.session_state.role
 
     # Fetch enrolled students for class size and student gender
-    students = get_enrolled_students(class_name, session)
+    students = get_enrolled_students(class_name, session, term)
     student_data = next((s for s in students if s["student_name"] == student_name), None)
     if not student_data:
         return None

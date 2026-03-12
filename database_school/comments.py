@@ -33,7 +33,7 @@ def create_comment(student_name, class_name, term, session,
     Returns:
         bool: True on success
     """
-    enrollment_id = get_enrollment_id(student_name, class_name, session)
+    enrollment_id = get_enrollment_id(student_name, class_name, session, term)
     if enrollment_id is None:
         logger.error(
             f"create_comment: no enrollment for '{student_name}' "
@@ -102,7 +102,7 @@ def delete_comment(student_name, class_name, term, session):
     Returns:
         bool: True if deleted, False on error or not found.
     """
-    enrollment_id = get_enrollment_id(student_name, class_name, session)
+    enrollment_id = get_enrollment_id(student_name, class_name, session, term)
     if enrollment_id is None:
         return False
 

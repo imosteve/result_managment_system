@@ -53,6 +53,10 @@ def add_subjects():
         st.session_state.show_clear_selections_confirm = False
     if "clear_selections_info" not in st.session_state:
         st.session_state.clear_selections_info = None
+    if "show_import_selections_confirm" not in st.session_state:
+        st.session_state.show_import_selections_confirm = False
+    if "import_selections_info" not in st.session_state:
+        st.session_state.import_selections_info = None
 
     # ── Session / term context ────────────────────────────────────────────────
     _ctx = render_class_term_session_selector("manage_subjects", allow_term_session_override=True)
@@ -185,6 +189,66 @@ def add_subjects():
                         st.error(f"❌ Error clearing selections: {str(e)}")
         
         confirm_clear_selections()
+
+    # Confirmation dialog for importing previous term selections
+    if st.session_state.show_import_selections_confirm and st.session_state.import_selections_info:
+        @st.dialog("Confirm Import Subject Selections")
+        def confirm_import_selections():
+            info = st.session_state.import_selections_info
+            st.markdown("### Import subject selections from a previous term?")
+            st.info(f"**From:** {info['source_term']} — {info['source_session']}")
+            st.info(f"**Into:** {info['target_term']} — {info['target_session']}")
+            st.info(f"**Class:** {info['class_name']}")
+            st.warning("⚠️ This will overwrite any existing selections in the target term for students who have source data.")
+
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("🚫 Cancel", key="cancel_import_selections", type="secondary", width="stretch"):
+                    ActivityTracker.update()
+                    st.session_state.show_import_selections_confirm = False
+                    st.session_state.import_selections_info = None
+                    st.rerun()
+            with col2:
+                if st.button("📥 Import", key="confirm_import_selections", type="primary", width="stretch"):
+                    ActivityTracker.update()
+                    try:
+                        source_selections = get_all_student_subject_selections(
+                            info["class_name"], info["source_term"], info["source_session"]
+                        )
+                        if not source_selections:
+                            st.warning("⚠️ No selections found in the source term.")
+                            st.session_state.show_import_selections_confirm = False
+                            st.session_state.import_selections_info = None
+                            st.rerun()
+                            return
+
+                        # Group by student
+                        student_subject_map = {}
+                        for student_name, subject_name in source_selections:
+                            student_subject_map.setdefault(student_name, []).append(subject_name)
+
+                        # Only import for students enrolled in the target term
+                        target_student_names = {s["student_name"] for s in info["target_students"]}
+                        imported, skipped = 0, 0
+                        for student_name, subject_list in student_subject_map.items():
+                            if student_name in target_student_names:
+                                save_student_subject_selections(
+                                    student_name, subject_list,
+                                    info["class_name"], info["target_term"], info["target_session"]
+                                )
+                                imported += 1
+                            else:
+                                skipped += 1
+
+                        st.session_state.show_import_selections_confirm = False
+                        st.session_state.import_selections_info = None
+                        st.success(f"✅ Imported selections for {imported} student(s). {skipped} skipped (not enrolled in target term).")
+                        time.sleep(1)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Error importing selections: {str(e)}")
+
+        confirm_import_selections()
 
     # Tabs for different operations
     if is_senior_class:
@@ -356,7 +420,7 @@ def add_subjects():
                 st.session_state.manage_subjects_tab_tracker = 3
 
             st.subheader("View Subject Selections")
-            students = get_enrolled_students(class_name, session)
+            students = get_enrolled_students(class_name, session, term)
             if not students:
                 st.warning(f"⚠️ No students enrolled in {class_name} for {session}.")
             elif not subjects:
@@ -405,7 +469,7 @@ def add_subjects():
             if role == "subject_teacher":
                 st.info("Subject Teachers cannot manage student subject selections.")
             else:
-                students = get_enrolled_students(class_name, session)
+                students = get_enrolled_students(class_name, session, term)
                 if not students:
                     st.warning(f"⚠️ No students enrolled in {class_name} for {session}.")
                 elif not subjects:
@@ -454,7 +518,7 @@ def add_subjects():
                     col1, col2 = st.columns(2)
 
                     with col1:
-                        st.markdown("#### Assign All Subjects to All Students")
+                        st.markdown("##### Batch Assign All Subjects")
                         if st.button("📚 Assign All Subjects", key="assign_all"):
                             ActivityTracker.update()
                             try:
@@ -469,7 +533,7 @@ def add_subjects():
                                 st.error(f"❌ Error in batch assignment: {str(e)}")
 
                     with col2:
-                        st.markdown("#### Clear All Selections")
+                        st.markdown("##### Clear All Selections")
                         if st.button("🗑️ Clear All Selections", key="clear_all_selections_btn"):
                             ActivityTracker.update()
                             st.session_state.show_clear_selections_confirm = True
@@ -481,3 +545,45 @@ def add_subjects():
                                 "student_count": len(students)
                             }
                             st.rerun()
+
+                    st.divider()
+
+                    st.markdown("#### Import from Previous Term")
+                    st.caption("⚠️ Select a different term or session.")
+                    VALID_TERMS = ["First", "Second", "Third"]
+                    all_sessions = get_all_sessions() or []
+                    session_list = sorted({s["session"] if isinstance(s, dict) else s for s in all_sessions}, reverse=True)
+                    if not session_list:
+                        session_list = [session]
+                    col1, col2, col3 = st.columns([2, 2, 1], vertical_alignment="bottom")
+                    with col1:
+                        source_term = st.selectbox(
+                            "Source Term",
+                            VALID_TERMS,
+                            index=VALID_TERMS.index(term) if term in VALID_TERMS else 0,
+                            key="import_source_term"
+                        )
+                    with col2:
+                        source_session = st.selectbox(
+                            "Source Session",
+                            session_list,
+                            index=session_list.index(session) if session in session_list else 0,
+                            key="import_source_session"
+                        )
+                    with col3:
+                        is_same = source_term == term and source_session == session
+                        st.markdown("&nbsp;", unsafe_allow_html=True)
+                        if st.button("📥 Import", key="import_prev_term_btn", disabled=is_same, type="primary"):
+                            ActivityTracker.update()
+                            st.session_state.show_import_selections_confirm = True
+                            st.session_state.import_selections_info = {
+                                "class_name": class_name,
+                                "source_term": source_term,
+                                "source_session": source_session,
+                                "target_term": term,
+                                "target_session": session,
+                                "target_students": [dict(s) for s in students],
+                            }
+                            st.rerun()
+                        if is_same:
+                            st.caption("⚠️ Select a different term or session.")

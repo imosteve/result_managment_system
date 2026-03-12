@@ -705,7 +705,7 @@ def build_class_broadsheet_data(class_name, term, session, user_id, role, sort_b
     """Build broadsheet data for a single class"""
     is_sss2_or_sss3 = bool(re.match(r"SSS [23].*$", class_name))
 
-    students = get_enrolled_students(class_name, session)
+    students = get_enrolled_students(class_name, session, term)
     subjects = get_subjects_by_class(class_name)
 
     if not students or not subjects:

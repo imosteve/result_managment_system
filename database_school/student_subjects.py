@@ -46,7 +46,7 @@ def save_student_subject_selections(student_name, selected_subjects,
         selected_subjects: list of subject name strings
         class_name, term, session: context
     """
-    enrollment_id = get_enrollment_id(student_name, class_name, session)
+    enrollment_id = get_enrollment_id(student_name, class_name, session, term)
     if enrollment_id is None:
         logger.error(
             f"save_student_subject_selections: no enrollment for "

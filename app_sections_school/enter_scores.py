@@ -154,8 +154,7 @@ def _get_accessible_students(class_name: str, session: str, term: str,
                               user_id: int, role: str,
                               subject_name: str, is_senior_class: bool) -> list:
     try:
-        # New schema: get_enrolled_students(class_name, session) → [{student_name,...}]
-        all_students = get_enrolled_students(class_name, session)
+        all_students = get_enrolled_students(class_name, session, term)
 
         if is_senior_class and subject_name:
             filtered = []

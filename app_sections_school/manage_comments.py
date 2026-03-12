@@ -59,7 +59,7 @@ def manage_comments():
     session    = _ctx["session"]
     ActivityTracker.watch_value("manage_comments_class_selector", f"{class_name}_{session}_{term}")
 
-    students = get_enrolled_students(class_name, session)
+    students = get_enrolled_students(class_name, session, term)
     if not students:
         st.warning(f"⚠️ No students enrolled for {class_name} - {session}.")
         return

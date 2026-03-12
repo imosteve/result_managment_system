@@ -49,7 +49,7 @@ def register_students():
     open_class_for_session(class_name, session)
 
     # ── Load enrolled students ─────────────────────────────────────────────────
-    students = get_enrolled_students(class_name, session)
+    students = get_enrolled_students(class_name, session, term)
 
     inject_metric_css()
     
@@ -185,7 +185,7 @@ def register_students():
                                    email=new_email.strip() or None,
                                    admission_number=new_admission_no or None,
                                    school_fees_paid=fees_paid)
-                    ok, reason = enroll_student(new_name, class_name, session)
+                    ok, reason = enroll_student(new_name, class_name, session, term)
                     if ok:
                         st.success("✅ Student added and enrolled successfully!")
                         st.session_state.student_form_counter += 1
@@ -257,7 +257,7 @@ def register_students():
                                email=email,
                                admission_number=admission_no or None,
                                school_fees_paid=fees_paid or "NO")
-                ok, reason = enroll_student(name, class_name, session)
+                ok, reason = enroll_student(name, class_name, session, term)
                 if ok:
                     success_count += 1
                     processed_names.add(name.lower())
@@ -302,7 +302,7 @@ def register_students():
                         c1, c2 = st.columns(2)
                         if c1.button("✅ Unenroll", key="confirm_unenroll_ok"):
                             ActivityTracker.update()
-                            if unenroll_student(student_to_remove, class_name, session):
+                            if unenroll_student(student_to_remove, class_name, session, term):
                                 st.success("✅ Student unenrolled.")
                             else:
                                 st.error("❌ Failed to unenroll student.")
@@ -330,7 +330,7 @@ def register_students():
                             ActivityTracker.update()
                             removed = 0
                             for s in students:
-                                if unenroll_student(s["student_name"], class_name, session):
+                                if unenroll_student(s["student_name"], class_name, session, term):
                                     removed += 1
                             st.success(f"✅ Unenrolled {removed} student(s).")
                             st.rerun()
