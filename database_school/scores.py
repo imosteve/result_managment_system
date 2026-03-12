@@ -267,9 +267,9 @@ def get_scores_for_subject(class_name: str, session: str,
                ON sc.enrollment_id = css.id
               AND sc.subject_name  = ?
               AND sc.term          = ?
-        WHERE cs.class_name = ? AND cs.session = ?
+        WHERE cs.class_name = ? AND cs.session = ? AND css.term = ?
         ORDER BY css.student_name
-    """, (subject_name, term, class_name, session))
+    """, (subject_name, term, class_name, session, term))
     rows = cursor.fetchall()
     conn.close()
     return [dict(r) for r in rows]
@@ -330,6 +330,7 @@ def get_grade_distribution(student_name: str, class_name: str,
             FROM   scores sc
             JOIN   class_session_students css
                        ON css.student_name = sc.student_name
+                      AND css.term         = sc.term
             JOIN   class_sessions cs ON cs.id = css.class_session_id
             JOIN   student_subject_selections sss
                        ON sss.enrollment_id = css.id
@@ -398,6 +399,7 @@ def get_student_grand_totals(class_name: str, session: str, term: str) -> list:
             FROM   scores sc
             JOIN   class_session_students css
                        ON css.student_name = sc.student_name
+                      AND css.term         = sc.term
             JOIN   class_sessions cs ON cs.id = css.class_session_id
             JOIN   student_subject_selections sss
                        ON sss.enrollment_id = css.id
