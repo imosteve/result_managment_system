@@ -257,38 +257,55 @@ def _render_score_preview_tab(students, score_map):
         return
 
     preview_data = {}
-    for idx, student in enumerate(students, 1):
+    for student in students:
         sn = student['student_name'] if isinstance(student, dict) else student[1]
         if sn in preview_data:
             continue
-
         existing = score_map.get(sn)
         if existing:
-            ca = int(existing['ca_score'] or 0 if isinstance(existing, dict) else existing[3] or 0)
-            exam = int(existing['exam_score'] or 0 if isinstance(existing, dict) else existing[4] or 0)
+            ca    = int(existing['ca_score']    or 0 if isinstance(existing, dict) else existing[3] or 0)
+            exam  = int(existing['exam_score']  or 0 if isinstance(existing, dict) else existing[4] or 0)
             total = int(existing['total_score'] or 0 if isinstance(existing, dict) else existing[5] or ca + exam)
             grade = assign_grade(total)
         else:
             ca = exam = total = 0
             grade = assign_grade(0)
+        preview_data[sn] = {"Student": sn, "CA": ca, "Exam": exam, "Total": total, "Grade": grade}
 
-        preview_data[sn] = {
-            "S/N": str(idx), "Student": sn,
-            "CA": str(ca), "Exam": str(exam), "Total": str(total), "Grade": grade
-        }
+    # Compute subject positions (rank by Total descending, ties share same rank)
+    sorted_items = sorted(preview_data.items(), key=lambda x: x[1]["Total"], reverse=True)
+    rank = 1
+    for i, (sn, row) in enumerate(sorted_items):
+        if i > 0 and row["Total"] != sorted_items[i - 1][1]["Total"]:
+            rank = i + 1
+        preview_data[sn]["Position"] = rank if row["Total"] > 0 else "-"
+
+    # Build display rows with S/N added back
+    rows = []
+    for idx, (sn, row) in enumerate(preview_data.items(), 1):
+        rows.append({
+            "S/N":      str(idx),
+            "Student":  sn,
+            "CA":       str(row["CA"]),
+            "Exam":     str(row["Exam"]),
+            "Total":    str(row["Total"]),
+            "Grade":    row["Grade"],
+            "Position": str(row["Position"]),
+        })
 
     st.dataframe(
-        pd.DataFrame(list(preview_data.values())),
+        pd.DataFrame(rows),
         column_config={
-            "S/N": st.column_config.TextColumn("S/N", width="small"),
-            "Student": st.column_config.TextColumn("Student", width="medium"),
-            "CA": st.column_config.TextColumn("CA", width="small"),
-            "Exam": st.column_config.TextColumn("Exam", width="small"),
-            "Total": st.column_config.TextColumn("Total", width="small"),
-            "Grade": st.column_config.TextColumn("Grade", width="small"),
+            "S/N":      st.column_config.TextColumn("S/N",      width=20),
+            "Student":  st.column_config.TextColumn("Student",  width="medium"),
+            "CA":       st.column_config.TextColumn("CA",       width="small"),
+            "Exam":     st.column_config.TextColumn("Exam",     width="small"),
+            "Total":    st.column_config.TextColumn("Total",    width="small"),
+            "Grade":    st.column_config.TextColumn("Grade",    width="small"),
+            "Position": st.column_config.TextColumn("Position", width="small"),
         },
         hide_index=True, width="stretch",
-        height=35 * len(preview_data) + 38
+        height=35 * len(rows) + 38
     )
 
 

@@ -338,18 +338,19 @@ def generate_report_card(student_name, class_name, term, session, is_secondary_c
             remark = remarks.get(subj_grade, ' ')
 
             subjects_data.append({
-                'subject': subject_name,
-                'test':  int(score["ca_score"])    if score["ca_score"]    is not None else "-",
-                'exam':  int(score["exam_score"])  if score["exam_score"]  is not None else "-",
-                'total': int(score["total_score"]) if score["total_score"] is not None else "-",
-                'grade': subj_grade,
-                'remark': remark
+                'subject':   subject_name,
+                'test':      int(score["ca_score"])    if score["ca_score"]    is not None else "-",
+                'exam':      int(score["exam_score"])  if score["exam_score"]  is not None else "-",
+                'total':     int(score["total_score"]) if score["total_score"] is not None else "-",
+                'grade':     subj_grade,
+                'remark':    remark,
+                'position':  format_ordinal(int(score["position"])) if score.get("position") else "-",
             })
         else:
             subjects_data.append({
                 'subject': subject_name,
                 'test': "-", 'exam': "-", 'total': "-",
-                'grade': "-", 'remark': ' '
+                'grade': "-", 'remark': ' ', 'position': "-",
             })
 
     # Next term info
@@ -528,6 +529,7 @@ def generate_report_card(student_name, class_name, term, session, is_secondary_c
             Paragraph('<b>Exam<br/>(70%)</b>', ParagraphStyle('Header', fontSize=10, fontName=FONT_NAME_BOLD, alignment=TA_CENTER)),
             Paragraph('<b>Total<br/>(100%)</b>', ParagraphStyle('Header', fontSize=10, fontName=FONT_NAME_BOLD, alignment=TA_CENTER)),
             Paragraph('<b>Grade</b>', ParagraphStyle('Header', fontSize=10, fontName=FONT_NAME_BOLD, alignment=TA_CENTER)),
+            Paragraph('<b>Position</b>', ParagraphStyle('Header', fontSize=10, fontName=FONT_NAME_BOLD, alignment=TA_CENTER)),
             Paragraph('<b>Remarks</b>', ParagraphStyle('Header', fontSize=10, fontName=FONT_NAME_BOLD, alignment=TA_CENTER))
         ]
         
@@ -542,6 +544,7 @@ def generate_report_card(student_name, class_name, term, session, is_secondary_c
                 Paragraph(str(subj['exam']), cell_style),
                 Paragraph(str(subj['total']), cell_style),
                 Paragraph(subj['grade'], cell_style),
+                Paragraph(str(subj.get('position', '-')), cell_style),
                 Paragraph(subj['remark'], cell_style)
             ])
         
@@ -553,10 +556,11 @@ def generate_report_card(student_name, class_name, term, session, is_secondary_c
             Paragraph(f'<b>{total_exam}</b>', total_style),
             Paragraph(f'<b>{grand_total}</b>', total_style),
             Paragraph('', total_style),
+            Paragraph('', total_style),
             Paragraph('', total_style)
         ])
         
-        subjects_table = Table(subjects_table_data, colWidths=[215, 52, 52, 52, 52, 97])
+        subjects_table = Table(subjects_table_data, colWidths=[175, 48, 48, 48, 45, 52, 84])
         subjects_table.setStyle(TableStyle([
             ('GRID', (0, 0), (-1, -1), 1, colors.black),
             ('BACKGROUND', (0, 0), (-1, 0), colors.white),
