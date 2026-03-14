@@ -204,14 +204,14 @@ def create_header(class_name, term, session, sizing):
         text_content = [
             Paragraph(SCHOOL_NAME, school_name_style),
             Paragraph(SCHOOL_ADDRESS, address_style),
-            Paragraph(f"BROADSHEET FOR {class_name} - {term}, {session} SESSION", title_style)
+            Paragraph(f"BROADSHEET FOR {class_name} - {term.upper()} TERM, {session} SESSION", title_style)
         ]
         header_data = [[logo, text_content]]
     else:
         text_content = [
             Paragraph(SCHOOL_NAME, school_name_style),
             Paragraph(SCHOOL_ADDRESS, address_style),
-            Paragraph(f"BROADSHEET FOR {class_name} - {term}, {session} SESSION", title_style)
+            Paragraph(f"BROADSHEET FOR {class_name} - {term.upper()} TERM, {session} SESSION", title_style)
         ]
         header_data = [[text_content]]
     
