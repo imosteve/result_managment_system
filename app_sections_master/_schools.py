@@ -11,6 +11,10 @@ import streamlit as st
 import pandas as pd
 import logging
 import time
+import os
+import io
+import zipfile
+import sqlite3
 from main_utils import inject_login_css
 
 from database_master import (
@@ -26,6 +30,8 @@ from database_master import (
     update_platform_admin_email,
     delete_platform_admin,
 )
+from database_master.schools import get_school_db_path
+from database_master.connection import SCHOOLS_DB_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -42,10 +48,11 @@ def render_schools_section():
 
     inject_login_css("templates/tabs_styles.css")
 
-    sub1, sub2, sub3 = st.tabs([
+    sub1, sub2, sub3, sub4 = st.tabs([
         "🏫 All Schools",
         "➕ Register School",
         "👤 Platform Admins",
+        "🗄️ School Databases",
     ])
     with sub1:
         _all_schools()
@@ -53,6 +60,8 @@ def render_schools_section():
         _register_school()
     with sub3:
         _platform_admins()
+    with sub4:
+        _school_databases()
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -538,3 +547,198 @@ def _platform_admins():
                         time.sleep(0.5); st.rerun()
                     else:
                         st.error("❌ Delete failed — check logs.")
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Sub-tab 4  ·  School Databases
+# ═════════════════════════════════════════════════════════════════════════════
+
+def _get_school_conn(db_path: str):
+    """Open a read-only-style connection to a school's SQLite DB."""
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def _school_db_size(db_path: str) -> str:
+    try:
+        size = os.path.getsize(db_path) / (1024 * 1024)
+        return f"{size:.3f} MB"
+    except Exception:
+        return "?"
+
+
+def _read_school_users(db_path: str) -> list:
+    """Return all users from a school DB as list of dicts."""
+    try:
+        conn = _get_school_conn(db_path)
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, username, email, role, password
+            FROM   users
+            ORDER  BY CASE role
+                WHEN 'superadmin' THEN 1
+                WHEN 'admin'      THEN 2
+                ELSE 3
+            END, username
+        """)
+        rows = [dict(r) for r in cursor.fetchall()]
+        conn.close()
+        return rows
+    except Exception as e:
+        return [{"error": str(e)}]
+
+
+def _school_databases():
+    schools = get_all_schools()
+
+    if not schools:
+        st.info("No schools registered yet.")
+        return
+
+    st.caption(
+        "Download individual or all school databases, "
+        "and inspect school user accounts (including passwords) from here."
+    )
+
+    # ── Download ALL as ZIP ───────────────────────────────────────────────
+    st.markdown("#### ⬇️ Download All School Databases")
+
+    existing = [s for s in schools if os.path.exists(get_school_db_path(s["school_code"]))]
+    missing  = [s for s in schools if not os.path.exists(get_school_db_path(s["school_code"]))]
+
+    if missing:
+        st.warning(
+            f"⚠️ {len(missing)} school DB file(s) not found on disk: "
+            + ", ".join(f"`{s['school_code']}`" for s in missing)
+        )
+
+    if existing:
+        if st.button("📦 Build ZIP of All School DBs", key="zip_all_btn", type="primary"):
+            with st.spinner(f"Packaging {len(existing)} database(s)…"):
+                buf = io.BytesIO()
+                with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+                    for s in existing:
+                        db_path = get_school_db_path(s["school_code"])
+                        zf.write(db_path, arcname=f"{s['school_code']}.db")
+                buf.seek(0)
+            st.download_button(
+                label=f"⬇️ Download all_schools.zip  ({len(existing)} databases)",
+                data=buf,
+                file_name="all_schools.zip",
+                mime="application/zip",
+                key="zip_all_download",
+            )
+    else:
+        st.info("No school database files found on disk.")
+
+    st.divider()
+
+    # ── Per-school section ────────────────────────────────────────────────
+    st.markdown("#### 🏫 Per-School: Download & User Credentials")
+
+    # Search filter
+    q = st.text_input(
+        "Filter schools",
+        placeholder="Name, code or domain…",
+        key="school_db_search",
+        label_visibility="collapsed",
+    )
+    visible = schools
+    if q:
+        ql = q.lower()
+        visible = [
+            s for s in visible
+            if ql in s["school_name"].lower()
+            or ql in s["school_code"].lower()
+            or ql in s["email_domain"].lower()
+        ]
+
+    if not visible:
+        st.warning("No schools match your search.")
+        return
+
+    for school in visible:
+        code    = school["school_code"]
+        db_path = get_school_db_path(code)
+        exists  = os.path.exists(db_path)
+        icon    = "🟢" if school["status"] == "active" else "🔴"
+        size    = _school_db_size(db_path) if exists else "file missing"
+
+        with st.expander(
+            f"{icon} **{school['school_name']}** — `{code}` · {size}",
+            expanded=False,
+        ):
+            col_info, col_dl = st.columns([3, 1])
+
+            with col_info:
+                st.markdown(f"**Domain:** `{school['email_domain']}`")
+                st.markdown(f"**DB file:** `data/schools/{school['school_code']}.db`")
+                st.markdown(f"**Status:** {icon} {school['status'].title()}")
+                st.markdown(f"**Size:** {size}")
+
+            with col_dl:
+                if exists:
+                    try:
+                        with open(db_path, "rb") as f:
+                            raw = f.read()
+                        st.download_button(
+                            label=f"⬇️ Download DB",
+                            data=raw,
+                            file_name=f"{code}.db",
+                            mime="application/octet-stream",
+                            key=f"dl_db_{code}",
+                            use_container_width=True,
+                        )
+                    except Exception as e:
+                        st.error(f"Read error: {e}")
+                else:
+                    st.error("DB file not found")
+
+            # ── User credentials ──────────────────────────────────────────
+            st.markdown("---")
+            st.markdown("##### 👤 School User Accounts")
+
+            if not exists:
+                st.warning("Database file not found — cannot read users.")
+            else:
+                users = _read_school_users(db_path)
+
+                if users and "error" in users[0]:
+                    st.error(f"Could not read users: {users[0]['error']}")
+                elif not users:
+                    st.info("No user accounts found in this database.")
+                else:
+                    # Split into admin-level and teachers
+                    admins   = [u for u in users if u["role"] in ("superadmin", "admin")]
+                    teachers = [u for u in users if u["role"] == "teacher"]
+
+                    if admins:
+                        st.markdown("**Admin & Superadmin accounts:**")
+                        admin_df = pd.DataFrame(admins)[["username", "email", "role", "password"]]
+                        admin_df.columns = ["Username", "Email", "Role", "Password"]
+                        st.dataframe(
+                            admin_df,
+                            use_container_width=True,
+                            hide_index=True,
+                            column_config={
+                                "Password": st.column_config.TextColumn("Password", width="medium"),
+                            },
+                        )
+
+                    if teachers:
+                        with st.expander(
+                            f"👩‍🏫 {len(teachers)} Teacher account(s) — click to expand",
+                            expanded=False,
+                        ):
+                            teacher_df = pd.DataFrame(teachers)[["username", "email", "role", "password"]]
+                            teacher_df.columns = ["Username", "Email", "Role", "Password"]
+                            st.dataframe(
+                                teacher_df,
+                                use_container_width=True,
+                                hide_index=True,
+                            )
+
+                    st.caption(
+                        f"Total: {len(admins)} admin(s) · {len(teachers)} teacher(s)"
+                    )
