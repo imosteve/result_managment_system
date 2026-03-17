@@ -199,7 +199,7 @@ def get_classes_for_session(session: str) -> list:
             cs.session,
             cs.is_active,
             c.description,
-            COUNT(css.id)   AS student_count
+            COUNT(DISTINCT css.student_name) AS student_count
         FROM  class_sessions cs
         JOIN  classes c ON c.class_name = cs.class_name
         LEFT JOIN class_session_students css ON css.class_session_id = cs.id
@@ -261,6 +261,27 @@ def close_class_for_session(class_name: str, session: str) -> bool:
         return False
     finally:
         conn.close()
+
+def reopen_class_for_session(class_name: str, session: str) -> bool:
+    """Re-activate a soft-closed class_session (is_active → 1)."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            UPDATE class_sessions SET is_active = 1
+            WHERE  class_name = ? AND session = ?
+        """, (class_name, session))
+        conn.commit()
+        reopened = cursor.rowcount > 0
+        if reopened:
+            logger.info(f"'{class_name}' re-opened for session '{session}'")
+        return reopened
+    except Exception as e:
+        logger.error(f"Error re-opening class session: {e}")
+        return False
+    finally:
+        conn.close()
+
 
 def delete_class_session(class_name: str, session: str) -> tuple:
     """

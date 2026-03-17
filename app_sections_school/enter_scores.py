@@ -104,15 +104,8 @@ def _render_score_management_interface():
     if is_senior_class:
         st.info(f"Showing {len(students)} student(s) who selected {selected_subject}")
 
-    # ── Score system gate (per class, per term) ───────────────────────────
+    # ── Score system (per class, per term) ──────────────────────────────
     score_system = get_class_score_system(class_name, term)
-    if not score_system["is_set"]:
-        st.warning(
-            f"⚠️ No score system has been configured for **{class_name}** / **{term} Term**.  \n\n"
-            "An admin must set it in **Manage Classes → 📐 Score System** before scores can be entered."
-        )
-        return
-
     max_ca   = score_system["max_ca_score"]
     max_exam = score_system["max_exam_score"]
     st.info(f"📐 **Score System ({term} Term):** CA (0–{max_ca}) + Exam (0–{max_exam}) = 100")
@@ -439,16 +432,16 @@ def _render_mobile_score_entry(students, score_map, class_name, subject, session
         with col1:
             ca_score = st.number_input(
                 f"CA Score (0–{max_ca})",
-                min_value=0.0, max_value=float(max_ca),
-                value=min(current_ca, float(max_ca)), step=0.5,
+                min_value=0.0,
+                value=current_ca, step=0.5,
                 key=f"mobile_ca_{current_idx}_{student_name}",
                 help=f"CA (0–{max_ca})"
             )
         with col2:
             exam_score = st.number_input(
                 f"Exam Score (0–{max_exam})",
-                min_value=0.0, max_value=float(max_exam),
-                value=min(current_exam, float(max_exam)), step=0.5,
+                min_value=0.0,
+                value=current_exam, step=0.5,
                 key=f"mobile_exam_{current_idx}_{student_name}",
                 help=f"Exam (0–{max_exam})"
             )
@@ -456,8 +449,18 @@ def _render_mobile_score_entry(students, score_map, class_name, subject, session
         total = ca_score + exam_score
         grade = assign_grade(total)
 
+        # Validate this student's scores before allowing save
+        mobile_errors = []
+        if ca_score > max_ca:
+            mobile_errors.append(f"CA exceeds max of {max_ca} ({ca_score:.1f})")
+        if exam_score > max_exam:
+            mobile_errors.append(f"Exam exceeds max of {max_exam} ({exam_score:.1f})")
+        for err in mobile_errors:
+            st.error(f"❌ {err}")
+
         with col3:
-            if st.button("💾 Save", type="primary", width="stretch"):
+            if st.button("💾 Save", type="primary", width="stretch",
+                         disabled=bool(mobile_errors)):
                 _save_single_student_score(student_name, class_name, subject, session, term, ca_score, exam_score, grade)
                 st.success(f"✅ Saved {student_name}'s scores!")
                 st.rerun()
@@ -535,10 +538,10 @@ def _render_desktop_score_entry(students, score_map, class_name, subject, sessio
                 "Student": st.column_config.TextColumn("Student", disabled=True, width=200),
                 ca_col:   st.column_config.NumberColumn(
                               ca_col, width="small", format="%d",
-                              min_value=0, max_value=max_ca),
+                              min_value=0),
                 exam_col: st.column_config.NumberColumn(
                               exam_col, width="small", format="%d",
-                              min_value=0, max_value=max_exam),
+                              min_value=0),
             },
             hide_index=True, width="stretch",
             key=f"score_editor_{class_name}_{subject}_{session}_{term}",
@@ -547,15 +550,14 @@ def _render_desktop_score_entry(students, score_map, class_name, subject, sessio
         )
 
         validation = _validate_scores(editable_df, max_ca, max_exam, ca_col, exam_col)
-        if validation["valid"]:
-            if st.button("💾 Save All Scores", key="save_scores", type="primary"):
-                ActivityTracker.update()
-                _save_scores_to_database(editable_df, class_name, subject,
-                                          session, term, ca_col, exam_col)
-        else:
-            for error in validation["errors"]:
-                st.error(error)
-            st.warning("⚠️ Please correct errors before saving.")
+        for error in validation["errors"]:
+            st.error(error)
+
+        if st.button("💾 Save All Scores", key="save_scores", type="primary",
+                     disabled=not validation["valid"]):
+            ActivityTracker.update()
+            _save_scores_to_database(editable_df, class_name, subject,
+                                      session, term, ca_col, exam_col)
 
     except Exception as e:
         logger.error(f"Error in score entry: {str(e)}")

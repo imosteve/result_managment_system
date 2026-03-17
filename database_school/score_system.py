@@ -29,7 +29,7 @@ SCORE_SYSTEMS = {
     "40/60": {"max_ca": 40, "max_exam": 60, "label": "40 CA / 60 Exam"},
 }
 
-# Default values (schema defaults) — means "never explicitly set"
+# Default values when no record exists — 30/70 is the standard system
 _DEFAULT_CA   = 30
 _DEFAULT_EXAM = 70
 
@@ -38,15 +38,14 @@ def get_class_score_system(class_name: str, term: str) -> dict:
     """
     Return the score system for a class/term.
 
-    Always returns a dict — never None.  If no record exists the
-    defaults (30/70) are returned with is_set=False, so callers can
-    gate entry without a None check.
+    Always returns a dict — never None.
+    If no explicit record exists, returns the default (30/70).
+    30/70 is a valid system, not a "not set" state.
 
     Returns dict with keys:
         max_ca_score  (int)
         max_exam_score (int)
         system_key    ("30/70" or "40/60")
-        is_set        (bool) — False when using schema defaults
     """
     conn = get_connection()
     conn.row_factory = sqlite3.Row
@@ -71,13 +70,11 @@ def get_class_score_system(class_name: str, term: str) -> dict:
         max_ca   = _DEFAULT_CA
         max_exam = _DEFAULT_EXAM
 
-    is_set = not (max_ca == _DEFAULT_CA and max_exam == _DEFAULT_EXAM)
-    key    = "40/60" if max_ca == 40 else "30/70"
+    key = "40/60" if max_ca == 40 else "30/70"
     return {
         "max_ca_score":  max_ca,
         "max_exam_score": max_exam,
         "system_key":    key,
-        "is_set":        is_set,
     }
 
 

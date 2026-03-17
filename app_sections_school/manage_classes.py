@@ -8,7 +8,8 @@ from database_school import (
     get_class_score_system, set_class_score_system,
     get_all_score_systems_for_class,
     get_all_sessions, get_classes_for_session,
-    open_class_for_session, close_class_for_session, delete_class_session,
+    open_class_for_session, close_class_for_session,
+    reopen_class_for_session, delete_class_session,
 )
 from main_utils import inject_login_css, render_page_header, inject_metric_css
 from auth.activity_tracker import ActivityTracker
@@ -243,30 +244,49 @@ def create_class_section():
 
 def _render_score_system_tab(classes: list):
     """
-    Tab 3 — Set score system per class AND per term.
+    Tab 3 — Set score system per class and per term.
 
-    Stored in class_term_score_systems (class_name, term) → (max_ca, max_exam).
-    Different terms can use different systems e.g. First=30/70, Second=40/60.
-    Default 30/70 with is_set=False means never explicitly configured.
+    30/70 is the default valid system — it does NOT mean "not configured".
+    Only 40/60 classes need an explicit change here.
+    Each term can have a different system.
     """
     TERMS = ["First", "Second", "Third"]
-    SYSTEMS = {
-        "30/70": (30, 70),
-        "40/60": (40, 60),
-    }
+    SYSTEMS = {"30/70": (30, 70), "40/60": (40, 60)}
     SYSTEM_LABELS = list(SYSTEMS.keys())
 
     st.subheader("Class Score Systems")
     st.caption(
-        "Set the CA/Exam weighting per class and per term.  "
-        "Each term can have a different system.  "
-        "Must be set before teachers can enter scores.  "
-        "Changing the system does **not** delete existing scores."
+        "Each class/term defaults to **30 CA / 70 Exam**.  "
+        "Change any term to 40/60 here if needed.  "
+        "Teachers can enter scores immediately — no configuration required.  "
+        "Changing a system does **not** delete existing scores."
     )
 
     if not classes:
         st.warning("No classes found. Add a class first.")
         return
+
+    # ── Bulk setter ───────────────────────────────────────────────────────
+    with st.expander("⚡ Bulk Set — apply one system to all classes", expanded=False):
+        bc1, bc2, bc3 = st.columns([2, 3, 1], vertical_alignment="bottom")
+        with bc1:
+            bulk_system = st.selectbox("System", SYSTEM_LABELS, key="bulk_score_system_choice")
+        with bc2:
+            bulk_terms  = st.multiselect("Apply to terms", TERMS, default=TERMS, key="bulk_score_terms")
+        with bc3:
+            if st.button("Apply", key="bulk_apply_btn", type="primary", use_container_width=True):
+                if not bulk_terms:
+                    st.warning("Select at least one term.")
+                else:
+                    max_ca, max_exam = SYSTEMS[bulk_system]
+                    ok = sum(
+                        1 for cls in classes for t in bulk_terms
+                        if set_class_score_system(cls["class_name"], t, max_ca, max_exam)
+                    )
+                    st.success(f"✅ Set {max_ca}/{max_exam} for {ok} class-term combination(s).")
+                    time.sleep(0.3); st.rerun()
+
+    st.divider()
 
     # ── Search ────────────────────────────────────────────────────────────
     search = st.text_input(
@@ -279,86 +299,44 @@ def _render_score_system_tab(classes: list):
         st.warning("No classes match your search.")
         return
 
-    # ── Summary across all classes/terms ─────────────────────────────────
-    total_slots  = len(classes) * 3
-    configured   = sum(
-        1 for c in classes for t in TERMS
-        if get_class_score_system(c["class_name"], t)["is_set"]
-    )
-    inject_metric_css()
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Class × Term slots", total_slots)
-    m2.metric("✅ Configured",        configured)
-    m3.metric("🔴 Using Default",     total_slots - configured)
-
-    # ── Bulk setter ───────────────────────────────────────────────────────
-    with st.expander("⚡ Bulk Set — apply one system to selected classes & terms",
-                     expanded=False):
-        bc1, bc2, bc3 = st.columns([2, 3, 1], vertical_alignment="bottom")
-        with bc1:
-            bulk_choice = st.selectbox("System", SYSTEM_LABELS,
-                                        key="bulk_score_system_choice")
-        with bc2:
-            bulk_terms = st.multiselect("Terms", TERMS, default=TERMS,
-                                         key="bulk_score_terms")
-        with bc3:
-            if st.button("Apply", key="bulk_apply_btn",
-                         type="primary", use_container_width=True):
-                max_ca, max_exam = SYSTEMS[bulk_choice]
-                ok = 0
-                for cls in classes:
-                    for t in bulk_terms:
-                        if set_class_score_system(cls["class_name"], t, max_ca, max_exam):
-                            ok += 1
-                st.success(
-                    f"✅ Set **{max_ca}/{max_exam}** for {ok} "
-                    f"class-term combination(s)."
-                )
-                time.sleep(0.3); st.rerun()
-
-    st.divider()
-
-    # ── Per-class, per-term grid ──────────────────────────────────────────
-    # Header row
-    hcols = st.columns([2, 2, 2, 2, 1], gap="medium")
-    hcols[0].markdown("**Class**")
-    for i, t in enumerate(TERMS, 1):
-        hcols[i].markdown(f"**{t} Term**")
-    hcols[4].markdown("**Save All**")
-
+    # ── Per-class cards ───────────────────────────────────────────────────
     for cls in visible:
         class_name = cls["class_name"]
-        systems = get_all_score_systems_for_class(class_name)
+        systems    = get_all_score_systems_for_class(class_name)
 
-        row = st.columns([2, 2, 2, 2, 1], gap="medium", vertical_alignment="bottom")
-        row[0].markdown(f"**{class_name}**")
+        with st.expander(f"**{class_name}**", expanded=False):
+            # Table header
+            hc = st.columns([2, 2, 1])
+            hc[0].markdown("**Term**")
+            hc[1].markdown("**Current System**")
+            hc[2].markdown("**Save**")
 
-        new_choices = {}
-        for i, term in enumerate(TERMS, 1):
-            s = systems[term]
-            badge = "🟢" if s["is_set"] else "🔴"
-            cur_idx = 0 if s["max_ca_score"] == 30 else 1
-            new_choices[term] = row[i].selectbox(
-                f"{badge} {term}",
-                SYSTEM_LABELS,
-                index=cur_idx,
-                key=f"ss_{class_name}_{term}",
-                label_visibility="visible",
-            )
+            for term in TERMS:
+                s       = systems[term]
+                cur_key = s["system_key"]
+                cur_idx = SYSTEM_LABELS.index(cur_key)
 
-        if row[4].button("💾", key=f"ss_save_{class_name}",
-                         use_container_width=True):
-            ActivityTracker.update()
-            saved = 0
-            for term, choice in new_choices.items():
-                ca, ex = SYSTEMS[choice]
-                if set_class_score_system(class_name, term, ca, ex):
-                    saved += 1
-            if saved == 3:
-                st.success(f"✅ {class_name}: all terms saved.")
-            else:
-                st.warning(f"⚠️ {class_name}: {saved}/3 terms saved.")
-            time.sleep(0.3); st.rerun()
+                tc = st.columns([2, 2, 1], vertical_alignment="bottom")
+                tc[0].markdown(term)
+
+                new_choice = tc[1].selectbox(
+                    f"System for {term}",
+                    SYSTEM_LABELS,
+                    index=cur_idx,
+                    key=f"ss_{class_name}_{term}",
+                    label_visibility="collapsed",
+                )
+
+                if tc[2].button("💾", key=f"ss_save_{class_name}_{term}",
+                                use_container_width=True):
+                    ActivityTracker.update()
+                    ca, ex = SYSTEMS[new_choice]
+                    if set_class_score_system(class_name, term, ca, ex):
+                        st.success(f"✅ {class_name} — {term}: {new_choice} saved.")
+                        time.sleep(0.2); st.rerun()
+                    else:
+                        st.error(f"❌ Failed to save {term} for {class_name}.")
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -446,7 +424,7 @@ def _render_session_enrollment_tab(classes: list):
         enrolled = cls.get("student_count", 0)
 
         row = st.columns([3, 2, 1, 1, 1], vertical_alignment="bottom")
-        row[0].markdown(f"**{cname}**  \n*{enrolled} student(s)*")
+        row[0].markdown(f"**{cname}**  \n*{enrolled} student(s) enrolled*")
         row[1].markdown("🟢 Active" if is_active else "🔴 Closed")
 
         # Close (soft)
@@ -465,9 +443,11 @@ def _render_session_enrollment_tab(classes: list):
                           use_container_width=True,
                           help="Re-open a closed class"):
             ActivityTracker.update()
-            open_class_for_session(cname, selected_session)
-            st.success(f"🔓 {cname} re-opened.")
-            time.sleep(0.3); st.rerun()
+            if reopen_class_for_session(cname, selected_session):
+                st.success(f"🔓 {cname} re-opened.")
+                time.sleep(0.3); st.rerun()
+            else:
+                st.error(f"❌ Could not re-open {cname}.")
 
         # Remove (hard delete with confirmation)
         if row[4].button("🗑️", key=f"rm_{cname}_{selected_session}",

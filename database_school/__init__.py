@@ -41,6 +41,7 @@ from .classes import (
     get_classes_for_session,
     get_classes_for_teacher,
     close_class_for_session,
+    reopen_class_for_session,
     delete_class_session,
 )
 
@@ -159,7 +160,6 @@ from .utils import (
     backup_database,
     restore_database,
     database_health_check,
-    migrate_add_score_system_table,
 )
 
 # ── Connection (re-exported for callers that need a raw connection) ────────────
