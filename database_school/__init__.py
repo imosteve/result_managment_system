@@ -41,6 +41,7 @@ from .classes import (
     get_classes_for_session,
     get_classes_for_teacher,
     close_class_for_session,
+    delete_class_session,
 )
 
 # ── Students & enrollment ─────────────────────────────────────────────────────
@@ -103,6 +104,14 @@ from .subjects import (
     clear_all_subjects,
 )
 
+# ── Score system ─────────────────────────────────────────────────────────────
+from .score_system import (
+    get_class_score_system,
+    set_class_score_system,
+    get_all_score_systems_for_class,
+    SCORE_SYSTEMS,
+)
+
 # ── Student subject selections ────────────────────────────────────────────────
 from .student_subjects import (
     get_student_selected_subjects,
@@ -150,6 +159,7 @@ from .utils import (
     backup_database,
     restore_database,
     database_health_check,
+    migrate_add_score_system_table,
 )
 
 # ── Connection (re-exported for callers that need a raw connection) ────────────

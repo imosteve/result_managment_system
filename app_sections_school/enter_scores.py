@@ -1,4 +1,4 @@
-# app_sections/enter_scores.py
+# app_sections/enter_scores.py - old
 
 import streamlit as st
 import pandas as pd
@@ -14,8 +14,8 @@ from database_school import (
     get_subjects_by_class, get_enrolled_students,
     get_scores_for_subject, save_score, delete_scores_for_term,
     get_student_selected_subjects, get_user_assignments,
-    get_all_sessions,
-    get_all_classes)
+    get_all_sessions, get_all_classes,
+    get_class_score_system)
 from auth.activity_tracker import ActivityTracker
 
 logging.basicConfig(level=logging.INFO)
@@ -104,7 +104,21 @@ def _render_score_management_interface():
     if is_senior_class:
         st.info(f"Showing {len(students)} student(s) who selected {selected_subject}")
 
-    _render_score_tabs(students, existing_scores, class_name, selected_subject, session, term)
+    # ── Score system gate (per class, per term) ───────────────────────────
+    score_system = get_class_score_system(class_name, term)
+    if not score_system["is_set"]:
+        st.warning(
+            f"⚠️ No score system has been configured for **{class_name}** / **{term} Term**.  \n\n"
+            "An admin must set it in **Manage Classes → 📐 Score System** before scores can be entered."
+        )
+        return
+
+    max_ca   = score_system["max_ca_score"]
+    max_exam = score_system["max_exam_score"]
+    st.info(f"📐 **Score System ({term} Term):** CA (0–{max_ca}) + Exam (0–{max_exam}) = 100")
+
+    _render_score_tabs(students, existing_scores, class_name, selected_subject,
+                       session, term, max_ca, max_exam)
 
 
 def _render_class_selection(classes, role) -> Optional[str]:
@@ -191,7 +205,8 @@ def _get_existing_scores(class_name: str, subject: str, session: str, term: str)
         return {}
 
 
-def _render_score_tabs(students, score_map, class_name, subject, session, term):
+def _render_score_tabs(students, score_map, class_name, subject, session, term,
+                        max_ca: int = 30, max_exam: int = 70):
     tab1, tab2, tab3 = st.tabs(["Enter Scores", "Preview Scores", "Clear All Scores"])
 
     active_tab = st.session_state.get("enter_scores_active_tab", 0)
@@ -199,7 +214,8 @@ def _render_score_tabs(students, score_map, class_name, subject, session, term):
 
     with tab1:
         st.session_state.enter_scores_active_tab = 0
-        _render_score_entry_tab(students, score_map, class_name, subject, session, term)
+        _render_score_entry_tab(students, score_map, class_name, subject,
+                                session, term, max_ca, max_exam)
 
     with tab2:
         st.session_state.enter_scores_active_tab = 1
@@ -210,33 +226,45 @@ def _render_score_tabs(students, score_map, class_name, subject, session, term):
         _render_clear_scores_tab(score_map, class_name, subject, session, term)
 
 
-def _validate_scores(df: pd.DataFrame) -> Dict:
+def _validate_scores(df: pd.DataFrame,
+                     max_ca: int = 30, max_exam: int = 70,
+                     ca_col: str = "CA (30%)",
+                     exam_col: str = "Exam (70%)") -> Dict:
+    """
+    Validate scores against the configured limits.
+    Scores AT the maximum are valid (e.g. CA=30 with max_ca=30 is fine).
+    Only scores ABOVE the maximum are errors that block saving.
+    Negative scores are always invalid.
+    """
     errors = []
     try:
         for idx, row in df.iterrows():
             student_name = row['Student']
-            ca = float(row.get("CA (30%)", 0))
-            exam = float(row.get("Exam (70%)", 0))
+            ca   = float(row.get(ca_col,   0) or 0)
+            exam = float(row.get(exam_col, 0) or 0)
             if ca < 0:
-                errors.append(f"❌ {idx+1} - {student_name}: CA score cannot be negative ({ca:.1f})")
-            elif ca > 30:
-                errors.append(f"❌ {idx+1} - {student_name}: CA score exceeds max of 30 ({ca:.1f})")
+                errors.append(f"❌ {idx+1} - {student_name}: CA cannot be negative ({ca:.1f})")
+            elif ca > max_ca:
+                errors.append(f"❌ {idx+1} - {student_name}: CA exceeds max of {max_ca} ({ca:.1f})")
             if exam < 0:
-                errors.append(f"❌ {idx+1} - {student_name}: Exam score cannot be negative ({exam:.1f})")
-            elif exam > 70:
-                errors.append(f"❌ {idx+1} - {student_name}: Exam score exceeds max of 70 ({exam:.1f})")
+                errors.append(f"❌ {idx+1} - {student_name}: Exam cannot be negative ({exam:.1f})")
+            elif exam > max_exam:
+                errors.append(f"❌ {idx+1} - {student_name}: Exam exceeds max of {max_exam} ({exam:.1f})")
         return {"valid": len(errors) == 0, "errors": errors}
     except Exception as e:
         return {"valid": False, "errors": [f"❌ Validation error: {str(e)}"]}
 
 
-def _save_scores_to_database(df: pd.DataFrame, class_name: str, subject: str, session: str, term: str):
+def _save_scores_to_database(df: pd.DataFrame, class_name: str, subject: str,
+                              session: str, term: str,
+                              ca_col: str = "CA (30%)",
+                              exam_col: str = "Exam (70%)"):
     try:
         user_id = st.session_state.get('user_id')
         for _, row in df.iterrows():
             student = row["Student"]
-            ca = float(row.get("CA (30%)", 0))
-            exam = float(row.get("Exam (70%)", 0))
+            ca   = float(row.get(ca_col,   0) or 0)
+            exam = float(row.get(exam_col, 0) or 0)
             total = ca + exam
             grade = assign_grade(total)
             # New schema: save_score(student_name, class_name, session, term, subject_name, ca_score, exam_score, grade, updated_by)
@@ -345,7 +373,8 @@ def resolve_device_mode(choice: str) -> bool:
     return False
 
 
-def _render_score_entry_tab(students, score_map, class_name, subject, session, term):
+def _render_score_entry_tab(students, score_map, class_name, subject, session, term,
+                             max_ca: int = 30, max_exam: int = 70):
     """Smart rendering based on device type"""
     with st.sidebar.expander("📱 View Mode"):
         device_mode = st.radio(
@@ -361,12 +390,15 @@ def _render_score_entry_tab(students, score_map, class_name, subject, session, t
     is_mobile = resolve_device_mode(device_mode)
 
     if is_mobile:
-        _render_mobile_score_entry(students, score_map, class_name, subject, session, term)
+        _render_mobile_score_entry(students, score_map, class_name, subject,
+                                    session, term, max_ca, max_exam)
     else:
-        _render_desktop_score_entry(students, score_map, class_name, subject, session, term)
+        _render_desktop_score_entry(students, score_map, class_name, subject,
+                                     session, term, max_ca, max_exam)
 
 
-def _render_mobile_score_entry(students, score_map, class_name, subject, session, term):
+def _render_mobile_score_entry(students, score_map, class_name, subject, session, term,
+                                max_ca: int = 30, max_exam: int = 70):
     """Mobile-optimized individual student entry"""
     if 'current_student_idx' not in st.session_state:
         st.session_state.current_student_idx = 0
@@ -406,17 +438,19 @@ def _render_mobile_score_entry(students, score_map, class_name, subject, session
         col1, col2, col3 = st.columns(3, vertical_alignment="bottom")
         with col1:
             ca_score = st.number_input(
-                "CA Score", min_value=0.0, max_value=30.0,
-                value=current_ca, step=0.5,
+                f"CA Score (0–{max_ca})",
+                min_value=0.0, max_value=float(max_ca),
+                value=min(current_ca, float(max_ca)), step=0.5,
                 key=f"mobile_ca_{current_idx}_{student_name}",
-                help="CA (0-30)"
+                help=f"CA (0–{max_ca})"
             )
         with col2:
             exam_score = st.number_input(
-                "Exam Score", min_value=0.0, max_value=70.0,
-                value=current_exam, step=0.5,
+                f"Exam Score (0–{max_exam})",
+                min_value=0.0, max_value=float(max_exam),
+                value=min(current_exam, float(max_exam)), step=0.5,
                 key=f"mobile_exam_{current_idx}_{student_name}",
-                help="Exam (0-70)"
+                help=f"Exam (0–{max_exam})"
             )
 
         total = ca_score + exam_score
@@ -432,8 +466,8 @@ def _render_mobile_score_entry(students, score_map, class_name, subject, session
         inject_metric_css()
         st.markdown("##### Quick Score Preview")
         col1, col2, col3, col4 = st.columns(4)
-        with col1: st.metric("CA", f"{ca_score:.1f}/30")
-        with col2: st.metric("Exam", f"{exam_score:.1f}/70")
+        with col1: st.metric("CA",    f"{ca_score:.1f}/{max_ca}")
+        with col2: st.metric("Exam",  f"{exam_score:.1f}/{max_exam}")
         with col3: st.metric("Total", f"{total:.1f}/100")
         with col4: st.metric("Grade", grade)
 
@@ -471,13 +505,15 @@ def _render_mobile_score_entry(students, score_map, class_name, subject, session
     st.caption(f"📊 Completed: {completed}/{total_students} students")
 
 
-def _render_desktop_score_entry(students, score_map, class_name, subject, session, term):
+def _render_desktop_score_entry(students, score_map, class_name, subject, session, term,
+                                 max_ca: int = 30, max_exam: int = 70):
     st.subheader("Enter Scores")
     if not students:
         st.warning("⚠️ No students available.")
         return
 
-    st.info("📊 **Score Limits:** CA (0-30) | Exam (0-70) | Total (0-100)")
+    ca_col   = f"CA ({max_ca}%)"
+    exam_col = f"Exam ({max_exam}%)"
 
     student_scores = {}
     for idx, student in enumerate(students, 1):
@@ -485,9 +521,9 @@ def _render_desktop_score_entry(students, score_map, class_name, subject, sessio
         if sn in student_scores:
             continue
         existing = score_map.get(sn)
-        ca = float(existing['ca_score'] or 0 if isinstance(existing, dict) else existing[3] or 0) if existing else 0.0
+        ca   = float(existing['ca_score']   or 0 if isinstance(existing, dict) else existing[3] or 0) if existing else 0.0
         exam = float(existing['exam_score'] or 0 if isinstance(existing, dict) else existing[4] or 0) if existing else 0.0
-        student_scores[sn] = {"S/N": str(idx), "Student": sn, "CA (30%)": ca, "Exam (70%)": exam}
+        student_scores[sn] = {"S/N": str(idx), "Student": sn, ca_col: ca, exam_col: exam}
 
     editable_rows = list(student_scores.values())
 
@@ -495,10 +531,14 @@ def _render_desktop_score_entry(students, score_map, class_name, subject, sessio
         editable_df = st.data_editor(
             pd.DataFrame(editable_rows),
             column_config={
-                "S/N": st.column_config.TextColumn("S/N", disabled=True, width=20),
+                "S/N":     st.column_config.TextColumn("S/N",     disabled=True, width=20),
                 "Student": st.column_config.TextColumn("Student", disabled=True, width=200),
-                "CA (30%)": st.column_config.NumberColumn("CA (30%)", width="small", format="%d"),
-                "Exam (70%)": st.column_config.NumberColumn("Exam (70%)", width="small", format="%d"),
+                ca_col:   st.column_config.NumberColumn(
+                              ca_col, width="small", format="%d",
+                              min_value=0, max_value=max_ca),
+                exam_col: st.column_config.NumberColumn(
+                              exam_col, width="small", format="%d",
+                              min_value=0, max_value=max_exam),
             },
             hide_index=True, width="stretch",
             key=f"score_editor_{class_name}_{subject}_{session}_{term}",
@@ -506,11 +546,12 @@ def _render_desktop_score_entry(students, score_map, class_name, subject, sessio
             on_change=ActivityTracker.update
         )
 
-        validation = _validate_scores(editable_df)
+        validation = _validate_scores(editable_df, max_ca, max_exam, ca_col, exam_col)
         if validation["valid"]:
             if st.button("💾 Save All Scores", key="save_scores", type="primary"):
                 ActivityTracker.update()
-                _save_scores_to_database(editable_df, class_name, subject, session, term)
+                _save_scores_to_database(editable_df, class_name, subject,
+                                          session, term, ca_col, exam_col)
         else:
             for error in validation["errors"]:
                 st.error(error)

@@ -1,8 +1,16 @@
 # app_sections/manage_classes.py
 
 import streamlit as st
-from database_school import get_all_classes, create_class, delete_class, update_class
-from main_utils import inject_login_css, render_page_header
+import time
+from database_school import (
+    get_all_classes, create_class, delete_class, update_class,
+    get_subjects_by_class,
+    get_class_score_system, set_class_score_system,
+    get_all_score_systems_for_class,
+    get_all_sessions, get_classes_for_session,
+    open_class_for_session, close_class_for_session, delete_class_session,
+)
+from main_utils import inject_login_css, render_page_header, inject_metric_css
 from auth.activity_tracker import ActivityTracker
 
 def create_class_section():
@@ -24,7 +32,7 @@ def create_class_section():
     # New schema: get_all_classes() → [{id, class_name, description, created_at}]
     classes = get_all_classes()
 
-    tab1, tab2 = st.tabs(["View/Edit Classes", "Add Class"])
+    tab1, tab2, tab3, tab4 = st.tabs(["View/Edit Classes", "Add Class", "📐 Score System", "🔓 Session Enrollment"])
 
     active_tab = st.session_state.get("manage_classes_active_tab", 0)
     ActivityTracker.watch_tab("manage_classes", active_tab)
@@ -216,3 +224,293 @@ def create_class_section():
                             unsafe_allow_html=True
                         )
                         st.rerun()
+
+    # ── TAB 3: SCORE SYSTEM ────────────────────────────────────────────────────
+    with tab3:
+        st.session_state.manage_classes_active_tab = 2
+        _render_score_system_tab(classes)
+
+    # ── TAB 4: SESSION ENROLLMENT ──────────────────────────────────────────────
+    with tab4:
+        st.session_state.manage_classes_active_tab = 3
+        _render_session_enrollment_tab(classes)
+
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Score System Tab  (per-class, per-term)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _render_score_system_tab(classes: list):
+    """
+    Tab 3 — Set score system per class AND per term.
+
+    Stored in class_term_score_systems (class_name, term) → (max_ca, max_exam).
+    Different terms can use different systems e.g. First=30/70, Second=40/60.
+    Default 30/70 with is_set=False means never explicitly configured.
+    """
+    TERMS = ["First", "Second", "Third"]
+    SYSTEMS = {
+        "30/70": (30, 70),
+        "40/60": (40, 60),
+    }
+    SYSTEM_LABELS = list(SYSTEMS.keys())
+
+    st.subheader("Class Score Systems")
+    st.caption(
+        "Set the CA/Exam weighting per class and per term.  "
+        "Each term can have a different system.  "
+        "Must be set before teachers can enter scores.  "
+        "Changing the system does **not** delete existing scores."
+    )
+
+    if not classes:
+        st.warning("No classes found. Add a class first.")
+        return
+
+    # ── Search ────────────────────────────────────────────────────────────
+    search = st.text_input(
+        "🔍 Filter classes", placeholder="Search by class name…",
+        key="score_sys_search", label_visibility="collapsed",
+    )
+    visible = [c for c in classes
+               if not search or search.lower() in c["class_name"].lower()]
+    if not visible:
+        st.warning("No classes match your search.")
+        return
+
+    # ── Summary across all classes/terms ─────────────────────────────────
+    total_slots  = len(classes) * 3
+    configured   = sum(
+        1 for c in classes for t in TERMS
+        if get_class_score_system(c["class_name"], t)["is_set"]
+    )
+    inject_metric_css()
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Class × Term slots", total_slots)
+    m2.metric("✅ Configured",        configured)
+    m3.metric("🔴 Using Default",     total_slots - configured)
+
+    # ── Bulk setter ───────────────────────────────────────────────────────
+    with st.expander("⚡ Bulk Set — apply one system to selected classes & terms",
+                     expanded=False):
+        bc1, bc2, bc3 = st.columns([2, 3, 1], vertical_alignment="bottom")
+        with bc1:
+            bulk_choice = st.selectbox("System", SYSTEM_LABELS,
+                                        key="bulk_score_system_choice")
+        with bc2:
+            bulk_terms = st.multiselect("Terms", TERMS, default=TERMS,
+                                         key="bulk_score_terms")
+        with bc3:
+            if st.button("Apply", key="bulk_apply_btn",
+                         type="primary", use_container_width=True):
+                max_ca, max_exam = SYSTEMS[bulk_choice]
+                ok = 0
+                for cls in classes:
+                    for t in bulk_terms:
+                        if set_class_score_system(cls["class_name"], t, max_ca, max_exam):
+                            ok += 1
+                st.success(
+                    f"✅ Set **{max_ca}/{max_exam}** for {ok} "
+                    f"class-term combination(s)."
+                )
+                time.sleep(0.3); st.rerun()
+
+    st.divider()
+
+    # ── Per-class, per-term grid ──────────────────────────────────────────
+    # Header row
+    hcols = st.columns([2, 2, 2, 2, 1], gap="medium")
+    hcols[0].markdown("**Class**")
+    for i, t in enumerate(TERMS, 1):
+        hcols[i].markdown(f"**{t} Term**")
+    hcols[4].markdown("**Save All**")
+
+    for cls in visible:
+        class_name = cls["class_name"]
+        systems = get_all_score_systems_for_class(class_name)
+
+        row = st.columns([2, 2, 2, 2, 1], gap="medium", vertical_alignment="bottom")
+        row[0].markdown(f"**{class_name}**")
+
+        new_choices = {}
+        for i, term in enumerate(TERMS, 1):
+            s = systems[term]
+            badge = "🟢" if s["is_set"] else "🔴"
+            cur_idx = 0 if s["max_ca_score"] == 30 else 1
+            new_choices[term] = row[i].selectbox(
+                f"{badge} {term}",
+                SYSTEM_LABELS,
+                index=cur_idx,
+                key=f"ss_{class_name}_{term}",
+                label_visibility="visible",
+            )
+
+        if row[4].button("💾", key=f"ss_save_{class_name}",
+                         use_container_width=True):
+            ActivityTracker.update()
+            saved = 0
+            for term, choice in new_choices.items():
+                ca, ex = SYSTEMS[choice]
+                if set_class_score_system(class_name, term, ca, ex):
+                    saved += 1
+            if saved == 3:
+                st.success(f"✅ {class_name}: all terms saved.")
+            else:
+                st.warning(f"⚠️ {class_name}: {saved}/3 terms saved.")
+            time.sleep(0.3); st.rerun()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Session Enrollment Tab
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _render_session_enrollment_tab(classes: list):
+    """
+    Tab 4 — Open / close / remove classes from a session.
+
+    Open:   creates a class_sessions row (idempotent)
+    Close:  sets is_active=0 (soft — data kept, marks class inactive)
+    Remove: DELETES the class_sessions row and all cascaded data
+            (students, scores, comments, etc. for that session)
+            This is what unblocks delete_class().
+    """
+    st.subheader("Session Enrollment")
+    st.caption(
+        "Control which classes are open for each session.  "
+        "**Remove** permanently deletes all data for that class in that session "
+        "and is the prerequisite for deleting the class itself."
+    )
+
+    sessions = get_all_sessions()
+    if not sessions:
+        st.warning("No sessions found. Create a session in Admin Panel first.")
+        return
+
+    session_names = [s["session"] if isinstance(s, dict) else s for s in sessions]
+
+    selected_session = st.selectbox(
+        "Select Session", session_names, key="sess_enroll_session_select"
+    )
+
+    if not selected_session:
+        return
+
+    open_classes = get_classes_for_session(selected_session)
+    open_names   = {c["class_name"] for c in open_classes}
+    closed_names = {c["class_name"] for c in open_classes if not c["is_active"]}
+
+    st.divider()
+
+    # ── Open new classes ──────────────────────────────────────────────────
+    st.markdown("#### 🔓 Open Classes for This Session")
+    not_open = [c for c in classes if c["class_name"] not in open_names]
+
+    if not not_open:
+        st.info("All classes are already open for this session.")
+    else:
+        cls_cols = st.columns(3)
+        checks   = {}
+        for i, c in enumerate(not_open):
+            checks[c["class_name"]] = cls_cols[i % 3].checkbox(
+                c["class_name"], key=f"open_chk_{c['class_name']}"
+            )
+        to_open = [cn for cn, v in checks.items() if v]
+        if st.button("🔓 Open Selected", key="open_sel_btn",
+                     type="primary", disabled=not to_open):
+            for cn in to_open:
+                open_class_for_session(cn, selected_session)
+            st.success(f"✅ Opened {len(to_open)} class(es).")
+            time.sleep(0.3); st.rerun()
+
+    st.divider()
+
+    # ── Manage open classes ───────────────────────────────────────────────
+    st.markdown("#### 📋 Currently Open Classes")
+
+    if not open_classes:
+        st.info("No classes open for this session yet.")
+        return
+
+    # Column headers
+    hc = st.columns([3, 2, 1, 1, 1])
+    hc[0].markdown("**Class**")
+    hc[1].markdown("**Status**")
+    hc[2].markdown("**Close**")
+    hc[3].markdown("**Re-open**")
+    hc[4].markdown("**Remove**")
+
+    for cls in open_classes:
+        cname    = cls["class_name"]
+        is_active = cls["is_active"]
+        enrolled = cls.get("student_count", 0)
+
+        row = st.columns([3, 2, 1, 1, 1], vertical_alignment="bottom")
+        row[0].markdown(f"**{cname}**  \n*{enrolled} student(s)*")
+        row[1].markdown("🟢 Active" if is_active else "🔴 Closed")
+
+        # Close (soft)
+        if row[2].button("🔒", key=f"close_{cname}_{selected_session}",
+                          disabled=not is_active,
+                          use_container_width=True,
+                          help="Soft-close — data preserved, marks inactive"):
+            ActivityTracker.update()
+            close_class_for_session(cname, selected_session)
+            st.info(f"🔒 {cname} closed for {selected_session}.")
+            time.sleep(0.3); st.rerun()
+
+        # Re-open
+        if row[3].button("🔓", key=f"reopen_{cname}_{selected_session}",
+                          disabled=bool(is_active),
+                          use_container_width=True,
+                          help="Re-open a closed class"):
+            ActivityTracker.update()
+            open_class_for_session(cname, selected_session)
+            st.success(f"🔓 {cname} re-opened.")
+            time.sleep(0.3); st.rerun()
+
+        # Remove (hard delete with confirmation)
+        if row[4].button("🗑️", key=f"rm_{cname}_{selected_session}",
+                          use_container_width=True,
+                          help="Permanently remove — deletes all student/score data"):
+            ActivityTracker.update()
+            st.session_state["confirm_remove_session"] = {
+                "class_name": cname,
+                "session":    selected_session,
+                "enrolled":   enrolled,
+            }
+
+    # ── Removal confirmation dialog ───────────────────────────────────────
+    pending = st.session_state.get("confirm_remove_session")
+    if pending:
+        @st.dialog("⚠️ Confirm Session Removal", width="small")
+        def _confirm_remove():
+            p = st.session_state["confirm_remove_session"]
+            st.error(
+                f"Remove **{p['class_name']}** from **{p['session']}**?  \n\n"
+                f"This will permanently delete **{p['enrolled']} enrollment(s)** "
+                "and all their scores, comments, and psychomotor ratings.  \n\n"
+                "The class definition is preserved — only this session's data is erased."
+            )
+            typed = st.text_input(
+                f"Type the class name **{p['class_name']}** to confirm:",
+                key="rm_session_confirm_input"
+            )
+            c1, c2 = st.columns(2)
+            if c1.button("🗑️ Remove", type="primary",
+                         use_container_width=True, key="rm_sess_yes"):
+                if typed.strip() == p["class_name"]:
+                    ok, msg = delete_class_session(p["class_name"], p["session"])
+                    del st.session_state["confirm_remove_session"]
+                    if ok:
+                        st.success(f"✅ {msg}")
+                    else:
+                        st.error(f"❌ {msg}")
+                    time.sleep(0.5); st.rerun()
+                else:
+                    st.error("Class name does not match.")
+            if c2.button("Cancel", use_container_width=True, key="rm_sess_no"):
+                del st.session_state["confirm_remove_session"]
+                st.rerun()
+
+        _confirm_remove()

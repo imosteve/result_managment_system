@@ -15,13 +15,13 @@ def get_subjects_by_class(class_name: str) -> list:
     Subjects are session/term-independent in the new schema.
 
     Returns:
-        list of dicts: {id, class_name, subject_name}
+        list of dicts: {id, class_name, subject_name, max_ca_score, max_exam_score}
     """
     conn = get_connection()
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT id, class_name, subject_name
+        SELECT id, class_name, subject_name, max_ca_score, max_exam_score
         FROM   subjects
         WHERE  class_name = ?
         ORDER  BY subject_name

@@ -398,3 +398,37 @@ def migrate_reduce_next_term_info_table():
     conn.close()
     logger.info("Minimal next_term_info migration completed.")
     return True
+
+def migrate_add_score_system_table() -> bool:
+    """
+    Safe idempotent migration: create class_term_score_systems if it
+    doesn't exist. Safe to call on every app startup.
+    New databases get this automatically via create_tables().
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS class_term_score_systems (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                class_name     TEXT    NOT NULL
+                                   REFERENCES classes(class_name)
+                                   ON DELETE CASCADE ON UPDATE CASCADE,
+                term           TEXT    NOT NULL
+                                   CHECK(term IN ('First', 'Second', 'Third')),
+                max_ca_score   REAL    NOT NULL DEFAULT 30
+                                   CHECK(max_ca_score IN (30, 40)),
+                max_exam_score REAL    NOT NULL DEFAULT 70
+                                   CHECK(max_exam_score IN (70, 60)),
+                updated_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(class_name, term)
+            )
+        """)
+        conn.commit()
+        logger.info("migrate_add_score_system_table: ready")
+        return True
+    except Exception as e:
+        logger.error(f"migrate_add_score_system_table error: {e}")
+        return False
+    finally:
+        conn.close()

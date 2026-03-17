@@ -261,3 +261,50 @@ def close_class_for_session(class_name: str, session: str) -> bool:
         return False
     finally:
         conn.close()
+
+def delete_class_session(class_name: str, session: str) -> tuple:
+    """
+    Permanently remove a class from a session.
+
+    CASCADE: deletes all class_session_students rows for this session,
+    which in turn CASCADE-deletes all scores, comments, psychomotor
+    ratings, and subject selections for those enrollments.
+
+    Use this when you need to:
+      - Undo accidentally opening a class for the wrong session
+      - Fully remove a session's data for a class
+      - Allow the class itself to be deleted (delete_class() refuses
+        while class_sessions rows exist)
+
+    Returns (True, "") or (False, reason_string).
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        # Count enrollments so we can warn the caller
+        cursor.execute("""
+            SELECT COUNT(*) FROM class_session_students css
+            JOIN   class_sessions cs ON cs.id = css.class_session_id
+            WHERE  cs.class_name = ? AND cs.session = ?
+        """, (class_name, session))
+        enrollment_count = cursor.fetchone()[0]
+
+        cursor.execute("""
+            DELETE FROM class_sessions
+            WHERE  class_name = ? AND session = ?
+        """, (class_name, session))
+        conn.commit()
+
+        if cursor.rowcount == 0:
+            return False, f"No session record found for '{class_name}' / '{session}'."
+
+        logger.warning(
+            f"Class session deleted: '{class_name}' / '{session}' "
+            f"({enrollment_count} enrollment(s) removed by CASCADE)"
+        )
+        return True, f"Removed '{class_name}' from {session}. {enrollment_count} enrollment(s) erased."
+    except Exception as e:
+        logger.error(f"Error deleting class session: {e}")
+        return False, str(e)
+    finally:
+        conn.close()
