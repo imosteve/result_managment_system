@@ -774,6 +774,15 @@ def render_analytics_tab(stats):
             """, (selected_session,))
             active_classes = cursor.fetchone()[0]
 
+            # Total students: unique students enrolled for the selected session + term
+            cursor.execute("""
+                SELECT COUNT(DISTINCT css.student_name)
+                FROM   class_session_students css
+                JOIN   class_sessions cs ON cs.id = css.class_session_id
+                WHERE  cs.session = ? AND css.term = ?
+            """, (selected_session, selected_term))
+            total_students = cursor.fetchone()[0]
+
             # Active students: distinct enrollments that have at least one score
             # in the selected session + term
             cursor.execute("""
@@ -810,23 +819,27 @@ def render_analytics_tab(stats):
 
         except Exception as e:
             active_classes   = 0
+            total_students   = 0
             active_students  = 0
             score_completion = 0
     else:
         # Fallback to global stats when no session is available
         activity_stats   = get_activity_statistics()
         active_classes   = activity_stats["active_classes"]
+        total_students   = 0
         active_students  = activity_stats["active_students"]
         score_completion = activity_stats["score_completion"]
 
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
         st.metric("Active Classes", active_classes)
     with col2:
-        st.metric("Active Students", active_students)
+        st.metric("Total Students", total_students)
     with col3:
-        st.metric("Score Completion", f"{score_completion}%")
+        st.metric("Active Students", active_students)
     with col4:
+        st.metric("Score Completion", f"{score_completion}%")
+    with col5:
         st.metric("Assignments", stats["assignments"])
 
 
