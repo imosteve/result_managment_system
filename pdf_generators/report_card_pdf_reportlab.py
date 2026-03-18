@@ -23,15 +23,10 @@ from database_school import (
     get_student_grand_totals, get_comment, get_subjects_by_class,
     get_psychomotor_rating, get_grade_distribution, get_next_term_begin_date, get_next_term_info
 )
-from database_master import get_school_by_code
 
-school_name = st.session_state.get("school_name", "platform")
 school_code = st.session_state.get("school_code", "platform")
 if not school_code:
     school_code = "platform"
-
-school_info = get_school_by_code(school_code) if school_code != "platform" else None
-school_address = school_info.get("address") if school_info else " "
 
 logo_path = f"static/logos/{school_code}_logo.png"
 watermark_path = f"static/logos/{school_code}_logo.png"
@@ -228,6 +223,13 @@ class ReportCardCanvas(canvas.Canvas):
 def generate_report_card(student_name, class_name, term, session, is_secondary_class, is_primary_class):
     """Generate PDF report card for a student using ReportLab - exact WeasyPrint replica"""
     from database_school import get_head_teacher_comment_by_average
+    from auth.session_manager import SessionManager
+
+    # Always refresh school info from master DB so address/name changes
+    # are picked up without requiring a logout/login cycle
+    SessionManager.refresh_school_info()
+    school_name    = st.session_state.get("school_name", "")
+    school_address = st.session_state.get("school_address", "") or ""
 
     user_id = st.session_state.user_id
     role = st.session_state.role

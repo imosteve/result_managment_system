@@ -301,6 +301,47 @@ class SessionManager:
         }
 
     @staticmethod
+    def refresh_school_info() -> bool:
+        """
+        Re-fetch school info from master DB and update session state.
+
+        Call this before generating any PDF or displaying school details
+        so that changes made to address, name, phone etc. in the master DB
+        are always reflected without requiring a full logout/login cycle.
+
+        Returns:
+            True if refreshed successfully, False if school not found or error.
+        """
+        school_code = st.session_state.get("school_code")
+        if not school_code:
+            return False  # Platform superadmin — no school to refresh
+
+        try:
+            from database_master import get_school_by_code, get_school_db_path
+
+            school_info = get_school_by_code(school_code)
+            if school_info is None:
+                logger.warning(
+                    f"refresh_school_info: school '{school_code}' not found"
+                )
+                return False
+
+            st.session_state.school_name    = school_info["school_name"]
+            st.session_state.school_address = school_info["address"]
+            st.session_state.school_db_path = get_school_db_path(school_code)
+
+            logger.debug(
+                f"School info refreshed for '{school_code}': "
+                f"name='{school_info['school_name']}', "
+                f"address='{school_info['address']}'"
+            )
+            return True
+
+        except Exception as e:
+            logger.error(f"refresh_school_info error: {e}")
+            return False
+
+    @staticmethod
     def update_activity():
         if SessionManager.is_authenticated():
             st.session_state.last_activity = datetime.now()

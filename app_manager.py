@@ -132,6 +132,10 @@ class ApplicationManager:
             from app_sections_master import render_platform_header
             render_platform_header()
         else:
+            # Refresh school info from master DB on every render so name/address
+            from auth.session_manager import SessionManager
+            SessionManager.refresh_school_info()
+
             display_name = (
                 st.session_state.get("school_name")
                 or APP_CONFIG.get("platform_name", "School Result Management System")

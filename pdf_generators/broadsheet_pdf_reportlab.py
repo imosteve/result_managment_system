@@ -24,18 +24,11 @@ from database_school import (
 )
 from main_utils import format_ordinal
 import streamlit as st
-from database_master import get_school_by_code
 
 
 school_code = st.session_state.get("school_code", "platform")
 if not school_code:
     school_code = "platform"
-
-school_info = get_school_by_code(school_code) if school_code != "platform" else None
-
-# School information constants
-SCHOOL_NAME = st.session_state.get("school_name", "platform").upper()
-SCHOOL_ADDRESS = school_info.get("address").upper() if school_info else " "
 
 # Get paths
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -49,6 +42,21 @@ LOGO_PATH = _Path(f"static/logos/{school_code}_logo.png")
 
 if not LOGO_PATH.exists():
     LOGO_PATH = _Path("static/logos/platform_logo.png")
+
+
+def _get_school_display_info() -> tuple[str, str]:
+    """
+    Fetch school name and address fresh from master DB on every call,
+    updating session state as a side-effect so all callers stay in sync.
+
+    Returns:
+        (school_name_upper, school_address_upper)
+    """
+    from auth.session_manager import SessionManager
+    SessionManager.refresh_school_info()
+    name    = st.session_state.get("school_name", "") or ""
+    address = st.session_state.get("school_address", "") or ""
+    return name.upper(), address.upper()
 
 
 # Register Arial fonts if available (fallback to Helvetica if not)
@@ -164,7 +172,10 @@ def create_header(class_name, term, session, sizing):
     """Create header with logo and school information"""
     elements = []
     styles = getSampleStyleSheet()
-    
+
+    # Always fetch live from master DB
+    SCHOOL_NAME, SCHOOL_ADDRESS = _get_school_display_info()
+
     # Create custom styles
     school_name_style = ParagraphStyle(
         'SchoolName',
