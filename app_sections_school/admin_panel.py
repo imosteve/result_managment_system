@@ -11,7 +11,8 @@ from database_school import (
     open_class_for_session, get_classes_for_session,
     create_user, get_all_users, delete_user, assign_teacher, get_user_assignments,
     delete_assignment, get_database_stats, update_user, update_assignment, get_user_role,
-    batch_assign_subject_teacher, get_classes_summary
+    batch_assign_subject_teacher, get_classes_summary,
+    get_scores_for_class, get_connection,
 )
 from .system_dashboard import get_activity_statistics
 from database_master import get_school_by_code
@@ -676,40 +677,157 @@ def render_analytics_tab(stats):
     """Render analytics and reports tab"""
     inject_metric_css()
 
+    # ── Filter row: Session + Term ────────────────────────────────────────────
+    all_sessions = get_all_sessions()
+    session_names = [s["session"] if isinstance(s, dict) else s[0] for s in all_sessions]
+
+    TERM_LABELS = {
+        "First":  "1st Term",
+        "Second": "2nd Term",
+        "Third":  "3rd Term",
+    }
+
+    filter_col1, filter_col2 = st.columns(2)
+    with filter_col1:
+        if session_names:
+            active_session = get_active_session()
+            default_idx = session_names.index(active_session) if active_session in session_names else 0
+            selected_session = st.selectbox(
+                "Session",
+                session_names,
+                index=default_idx,
+                key="analytics_session_filter",
+            )
+        else:
+            selected_session = None
+            st.info("No sessions configured yet.")
+
+    with filter_col2:
+        selected_term = st.selectbox(
+            "Term",
+            ["First", "Second", "Third"],
+            format_func=lambda t: TERM_LABELS[t],
+            key="analytics_term_filter",
+        )
+
+    st.markdown("---")
+
+    # ── Class Overview ────────────────────────────────────────────────────────
     st.markdown("#### Class Overview")
-    
+
     class_summary = get_classes_summary()
-    
+
     if class_summary:
-        class_data = [
-            {
-                "Class":    row["class_name"],
-                "Session":  row["session"] or "-",
-                "Students": row["student_count"],
-                "Subjects": row["subject_count"],
-                "Scores":   row["score_count"]
-            }
-            for row in class_summary
+        filtered_summary = [
+            r for r in class_summary
+            if selected_session is None or r["session"] == selected_session
         ]
 
-        streamlit_paginator(class_data, table_name="class_summary_analytics")
+        if filtered_summary:
+            conn = get_connection()
+            cursor = conn.cursor()
+            class_data = []
+            for row in filtered_summary:
+                scores = get_scores_for_class(
+                    row["class_name"], row["session"], selected_term
+                )
+                # Count unique students enrolled for this specific class + session + term
+                cursor.execute("""
+                    SELECT COUNT(DISTINCT css.student_name)
+                    FROM   class_session_students css
+                    JOIN   class_sessions cs ON cs.id = css.class_session_id
+                    WHERE  cs.class_name = ? AND cs.session = ? AND css.term = ?
+                """, (row["class_name"], row["session"], selected_term))
+                student_count = cursor.fetchone()[0]
+
+                class_data.append({
+                    "Class":    row["class_name"],
+                    "Session":  row["session"] or "-",
+                    "Term":     TERM_LABELS[selected_term],
+                    "Students": student_count,
+                    "Subjects": row["subject_count"],
+                    "Scores":   len(scores),
+                })
+            conn.close()
+            streamlit_paginator(class_data, table_name="class_summary_analytics")
+        else:
+            st.info(f"No classes found for session **{selected_session}**.")
     else:
         st.info("No classes found in the system.")
 
     st.markdown("---")
+
+    # ── Activity Statistics (per selected session + term) ─────────────────────
     st.markdown("#### 📈 Activity Statistics")
-    
-    activity_stats = get_activity_statistics()
-    
+
+    if selected_session:
+        try:
+            conn = get_connection()
+            cursor = conn.cursor()
+
+            # Active classes: class_sessions in the selected session with ≥1 enrolled student
+            cursor.execute("""
+                SELECT COUNT(DISTINCT cs.id)
+                FROM   class_sessions cs
+                JOIN   class_session_students css ON css.class_session_id = cs.id
+                WHERE  cs.session = ?
+            """, (selected_session,))
+            active_classes = cursor.fetchone()[0]
+
+            # Active students: distinct enrollments that have at least one score
+            # in the selected session + term
+            cursor.execute("""
+                SELECT COUNT(DISTINCT sc.enrollment_id)
+                FROM   scores sc
+                JOIN   class_session_students css ON css.id = sc.enrollment_id
+                JOIN   class_sessions         cs  ON cs.id  = css.class_session_id
+                WHERE  cs.session = ? AND sc.term = ?
+            """, (selected_session, selected_term))
+            active_students = cursor.fetchone()[0]
+
+            # Expected scores: enrolled students × subjects for the selected session + term
+            cursor.execute("""
+                SELECT COUNT(*)
+                FROM   class_session_students css
+                JOIN   class_sessions cs  ON cs.id  = css.class_session_id
+                JOIN   subjects       sub ON sub.class_name = cs.class_name
+                WHERE  cs.session = ? AND css.term = ?
+            """, (selected_session, selected_term))
+            expected = cursor.fetchone()[0]
+
+            # Actual scores recorded for the selected session + term
+            cursor.execute("""
+                SELECT COUNT(*)
+                FROM   scores sc
+                JOIN   class_session_students css ON css.id = sc.enrollment_id
+                JOIN   class_sessions         cs  ON cs.id  = css.class_session_id
+                WHERE  cs.session = ? AND sc.term = ?
+            """, (selected_session, selected_term))
+            actual = cursor.fetchone()[0]
+
+            conn.close()
+            score_completion = int((actual / expected * 100) if expected > 0 else 0)
+
+        except Exception as e:
+            active_classes   = 0
+            active_students  = 0
+            score_completion = 0
+    else:
+        # Fallback to global stats when no session is available
+        activity_stats   = get_activity_statistics()
+        active_classes   = activity_stats["active_classes"]
+        active_students  = activity_stats["active_students"]
+        score_completion = activity_stats["score_completion"]
+
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric("Active Classes", activity_stats['active_classes'])
+        st.metric("Active Classes", active_classes)
     with col2:
-        st.metric("Active Students", activity_stats['active_students'])
+        st.metric("Active Students", active_students)
     with col3:
-        st.metric("Score Completion", f"{activity_stats['score_completion']}%")
+        st.metric("Score Completion", f"{score_completion}%")
     with col4:
-        st.metric("Assignments", stats['assignments'])
+        st.metric("Assignments", stats["assignments"])
 
 
 
