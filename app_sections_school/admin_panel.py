@@ -703,10 +703,14 @@ def render_analytics_tab(stats):
             st.info("No sessions configured yet.")
 
     with filter_col2:
+        _term_options = ["First", "Second", "Third"]
+        _active_term  = get_active_term_name()
+        _term_default = _active_term if _active_term in _term_options else "First"
         selected_term = st.selectbox(
             "Term",
-            ["First", "Second", "Third"],
+            _term_options,
             format_func=lambda t: TERM_LABELS[t],
+            index=_term_options.index(_term_default),
             key="analytics_term_filter",
         )
 
